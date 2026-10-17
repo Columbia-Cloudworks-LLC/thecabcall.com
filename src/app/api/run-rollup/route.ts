@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { appendAuditEntry, hashActorIp } from "@/lib/audit";
 import {
   createLocalR2AudioAdapter,
   createLocalSqliteD1Adapter,
@@ -50,6 +51,25 @@ export async function POST(req: NextRequest) {
     audioBucket,
     geminiApiKey: envVars.GEMINI_API_KEY,
   });
+
+  try {
+    const clientIp =
+      req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip");
+    await appendAuditEntry(db, {
+      actorEmail: req.headers.get("x-actor-email") || "system@thecabcall.com",
+      actorRole: "owner",
+      authMethod: "admin_secret",
+      actorIpHash: await hashActorIp(clientIp),
+      actionType: "episode.generate",
+      targetType: "episode",
+      targetId: String(episode.id ?? episode.slug),
+      reason: `Generated podcast rollup episode #${episode.episode_number}: ${episode.title}`,
+      beforeState: null,
+      afterState: episode,
+    });
+  } catch (err) {
+    console.warn("[Audit] Failed to log local episode.generate:", err);
+  }
 
   return NextResponse.json({
     ok: true,

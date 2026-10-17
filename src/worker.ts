@@ -1,4 +1,13 @@
 import {
+  AppendAuditEntryInput,
+  appendAuditEntry,
+  exportAuditDisclosureBundle,
+  hashActorIp,
+  listAuditEntries,
+  replayAuditEntry,
+  verifyAuditChainIntegrity,
+} from "./pipeline/audit";
+import {
   D1DatabaseLike,
   runD1IngestPipeline,
   US_HIGH_IMPACT_FEEDS,
@@ -35,7 +44,7 @@ const DEFAULT_SAMPLE_ARTICLE = {
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, HEAD, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, HEAD, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, x-admin-secret",
 };
 
@@ -118,6 +127,14 @@ const worker = {
         endpoints: {
           snapshot:
             "GET /api/snapshot (public edge-cached D1 telemetry snapshot)",
+          auditList:
+            "GET /api/admin/audit (list & filter immutable audit_ledger entries)",
+          auditVerify:
+            "GET /api/admin/audit/verify (verify SHA-256 cryptographic hash chain)",
+          auditReplay:
+            "POST /api/admin/audit/replay (requires x-admin-secret; deterministic state revert/replay)",
+          auditExport:
+            "GET /api/admin/audit/export (signed JSON & Markdown public disclosure bundle)",
           testJev: "POST /api/test-jev (requires x-admin-secret header)",
           runIngest:
             "POST /api/run-ingest (requires x-admin-secret header; optional ?synthesize=true)",
@@ -464,11 +481,264 @@ const worker = {
           geminiApiKey: env.GEMINI_API_KEY,
         });
 
+        try {
+          const clientIp =
+            request.headers.get("cf-connecting-ip") ||
+            request.headers.get("x-forwarded-for");
+          await appendAuditEntry(env.DB, {
+            actorEmail:
+              request.headers.get("x-actor-email") || "system@thecabcall.com",
+            actorRole: "owner",
+            authMethod: "admin_secret",
+            actorIpHash: await hashActorIp(clientIp),
+            actionType: "episode.generate",
+            targetType: "episode",
+            targetId: String(episode.id ?? episode.slug),
+            reason: `Generated podcast rollup episode #${episode.episode_number}: ${episode.title}`,
+            beforeState: null,
+            afterState: episode,
+          });
+        } catch (auditErr) {
+          console.warn("[Audit] Failed to log episode.generate:", auditErr);
+        }
+
         return jsonResponse({
           ok: true,
           stage: "Friday 5-Minute CAB Weekly Brief Rollup",
           episode,
         });
+      } catch (err) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          },
+          500
+        );
+      }
+    }
+
+    // Audit Route 1: GET & POST /api/admin/audit
+    if (url.pathname === "/api/admin/audit") {
+      if (request.method === "GET") {
+        try {
+          const filters = {
+            actionType: url.searchParams.get("actionType") || undefined,
+            targetType: url.searchParams.get("targetType") || undefined,
+            targetId: url.searchParams.get("targetId") || undefined,
+            actorEmail: url.searchParams.get("actorEmail") || undefined,
+            search: url.searchParams.get("search") || undefined,
+            fromDate: url.searchParams.get("fromDate") || undefined,
+            toDate: url.searchParams.get("toDate") || undefined,
+            limit: url.searchParams.get("limit")
+              ? parseInt(url.searchParams.get("limit")!, 10)
+              : 100,
+            offset: url.searchParams.get("offset")
+              ? parseInt(url.searchParams.get("offset")!, 10)
+              : 0,
+          };
+
+          const [listResult, chainIntegrity] = await Promise.all([
+            listAuditEntries(env.DB, filters),
+            verifyAuditChainIntegrity(env.DB),
+          ]);
+
+          return jsonResponse(
+            {
+              ok: true,
+              ...listResult,
+              chainIntegrity,
+            },
+            200,
+            { "Cache-Control": "no-store" }
+          );
+        } catch (err) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            500
+          );
+        }
+      }
+
+      if (request.method === "POST") {
+        if (!isAuthorizedAdmin(request, env)) {
+          return jsonResponse(
+            { error: "Unauthorized: Invalid or missing x-admin-secret header" },
+            401
+          );
+        }
+
+        try {
+          const body = (await request.json()) as AppendAuditEntryInput;
+          if (!body.actionType || !body.targetType || body.targetId === undefined) {
+            return jsonResponse(
+              {
+                ok: false,
+                error:
+                  "Missing required fields: actionType, targetType, targetId",
+              },
+              400
+            );
+          }
+
+          const clientIp =
+            request.headers.get("cf-connecting-ip") ||
+            request.headers.get("x-forwarded-for");
+          const entry = await appendAuditEntry(env.DB, {
+            ...body,
+            actorEmail: body.actorEmail || "system@thecabcall.com",
+            authMethod: body.authMethod || "admin_secret",
+            actorIpHash:
+              body.actorIpHash ?? (await hashActorIp(clientIp)),
+          });
+
+          return jsonResponse({ ok: true, entry }, 201);
+        } catch (err) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            500
+          );
+        }
+      }
+    }
+
+    // Audit Route 2: GET /api/admin/audit/verify (Cryptographic SHA-256 Chain Verification)
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/admin/audit/verify"
+    ) {
+      try {
+        const verification = await verifyAuditChainIntegrity(env.DB);
+        return jsonResponse(
+          {
+            ok: true,
+            ...verification,
+          },
+          200,
+          { "Cache-Control": "no-store" }
+        );
+      } catch (err) {
+        return jsonResponse(
+          {
+            ok: false,
+            valid: false,
+            error: err instanceof Error ? err.message : String(err),
+          },
+          500
+        );
+      }
+    }
+
+    // Audit Route 3: POST /api/admin/audit/replay (Deterministic State Revert / Re-Apply)
+    if (
+      request.method === "POST" &&
+      url.pathname === "/api/admin/audit/replay"
+    ) {
+      if (!isAuthorizedAdmin(request, env)) {
+        return jsonResponse(
+          { error: "Unauthorized: Invalid or missing x-admin-secret header" },
+          401
+        );
+      }
+
+      try {
+        const body = (await request.json()) as {
+          eventId?: string;
+          mode?: "revert_to_before" | "reapply_after";
+          actorEmail?: string;
+          actorRole?: string;
+          authMethod?:
+            | "google_oauth"
+            | "magic_link"
+            | "admin_secret"
+            | "system_bootstrap";
+          reason?: string;
+        };
+
+        if (!body.eventId) {
+          return jsonResponse(
+            { ok: false, error: "Missing required field: eventId" },
+            400
+          );
+        }
+
+        const mode =
+          body.mode === "reapply_after"
+            ? "reapply_after"
+            : "revert_to_before";
+        const clientIp =
+          request.headers.get("cf-connecting-ip") ||
+          request.headers.get("x-forwarded-for");
+
+        const replayResult = await replayAuditEntry(
+          env.DB,
+          body.eventId,
+          mode,
+          {
+            actorEmail: body.actorEmail || "owner@thecabcall.com",
+            actorRole: body.actorRole || "owner",
+            authMethod: body.authMethod || "admin_secret",
+            actorIpHash: await hashActorIp(clientIp),
+            reason: body.reason,
+          }
+        );
+
+        return jsonResponse(replayResult, 200);
+      } catch (err) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          },
+          400
+        );
+      }
+    }
+
+    // Audit Route 4: GET /api/admin/audit/export (Signed JSON & Markdown Disclosure Bundle)
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/admin/audit/export"
+    ) {
+      try {
+        const filters = {
+          actionType: url.searchParams.get("actionType") || undefined,
+          targetType: url.searchParams.get("targetType") || undefined,
+          targetId: url.searchParams.get("targetId") || undefined,
+          actorEmail: url.searchParams.get("actorEmail") || undefined,
+          search: url.searchParams.get("search") || undefined,
+          fromDate: url.searchParams.get("fromDate") || undefined,
+          toDate: url.searchParams.get("toDate") || undefined,
+          limit: url.searchParams.get("limit")
+            ? parseInt(url.searchParams.get("limit")!, 10)
+            : 500,
+        };
+
+        const bundle = await exportAuditDisclosureBundle(env.DB, filters);
+        const format = (url.searchParams.get("format") || "json").toLowerCase();
+
+        if (format === "markdown" || format === "md") {
+          return new Response(bundle.markdownReport, {
+            status: 200,
+            headers: {
+              "Content-Type": "text/markdown; charset=utf-8",
+              "Content-Disposition": `attachment; filename="cabcall-audit-disclosure-${bundle.generatedAt.slice(
+                0,
+                10
+              )}.md"`,
+              "Cache-Control": "no-store",
+              ...CORS_HEADERS,
+            },
+          });
+        }
+
+        return jsonResponse(bundle, 200, { "Cache-Control": "no-store" });
       } catch (err) {
         return jsonResponse(
           {

@@ -18,9 +18,9 @@
 | **System-2 Synthesis (Gemini 2.5 Flash)** | Live on Cloudflare Edge & working locally | `src/pipeline/synthesize.ts` |
 | **Friday 5-Min Podcast Rollup + TTS Audio** | Live on Cloudflare Edge & R2 (`cabcall-audio`) | `src/pipeline/rollup.ts` |
 | **Cloudflare Worker Entrypoint & Crons** | Deployed (`https://thecabcall.thecabcall.workers.dev`) | `src/worker.ts`, `wrangler.jsonc` |
-| **D1 SQLite Schema & Migrations** | Applied to remote `cabcall-db` (`094cf69c-0fe3-409b-a871-06f3610a28a6`) & local `.wrangler` | `migrations/0001_init.sql`, `migrations/0002_pipeline_runs.sql` |
+| **D1 SQLite Schema & Migrations** | Applied to remote `cabcall-db` (`094cf69c-0fe3-409b-a871-06f3610a28a6`) & local `.wrangler` | `migrations/0001_init.sql`, `migrations/0002_pipeline_runs.sql`, `migrations/0003_audit_ledger.sql` |
 | **Database & Audio Bridge** | Live Cloud Worker Bridge (`/api/snapshot` + R2 audio) with local `.wrangler` fallback | `src/lib/d1-bridge.ts`, `src/lib/store.ts` |
-| **Admin Governance, Auth & Audit Ledger** | Planned in Epic #6 (Issues #6 – #12 below) | `migrations/0003_*.sql`, `src/app/admin/`, `src/lib/audit.ts`, `src/lib/auth.ts` |
+| **Admin Governance, Auth & Audit Ledger** | Issue #6 Audit Ledger live in Production; Issues #7 – #12 planned below | `migrations/0003_audit_ledger.sql`, `src/pipeline/audit.ts`, `src/lib/audit.ts`, `src/app/api/admin/audit/` |
 
 ---
 
@@ -36,7 +36,7 @@
 - [ ] **Epic #5 ([GitHub Issue #5](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/5)): Legacy Podcast Archive Migration & Voice Cloning / TTS Enhancement** (`Issues 5.1 – 5.3`)
 
 ### Open Admin Dashboard, Editorial Pipeline & Immutable Audit Trail Epic (#6 — Issues #6 to #12)
-- [ ] **Issue #6 ([GitHub Issue #6](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/6)): Immutable Replayable Audit Ledger & Disclosure Engine (D1 Append-Only Schema, SHA-256 Hash Chain & Replay API)**
+- [x] **Issue #6 ([GitHub Issue #6](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/6)): Immutable Replayable Audit Ledger & Disclosure Engine (D1 Append-Only Schema, SHA-256 Hash Chain & Replay API)**
 - [ ] **Issue #7 ([GitHub Issue #7](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/7)): Admin Authentication & User Access Control (Google OAuth Owner Lock, Email Invites & Magic Link Fallback)**
 - [ ] **Issue #8 ([GitHub Issue #8](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/8)): Admin Dashboard Shell, Telemetry Command Center & Audit Trail Explorer / Replay Studio (`/admin` & `/admin/audit`)**
 - [ ] **Issue #9 ([GitHub Issue #9](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/9)): Podcast Episode Admin Studio — Delete Episodes, Purge R2 Audio, Edit Transcripts & Generate New Episodes (`/admin/episodes`)**
@@ -173,7 +173,7 @@
 
 ## Issue #6 (Epic 6.1): Immutable Replayable Audit Ledger & Disclosure Engine
 - **GitHub Issue:** [#6](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/6)
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Objective:** Create the foundational append-only, cryptographically hash-chained audit trail (`audit_ledger`) in Cloudflare D1 and `src/lib/audit.ts` so that every administrative, editorial, feed, filter, episode, and access-control change across the entire platform is recorded with full `before_state_json`, `after_state_json`, actor attribution, SHA-256 chain integrity, deterministic replay/rollback capability, and one-click disclosure export.
 - **Automated Steps for Antigravity:**
   1. **D1 Migration (`migrations/0003_audit_ledger.sql`):**
