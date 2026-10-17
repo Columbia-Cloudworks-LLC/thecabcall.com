@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { appendAuditEntry, hashActorIp } from "@/lib/audit";
+import { requireAdminRequestActor } from "@/lib/auth";
 import {
   createLocalR2AudioAdapter,
   createLocalSqliteD1Adapter,
@@ -12,19 +13,29 @@ import { runWeeklyRollupPipeline } from "@/pipeline/rollup";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const envVars = loadLocalEnvVars();
-  const providedSecret = req.headers.get("x-admin-secret");
-
-  if (!providedSecret || providedSecret !== envVars.ADMIN_SECRET) {
+  const auth = await requireAdminRequestActor(req, [
+    "owner",
+    "admin",
+    "editor",
+  ]);
+  if (!auth.authorized || !auth.actor) {
     return NextResponse.json(
-      { error: "Unauthorized: Invalid or missing x-admin-secret header" },
-      { status: 401 }
+      { error: auth.error || "Unauthorized: Admin session or x-admin-secret required" },
+      { status: auth.status }
     );
   }
 
+  const envVars = loadLocalEnvVars();
+
   if (shouldUseRemoteWorker()) {
     try {
-      const remoteResult = await triggerRemoteWorkerRollup();
+      const remoteResult = await triggerRemoteWorkerRollup({
+        actor: {
+          email: auth.actor.email,
+          role: auth.actor.role,
+          authMethod: auth.actor.authMethod,
+        },
+      });
       return NextResponse.json(remoteResult);
     } catch (err) {
       return NextResponse.json(
@@ -56,9 +67,9 @@ export async function POST(req: NextRequest) {
     const clientIp =
       req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip");
     await appendAuditEntry(db, {
-      actorEmail: req.headers.get("x-actor-email") || "system@thecabcall.com",
-      actorRole: "owner",
-      authMethod: "admin_secret",
+      actorEmail: auth.actor.email,
+      actorRole: auth.actor.role,
+      authMethod: auth.actor.authMethod,
       actorIpHash: await hashActorIp(clientIp),
       actionType: "episode.generate",
       targetType: "episode",

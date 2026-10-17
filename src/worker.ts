@@ -433,9 +433,10 @@ const worker = {
 
     // Admin Route 2: POST /api/run-ingest
     if (request.method === "POST" && url.pathname === "/api/run-ingest") {
-      if (!isAuthorizedAdmin(request, env)) {
+      const actor = await resolveAdminActor(request, env);
+      if (!actor) {
         return jsonResponse(
-          { error: "Unauthorized: Invalid or missing x-admin-secret header" },
+          { error: "Unauthorized: Invalid or missing admin credentials" },
           401
         );
       }
@@ -487,6 +488,45 @@ const worker = {
           });
         }
 
+        if (
+          request.headers.get("x-actor-email") ||
+          extractSessionTokenFromRequest(request)
+        ) {
+          try {
+            const clientIp =
+              request.headers.get("cf-connecting-ip") ||
+              request.headers.get("x-forwarded-for");
+            await appendAuditEntry(env.DB, {
+              actorEmail: actor.email,
+              actorRole: actor.role,
+              authMethod: actor.authMethod,
+              actorIpHash: await hashActorIp(clientIp),
+              actionType: "pipeline.run_ingest",
+              targetType: "pipeline",
+              targetId: "rss_ingest",
+              reason: `Manual RSS ingest & System-1 Jev triage triggered from Admin Command Center (${summary.ingestedCount} evaluated, ${summary.triagedCount} triaged, ${summary.droppedCount} dropped)${
+                synthesisSummary
+                  ? `; chained System-2 synthesis (${synthesisSummary.synthesizedCount} synthesized)`
+                  : ""
+              }.`,
+              beforeState: null,
+              afterState: {
+                ingestedCount: summary.ingestedCount,
+                triagedCount: summary.triagedCount,
+                droppedCount: summary.droppedCount,
+                chainedSynthesis: synthesisSummary
+                  ? {
+                      requestedLimit: synthesisSummary.requestedLimit,
+                      synthesizedCount: synthesisSummary.synthesizedCount,
+                    }
+                  : null,
+              },
+            });
+          } catch (auditErr) {
+            console.warn("[Audit] Failed to log pipeline.run_ingest:", auditErr);
+          }
+        }
+
         return jsonResponse({
           ok: true,
           model: "jev-1.14.0",
@@ -506,9 +546,10 @@ const worker = {
 
     // Admin Route 3: POST /api/run-synthesize
     if (request.method === "POST" && url.pathname === "/api/run-synthesize") {
-      if (!isAuthorizedAdmin(request, env)) {
+      const actor = await resolveAdminActor(request, env);
+      if (!actor) {
         return jsonResponse(
-          { error: "Unauthorized: Invalid or missing x-admin-secret header" },
+          { error: "Unauthorized: Invalid or missing admin credentials" },
           401
         );
       }
@@ -535,6 +576,37 @@ const worker = {
           limit,
         });
 
+        if (
+          request.headers.get("x-actor-email") ||
+          extractSessionTokenFromRequest(request)
+        ) {
+          try {
+            const clientIp =
+              request.headers.get("cf-connecting-ip") ||
+              request.headers.get("x-forwarded-for");
+            await appendAuditEntry(env.DB, {
+              actorEmail: actor.email,
+              actorRole: actor.role,
+              authMethod: actor.authMethod,
+              actorIpHash: await hashActorIp(clientIp),
+              actionType: "pipeline.run_synthesize",
+              targetType: "pipeline",
+              targetId: "system2_synthesize",
+              reason: `Manual System-2 Gemini 2.5 Flash synthesis triggered from Admin Command Center (${result.synthesizedCount} briefs synthesized, limit ${result.requestedLimit}).`,
+              beforeState: null,
+              afterState: {
+                requestedLimit: result.requestedLimit,
+                synthesizedCount: result.synthesizedCount,
+              },
+            });
+          } catch (auditErr) {
+            console.warn(
+              "[Audit] Failed to log pipeline.run_synthesize:",
+              auditErr
+            );
+          }
+        }
+
         return jsonResponse({
           ok: true,
           stage: "Stage 4 System-2 Bounded Socratic Synthesis",
@@ -553,9 +625,10 @@ const worker = {
 
     // Admin Route 4: POST /api/run-rollup
     if (request.method === "POST" && url.pathname === "/api/run-rollup") {
-      if (!isAuthorizedAdmin(request, env)) {
+      const actor = await resolveAdminActor(request, env);
+      if (!actor) {
         return jsonResponse(
-          { error: "Unauthorized: Invalid or missing x-admin-secret header" },
+          { error: "Unauthorized: Invalid or missing admin credentials" },
           401
         );
       }
@@ -572,10 +645,9 @@ const worker = {
             request.headers.get("cf-connecting-ip") ||
             request.headers.get("x-forwarded-for");
           await appendAuditEntry(env.DB, {
-            actorEmail:
-              request.headers.get("x-actor-email") || "system@thecabcall.com",
-            actorRole: "owner",
-            authMethod: "admin_secret",
+            actorEmail: actor.email,
+            actorRole: actor.role,
+            authMethod: actor.authMethod,
             actorIpHash: await hashActorIp(clientIp),
             actionType: "episode.generate",
             targetType: "episode",
@@ -650,9 +722,10 @@ const worker = {
       }
 
       if (request.method === "POST") {
-        if (!isAuthorizedAdmin(request, env)) {
+        const actor = await resolveAdminActor(request, env);
+        if (!actor) {
           return jsonResponse(
-            { error: "Unauthorized: Invalid or missing x-admin-secret header" },
+            { error: "Unauthorized: Invalid or missing admin credentials" },
             401
           );
         }
@@ -675,8 +748,9 @@ const worker = {
             request.headers.get("x-forwarded-for");
           const entry = await appendAuditEntry(env.DB, {
             ...body,
-            actorEmail: body.actorEmail || "system@thecabcall.com",
-            authMethod: body.authMethod || "admin_secret",
+            actorEmail: body.actorEmail || actor.email,
+            actorRole: body.actorRole || actor.role,
+            authMethod: body.authMethod || actor.authMethod,
             actorIpHash:
               body.actorIpHash ?? (await hashActorIp(clientIp)),
           });
@@ -726,9 +800,10 @@ const worker = {
       request.method === "POST" &&
       url.pathname === "/api/admin/audit/replay"
     ) {
-      if (!isAuthorizedAdmin(request, env)) {
+      const actor = await resolveAdminActor(request, env);
+      if (!actor) {
         return jsonResponse(
-          { error: "Unauthorized: Invalid or missing x-admin-secret header" },
+          { error: "Unauthorized: Invalid or missing admin credentials" },
           401
         );
       }
@@ -767,9 +842,9 @@ const worker = {
           body.eventId,
           mode,
           {
-            actorEmail: body.actorEmail || "owner@thecabcall.com",
-            actorRole: body.actorRole || "owner",
-            authMethod: body.authMethod || "admin_secret",
+            actorEmail: body.actorEmail || actor.email,
+            actorRole: body.actorRole || actor.role,
+            authMethod: body.authMethod || actor.authMethod,
             actorIpHash: await hashActorIp(clientIp),
             reason: body.reason,
           }

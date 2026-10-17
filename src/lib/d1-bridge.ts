@@ -852,17 +852,29 @@ export async function triggerRemoteWorkerIngest(options?: {
     sourceFeed: string;
     link?: string;
   };
+  actor?: {
+    email: string;
+    role: string;
+    authMethod: string;
+  };
 }): Promise<Record<string, unknown>> {
   const workerUrl = getEffectiveWorkerUrl();
   const envVars = loadLocalEnvVars();
   const query = options?.synthesize ? "?synthesize=true" : "";
 
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-admin-secret": envVars.ADMIN_SECRET,
+  };
+  if (options?.actor) {
+    headers["x-actor-email"] = options.actor.email;
+    headers["x-actor-role"] = options.actor.role;
+    headers["x-actor-auth-method"] = options.actor.authMethod;
+  }
+
   const response = await fetch(`${workerUrl}/api/run-ingest${query}`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-admin-secret": envVars.ADMIN_SECRET,
-    },
+    headers,
     body: JSON.stringify({
       synthesize: options?.synthesize,
       synthesizeLimit: options?.synthesizeLimit,
@@ -890,16 +902,28 @@ export async function triggerRemoteWorkerIngest(options?: {
  */
 export async function triggerRemoteWorkerSynthesize(options?: {
   limit?: number;
+  actor?: {
+    email: string;
+    role: string;
+    authMethod: string;
+  };
 }): Promise<Record<string, unknown>> {
   const workerUrl = getEffectiveWorkerUrl();
   const envVars = loadLocalEnvVars();
 
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-admin-secret": envVars.ADMIN_SECRET,
+  };
+  if (options?.actor) {
+    headers["x-actor-email"] = options.actor.email;
+    headers["x-actor-role"] = options.actor.role;
+    headers["x-actor-auth-method"] = options.actor.authMethod;
+  }
+
   const response = await fetch(`${workerUrl}/api/run-synthesize`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-admin-secret": envVars.ADMIN_SECRET,
-    },
+    headers,
     body: JSON.stringify({
       limit: options?.limit ?? 5,
     }),
@@ -922,18 +946,29 @@ export async function triggerRemoteWorkerSynthesize(options?: {
 /**
  * Triggers `POST /api/run-rollup` on the production Cloudflare Worker and refreshes the snapshot cache.
  */
-export async function triggerRemoteWorkerRollup(): Promise<
-  Record<string, unknown>
-> {
+export async function triggerRemoteWorkerRollup(options?: {
+  actor?: {
+    email: string;
+    role: string;
+    authMethod: string;
+  };
+}): Promise<Record<string, unknown>> {
   const workerUrl = getEffectiveWorkerUrl();
   const envVars = loadLocalEnvVars();
 
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "x-admin-secret": envVars.ADMIN_SECRET,
+  };
+  if (options?.actor) {
+    headers["x-actor-email"] = options.actor.email;
+    headers["x-actor-role"] = options.actor.role;
+    headers["x-actor-auth-method"] = options.actor.authMethod;
+  }
+
   const response = await fetch(`${workerUrl}/api/run-rollup`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-admin-secret": envVars.ADMIN_SECRET,
-    },
+    headers,
     cache: "no-store",
   });
 

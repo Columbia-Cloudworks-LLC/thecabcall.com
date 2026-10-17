@@ -18,7 +18,7 @@ export default async function AdminLoginPage({
   const nextPath =
     typeof params.next === "string" && params.next.startsWith("/admin")
       ? params.next
-      : "/admin/users";
+      : "/admin";
 
   const session = await getCurrentAdminSession();
   if (session) {

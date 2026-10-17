@@ -20,7 +20,7 @@
 | **Cloudflare Worker Entrypoint & Crons** | Deployed (`https://thecabcall.thecabcall.workers.dev`) | `src/worker.ts`, `wrangler.jsonc` |
 | **D1 SQLite Schema & Migrations** | Applied to remote `cabcall-db` (`094cf69c-0fe3-409b-a871-06f3610a28a6`) & local `.wrangler` | `migrations/0001_init.sql`, `migrations/0002_pipeline_runs.sql`, `migrations/0003_audit_ledger.sql`, `migrations/0004_admin_auth.sql` |
 | **Database & Audio Bridge** | Live Cloud Worker Bridge (`/api/snapshot` + R2 audio) with local `.wrangler` fallback | `src/lib/d1-bridge.ts`, `src/lib/store.ts` |
-| **Admin Governance, Auth & Audit Ledger** | Issues #6 & #7 (Audit Ledger + Admin OAuth/Magic-Link Auth & User Invites) live in Production; Issues #8 – #12 planned below | `migrations/0003_audit_ledger.sql`, `migrations/0004_admin_auth.sql`, `src/pipeline/audit.ts`, `src/pipeline/auth.ts`, `src/lib/audit.ts`, `src/lib/auth.ts`, `src/app/admin/` |
+| **Admin Governance, Auth & Audit Ledger** | Issues #6, #7 & #8 (Audit Ledger, Admin OAuth/Magic-Link Auth & Invites, Command Center Shell & Audit Replay Studio) live in Production; Issues #9 – #12 planned below | `migrations/0003_audit_ledger.sql`, `migrations/0004_admin_auth.sql`, `src/pipeline/audit.ts`, `src/pipeline/auth.ts`, `src/lib/audit.ts`, `src/lib/auth.ts`, `src/app/admin/`, `src/app/admin/audit/` |
 
 ---
 
@@ -38,7 +38,7 @@
 ### Open Admin Dashboard, Editorial Pipeline & Immutable Audit Trail Epic (#6 — Issues #6 to #12)
 - [x] **Issue #6 ([GitHub Issue #6](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/6)): Immutable Replayable Audit Ledger & Disclosure Engine (D1 Append-Only Schema, SHA-256 Hash Chain & Replay API)**
 - [x] **Issue #7 ([GitHub Issue #7](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/7)): Admin Authentication & User Access Control (Google OAuth Owner Lock, Email Invites & Magic Link Fallback)**
-- [ ] **Issue #8 ([GitHub Issue #8](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/8)): Admin Dashboard Shell, Telemetry Command Center & Audit Trail Explorer / Replay Studio (`/admin` & `/admin/audit`)**
+- [x] **Issue #8 ([GitHub Issue #8](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/8)): Admin Dashboard Shell, Telemetry Command Center & Audit Trail Explorer / Replay Studio (`/admin` & `/admin/audit`)**
 - [ ] **Issue #9 ([GitHub Issue #9](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/9)): Podcast Episode Admin Studio — Delete Episodes, Purge R2 Audio, Edit Transcripts & Generate New Episodes (`/admin/episodes`)**
 - [ ] **Issue #10 ([GitHub Issue #10](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/10)): Dynamic Inbound RSS Feed & Triage Filter Management (`/admin/feeds` & `/admin/filters`)**
 - [ ] **Issue #11 ([GitHub Issue #11](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/11)): Editorial Pipeline & Incident Studio — De-Alarmist Title Rewriting, Image Attachment Pipeline & Brief Overrides (`/admin/incidents` & `/admin/transforms`)**
@@ -297,7 +297,7 @@
 
 ## Issue #8 (Epic 6.3): Admin Dashboard Shell, Telemetry Command Center & Audit Trail Explorer / Replay Studio (`/admin` & `/admin/audit`)
 - **GitHub Issue:** [#8](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/8)
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Objective:** Build the unified Admin Dashboard navigation shell (`/admin`) and the interactive **Immutable Audit Trail Explorer, Replay & Disclosure Studio** (`/admin/audit`) so you can inspect every change ever made on the site, verify the cryptographic SHA-256 hash chain, view side-by-side `before`/`after` JSON diffs, deterministically revert/replay any change, and export public disclosure reports.
 - **Automated Steps for Antigravity:**
   1. **Admin Layout & Navigation (`/admin/layout.tsx`, `/admin/page.tsx`):**
