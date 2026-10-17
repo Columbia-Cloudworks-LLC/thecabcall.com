@@ -1,12 +1,29 @@
 import {
   AppendAuditEntryInput,
   appendAuditEntry,
+  AuditAuthMethod,
   exportAuditDisclosureBundle,
   hashActorIp,
   listAuditEntries,
   replayAuditEntry,
   verifyAuditChainIntegrity,
 } from "./pipeline/audit";
+import {
+  ADMIN_SESSION_COOKIE_NAME,
+  AdminAuthProviderPref,
+  AdminUserRole,
+  AuthenticatedAdminActor,
+  authenticateGoogleOAuthUser,
+  DEFAULT_OWNER_EMAIL,
+  inviteAdminUser,
+  listAdminUsers,
+  requestAdminMagicLink,
+  revokeAdminSessionByToken,
+  revokeAdminUser,
+  updateAdminUserRole,
+  verifyAdminMagicLinkToken,
+  verifyAdminSession,
+} from "./pipeline/auth";
 import {
   D1DatabaseLike,
   runD1IngestPipeline,
@@ -22,6 +39,11 @@ export interface WorkerEnv {
   TYPESAFE_API_KEY?: string;
   GEMINI_API_KEY?: string;
   ADMIN_SECRET?: string;
+  OWNER_ADMIN_EMAIL?: string;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  RESEND_API_KEY?: string;
+  EMAIL_FROM?: string;
 }
 
 export interface ScheduledControllerLike {
@@ -45,7 +67,8 @@ const DEFAULT_SAMPLE_ARTICLE = {
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, HEAD, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, x-admin-secret",
+  "Access-Control-Allow-Headers":
+    "Content-Type, x-admin-secret, x-session-token, x-actor-email, x-actor-role, x-actor-auth-method, Authorization",
 };
 
 function jsonResponse(
@@ -63,10 +86,73 @@ function jsonResponse(
   });
 }
 
+function extractSessionTokenFromRequest(request: Request): string | null {
+  const headerToken = request.headers.get("x-session-token");
+  if (headerToken && headerToken.trim()) {
+    return headerToken.trim();
+  }
+  const authHeader = request.headers.get("authorization");
+  if (authHeader && authHeader.toLowerCase().startsWith("bearer ")) {
+    const bearer = authHeader.slice(7).trim();
+    if (bearer) return bearer;
+  }
+  const cookieHeader = request.headers.get("cookie") || "";
+  for (const part of cookieHeader.split(";")) {
+    const [k, ...vParts] = part.trim().split("=");
+    if (k === ADMIN_SESSION_COOKIE_NAME) {
+      const val = decodeURIComponent(vParts.join("=")).trim();
+      if (val) return val;
+    }
+  }
+  return null;
+}
+
 function isAuthorizedAdmin(request: Request, env: WorkerEnv): boolean {
   const expectedSecret = env.ADMIN_SECRET || "local-dev-secret";
   const providedSecret = request.headers.get("x-admin-secret");
   return Boolean(providedSecret && providedSecret === expectedSecret);
+}
+
+async function resolveAdminActor(
+  request: Request,
+  env: WorkerEnv
+): Promise<AuthenticatedAdminActor | null> {
+  const sessionToken = extractSessionTokenFromRequest(request);
+  if (sessionToken) {
+    const sessionActor = await verifyAdminSession(
+      env.DB,
+      sessionToken,
+      env.OWNER_ADMIN_EMAIL
+    );
+    if (sessionActor) {
+      return sessionActor;
+    }
+  }
+
+  if (isAuthorizedAdmin(request, env)) {
+    const ownerEmail = (
+      env.OWNER_ADMIN_EMAIL || DEFAULT_OWNER_EMAIL
+    ).toLowerCase();
+    const actorEmail = (
+      request.headers.get("x-actor-email") || ownerEmail
+    )
+      .trim()
+      .toLowerCase();
+    const actorRole = (request.headers.get("x-actor-role") ||
+      "owner") as AdminUserRole;
+    const authMethod = (request.headers.get("x-actor-auth-method") ||
+      "admin_secret") as AuditAuthMethod;
+    return {
+      userId: 1,
+      email: actorEmail,
+      displayName: "CAB Admin",
+      avatarUrl: null,
+      role: actorRole,
+      authMethod,
+    };
+  }
+
+  return null;
 }
 
 function parseByteRangeHeader(
@@ -739,6 +825,502 @@ const worker = {
         }
 
         return jsonResponse(bundle, 200, { "Cache-Control": "no-store" });
+      } catch (err) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          },
+          500
+        );
+      }
+    }
+
+    // Auth Route 1: POST /api/auth/google/verify-login
+    if (
+      request.method === "POST" &&
+      url.pathname === "/api/auth/google/verify-login"
+    ) {
+      if (!isAuthorizedAdmin(request, env)) {
+        return jsonResponse(
+          { error: "Unauthorized: Invalid or missing x-admin-secret header" },
+          401
+        );
+      }
+
+      try {
+        const body = (await request.json()) as {
+          email?: string;
+          emailVerified?: boolean;
+          displayName?: string | null;
+          avatarUrl?: string | null;
+          clientIp?: string | null;
+        };
+
+        const clientIp =
+          body.clientIp ||
+          request.headers.get("cf-connecting-ip") ||
+          request.headers.get("x-forwarded-for");
+
+        const result = await authenticateGoogleOAuthUser({
+          db: env.DB,
+          ownerEmail: env.OWNER_ADMIN_EMAIL,
+          email: body.email || "",
+          emailVerified: Boolean(body.emailVerified),
+          displayName: body.displayName,
+          avatarUrl: body.avatarUrl,
+          clientIp,
+        });
+
+        return jsonResponse(result, result.status, {
+          "Cache-Control": "no-store",
+        });
+      } catch (err) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          },
+          500
+        );
+      }
+    }
+
+    // Auth Route 2: POST /api/auth/magic-link/request
+    if (
+      request.method === "POST" &&
+      url.pathname === "/api/auth/magic-link/request"
+    ) {
+      try {
+        const body = (await request.json()) as {
+          email?: string;
+          purpose?: "login" | "invite";
+          baseUrl?: string;
+          includeRawLink?: boolean;
+          clientIp?: string | null;
+        };
+
+        const clientIp =
+          body.clientIp ||
+          request.headers.get("cf-connecting-ip") ||
+          request.headers.get("x-forwarded-for");
+
+        const result = await requestAdminMagicLink({
+          db: env.DB,
+          ownerEmail: env.OWNER_ADMIN_EMAIL,
+          email: body.email || "",
+          purpose: body.purpose || "login",
+          clientIp,
+          baseUrl: body.baseUrl || "https://thecabcall.com",
+          resendApiKey: env.RESEND_API_KEY,
+          emailFrom: env.EMAIL_FROM,
+        });
+
+        const adminCaller = await resolveAdminActor(request, env);
+        const includeRawLink = Boolean(body.includeRawLink && adminCaller);
+
+        const responsePayload = includeRawLink
+          ? result
+          : {
+              ok: result.ok,
+              status: result.status,
+              code: result.code,
+              error: result.error,
+              email: result.email,
+              purpose: result.purpose,
+              expiresAt: result.expiresAt,
+              emailSent: result.emailSent,
+              emailError: result.emailError,
+            };
+
+        return jsonResponse(responsePayload, result.status, {
+          "Cache-Control": "no-store",
+        });
+      } catch (err) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          },
+          500
+        );
+      }
+    }
+
+    // Auth Route 3: GET & POST /api/auth/magic-link/verify
+    if (
+      (request.method === "GET" || request.method === "POST") &&
+      url.pathname === "/api/auth/magic-link/verify"
+    ) {
+      try {
+        let token = url.searchParams.get("token") || "";
+        let clientIp =
+          request.headers.get("cf-connecting-ip") ||
+          request.headers.get("x-forwarded-for");
+
+        if (request.method === "POST") {
+          try {
+            const body = (await request.json()) as {
+              token?: string;
+              clientIp?: string | null;
+            };
+            if (body.token) token = body.token;
+            if (body.clientIp) clientIp = body.clientIp;
+          } catch {
+            // Use query token if body is empty
+          }
+        }
+
+        const result = await verifyAdminMagicLinkToken({
+          db: env.DB,
+          ownerEmail: env.OWNER_ADMIN_EMAIL,
+          rawToken: token,
+          clientIp,
+        });
+
+        return jsonResponse(result, result.status, {
+          "Cache-Control": "no-store",
+        });
+      } catch (err) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          },
+          500
+        );
+      }
+    }
+
+    // Auth Route 4: GET & POST /api/auth/session
+    if (
+      (request.method === "GET" || request.method === "POST") &&
+      url.pathname === "/api/auth/session"
+    ) {
+      try {
+        let token =
+          extractSessionTokenFromRequest(request) ||
+          url.searchParams.get("token") ||
+          "";
+
+        if (!token && request.method === "POST") {
+          try {
+            const body = (await request.json()) as { token?: string };
+            if (body.token) token = body.token;
+          } catch {
+            // ignore
+          }
+        }
+
+        const actor = await verifyAdminSession(
+          env.DB,
+          token,
+          env.OWNER_ADMIN_EMAIL
+        );
+
+        return jsonResponse(
+          {
+            ok: true,
+            authenticated: Boolean(actor),
+            actor,
+          },
+          200,
+          { "Cache-Control": "no-store" }
+        );
+      } catch (err) {
+        return jsonResponse(
+          {
+            ok: false,
+            authenticated: false,
+            actor: null,
+            error: err instanceof Error ? err.message : String(err),
+          },
+          500
+        );
+      }
+    }
+
+    // Auth Route 5: POST /api/auth/logout
+    if (request.method === "POST" && url.pathname === "/api/auth/logout") {
+      try {
+        let token = extractSessionTokenFromRequest(request) || "";
+        if (!token) {
+          try {
+            const body = (await request.json()) as { token?: string };
+            if (body.token) token = body.token;
+          } catch {
+            // ignore
+          }
+        }
+
+        await revokeAdminSessionByToken(env.DB, token);
+        return jsonResponse(
+          { ok: true, revoked: true },
+          200,
+          { "Cache-Control": "no-store" }
+        );
+      } catch (err) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          },
+          500
+        );
+      }
+    }
+
+    // Admin Users Route 1: GET /api/admin/users
+    if (request.method === "GET" && url.pathname === "/api/admin/users") {
+      const actor = await resolveAdminActor(request, env);
+      if (!actor) {
+        return jsonResponse(
+          { ok: false, error: "Unauthorized: Admin authentication required" },
+          401
+        );
+      }
+
+      try {
+        const users = await listAdminUsers(env.DB, env.OWNER_ADMIN_EMAIL);
+        return jsonResponse(
+          {
+            ok: true,
+            ownerEmail: (
+              env.OWNER_ADMIN_EMAIL || DEFAULT_OWNER_EMAIL
+            ).toLowerCase(),
+            actor,
+            users,
+          },
+          200,
+          { "Cache-Control": "no-store" }
+        );
+      } catch (err) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          },
+          500
+        );
+      }
+    }
+
+    // Admin Users Route 2: POST /api/admin/users/invite
+    if (
+      request.method === "POST" &&
+      url.pathname === "/api/admin/users/invite"
+    ) {
+      const actor = await resolveAdminActor(request, env);
+      if (!actor) {
+        return jsonResponse(
+          { ok: false, error: "Unauthorized: Admin authentication required" },
+          401
+        );
+      }
+      if (actor.role !== "owner" && actor.role !== "admin") {
+        return jsonResponse(
+          {
+            ok: false,
+            error: "Forbidden: Only Owner or Admin roles may invite users.",
+          },
+          403
+        );
+      }
+
+      try {
+        const body = (await request.json()) as {
+          email?: string;
+          displayName?: string | null;
+          role?: AdminUserRole;
+          authProviderPref?: AdminAuthProviderPref;
+          reason?: string;
+          baseUrl?: string;
+          sendEmail?: boolean;
+          actorEmail?: string;
+          actorRole?: string;
+          authMethod?: AuditAuthMethod;
+        };
+
+        const clientIp =
+          request.headers.get("cf-connecting-ip") ||
+          request.headers.get("x-forwarded-for");
+
+        const result = await inviteAdminUser({
+          db: env.DB,
+          ownerEmail: env.OWNER_ADMIN_EMAIL,
+          actor: {
+            actorEmail: body.actorEmail || actor.email,
+            actorRole: body.actorRole || actor.role,
+            authMethod: body.authMethod || actor.authMethod,
+            actorIpHash: await hashActorIp(clientIp),
+          },
+          email: body.email || "",
+          displayName: body.displayName,
+          role: body.role,
+          authProviderPref: body.authProviderPref,
+          reason: body.reason,
+          baseUrl: body.baseUrl || "https://thecabcall.com",
+          resendApiKey: env.RESEND_API_KEY,
+          emailFrom: env.EMAIL_FROM,
+          sendEmail: body.sendEmail !== false,
+        });
+
+        return jsonResponse(result, result.status, {
+          "Cache-Control": "no-store",
+        });
+      } catch (err) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          },
+          500
+        );
+      }
+    }
+
+    // Admin Users Route 3: POST /api/admin/users/revoke (or DELETE /api/admin/users)
+    if (
+      (request.method === "POST" &&
+        url.pathname === "/api/admin/users/revoke") ||
+      (request.method === "DELETE" && url.pathname === "/api/admin/users")
+    ) {
+      const actor = await resolveAdminActor(request, env);
+      if (!actor) {
+        return jsonResponse(
+          { ok: false, error: "Unauthorized: Admin authentication required" },
+          401
+        );
+      }
+      if (actor.role !== "owner" && actor.role !== "admin") {
+        return jsonResponse(
+          {
+            ok: false,
+            error: "Forbidden: Only Owner or Admin roles may revoke users.",
+          },
+          403
+        );
+      }
+
+      try {
+        const body = (await request.json()) as {
+          email?: string;
+          id?: number | string;
+          reason?: string;
+          actorEmail?: string;
+          actorRole?: string;
+          authMethod?: AuditAuthMethod;
+        };
+
+        const targetEmailOrId = body.id ?? body.email ?? "";
+        if (!targetEmailOrId) {
+          return jsonResponse(
+            { ok: false, error: "Missing required field: email or id" },
+            400
+          );
+        }
+
+        const clientIp =
+          request.headers.get("cf-connecting-ip") ||
+          request.headers.get("x-forwarded-for");
+
+        const result = await revokeAdminUser({
+          db: env.DB,
+          ownerEmail: env.OWNER_ADMIN_EMAIL,
+          actor: {
+            actorEmail: body.actorEmail || actor.email,
+            actorRole: body.actorRole || actor.role,
+            authMethod: body.authMethod || actor.authMethod,
+            actorIpHash: await hashActorIp(clientIp),
+          },
+          targetEmailOrId,
+          reason: body.reason,
+        });
+
+        return jsonResponse(result, result.status, {
+          "Cache-Control": "no-store",
+        });
+      } catch (err) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          },
+          500
+        );
+      }
+    }
+
+    // Admin Users Route 4: POST /api/admin/users/role (or PUT /api/admin/users)
+    if (
+      (request.method === "POST" && url.pathname === "/api/admin/users/role") ||
+      (request.method === "PUT" && url.pathname === "/api/admin/users")
+    ) {
+      const actor = await resolveAdminActor(request, env);
+      if (!actor) {
+        return jsonResponse(
+          { ok: false, error: "Unauthorized: Admin authentication required" },
+          401
+        );
+      }
+      if (actor.role !== "owner" && actor.role !== "admin") {
+        return jsonResponse(
+          {
+            ok: false,
+            error:
+              "Forbidden: Only Owner or Admin roles may update user roles.",
+          },
+          403
+        );
+      }
+
+      try {
+        const body = (await request.json()) as {
+          email?: string;
+          id?: number | string;
+          role?: AdminUserRole;
+          authProviderPref?: AdminAuthProviderPref;
+          displayName?: string | null;
+          reason?: string;
+          actorEmail?: string;
+          actorRole?: string;
+          authMethod?: AuditAuthMethod;
+        };
+
+        const targetEmailOrId = body.id ?? body.email ?? "";
+        if (!targetEmailOrId || !body.role) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: "Missing required fields: (email or id) and role",
+            },
+            400
+          );
+        }
+
+        const clientIp =
+          request.headers.get("cf-connecting-ip") ||
+          request.headers.get("x-forwarded-for");
+
+        const result = await updateAdminUserRole({
+          db: env.DB,
+          ownerEmail: env.OWNER_ADMIN_EMAIL,
+          actor: {
+            actorEmail: body.actorEmail || actor.email,
+            actorRole: body.actorRole || actor.role,
+            authMethod: body.authMethod || actor.authMethod,
+            actorIpHash: await hashActorIp(clientIp),
+          },
+          targetEmailOrId,
+          role: body.role,
+          authProviderPref: body.authProviderPref,
+          displayName: body.displayName,
+          reason: body.reason,
+        });
+
+        return jsonResponse(result, result.status, {
+          "Cache-Control": "no-store",
+        });
       } catch (err) {
         return jsonResponse(
           {

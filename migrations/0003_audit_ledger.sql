@@ -35,7 +35,7 @@ BEGIN
 END;
 
 -- Seed GENESIS audit ledger row recording the initialization of the immutable audit system
-INSERT INTO audit_ledger (
+INSERT OR IGNORE INTO audit_ledger (
   event_id,
   timestamp,
   actor_email,

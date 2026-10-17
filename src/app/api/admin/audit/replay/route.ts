@@ -9,13 +9,13 @@ import { loadLocalEnvVars } from "@/lib/d1-bridge";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const envVars = loadLocalEnvVars();
-  const providedSecret = req.headers.get("x-admin-secret");
+  const { requireAdminRequestActor } = await import("@/lib/auth");
+  const auth = await requireAdminRequestActor(req, ["owner", "admin"]);
 
-  if (!providedSecret || providedSecret !== envVars.ADMIN_SECRET) {
+  if (!auth.authorized || !auth.actor) {
     return NextResponse.json(
-      { error: "Unauthorized: Invalid or missing x-admin-secret header" },
-      { status: 401 }
+      { error: auth.error || "Unauthorized" },
+      { status: auth.status }
     );
   }
 
@@ -42,9 +42,9 @@ export async function POST(req: NextRequest) {
       req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip");
 
     const result = await executeAuditReplay(body.eventId, mode, {
-      actorEmail: body.actorEmail || "owner@thecabcall.com",
-      actorRole: body.actorRole || "owner",
-      authMethod: body.authMethod || "admin_secret",
+      actorEmail: body.actorEmail || auth.actor.email,
+      actorRole: body.actorRole || auth.actor.role,
+      authMethod: body.authMethod || auth.actor.authMethod,
       actorIpHash: await hashActorIp(clientIp),
       reason: body.reason,
     });

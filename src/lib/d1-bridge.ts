@@ -472,6 +472,11 @@ export function loadLocalEnvVars(): {
   ADMIN_SECRET: string;
   WORKER_API_URL?: string;
   NEXT_PUBLIC_WORKER_URL?: string;
+  OWNER_ADMIN_EMAIL: string;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  RESEND_API_KEY?: string;
+  EMAIL_FROM?: string;
 } {
   const vars: Record<string, string> = {};
   try {
@@ -513,6 +518,18 @@ export function loadLocalEnvVars(): {
       )
         .trim()
         .replace(/\/+$/, "") || undefined,
+    OWNER_ADMIN_EMAIL: (
+      process.env.OWNER_ADMIN_EMAIL ||
+      vars.OWNER_ADMIN_EMAIL ||
+      "nicholas.king@columbiacloudworks.com"
+    )
+      .trim()
+      .toLowerCase(),
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID || vars.GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET:
+      process.env.GOOGLE_CLIENT_SECRET || vars.GOOGLE_CLIENT_SECRET,
+    RESEND_API_KEY: process.env.RESEND_API_KEY || vars.RESEND_API_KEY,
+    EMAIL_FROM: process.env.EMAIL_FROM || vars.EMAIL_FROM,
   };
 }
 

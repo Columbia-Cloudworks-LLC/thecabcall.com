@@ -45,13 +45,17 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const envVars = loadLocalEnvVars();
-  const providedSecret = req.headers.get("x-admin-secret");
+  const { requireAdminRequestActor } = await import("@/lib/auth");
+  const auth = await requireAdminRequestActor(req, [
+    "owner",
+    "admin",
+    "editor",
+  ]);
 
-  if (!providedSecret || providedSecret !== envVars.ADMIN_SECRET) {
+  if (!auth.authorized || !auth.actor) {
     return NextResponse.json(
-      { error: "Unauthorized: Invalid or missing x-admin-secret header" },
-      { status: 401 }
+      { error: auth.error || "Unauthorized" },
+      { status: auth.status }
     );
   }
 
@@ -71,8 +75,9 @@ export async function POST(req: NextRequest) {
       req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip");
     const entry = await recordAuditEntry({
       ...body,
-      actorEmail: body.actorEmail || "system@thecabcall.com",
-      authMethod: body.authMethod || "admin_secret",
+      actorEmail: body.actorEmail || auth.actor.email,
+      actorRole: body.actorRole || auth.actor.role,
+      authMethod: body.authMethod || auth.actor.authMethod,
       actorIpHash: body.actorIpHash ?? (await hashActorIp(clientIp)),
     });
 
