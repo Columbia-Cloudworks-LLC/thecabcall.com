@@ -1,11 +1,11 @@
 # The CAB Call (`thecabcall.com`) — Master Epics & Issues Roadmap
 
 > **How to use this document with Antigravity:**
-> Open a new Antigravity session in this repository and simply say:
-> - **`"Implement Epic #1"`** (or `"Implement Epic #2"`, `"Implement Epic #3"`, etc.)
-> - Or target a specific issue: **`"Implement Issue 2.1"`**
+> Open an Antigravity session in this repository and simply say:
+> - **`"Implement Issue 6"`** (or `"Implement Issue #7"`, `"Implement Issue #8"`, `"Implement Issue #9"`, `"Implement Issue #10"`, `"Implement Issue #11"`, `"Implement Issue #12"`)
+> - Or run an entire Epic at once: **`"Implement Epic #6"`** (or `"Implement Epic #5"`)
 >
-> Antigravity is configured via [`AGENTS.md`](../AGENTS.md) to execute every issue in the requested Epic **autonomously from start to finish**, running all verification checks automatically, and **only pausing when it hits a `[HUMAN ACTION GATE]`** (a step requiring your interactive login, external dashboard action, or files). When it pauses at a gate, it will give you exact, copy-pasteable instructions for what to do and wait for you to reply `"Done, continue"`.
+> Antigravity is configured via [`AGENTS.md`](../AGENTS.md) and [`.github/ISSUE_TEMPLATE/antigravity-issue.md`](../.github/ISSUE_TEMPLATE/antigravity-issue.md) to implement every requested Issue **autonomously from start to finish**—writing the code, running local tests, applying remote Cloudflare D1 migrations, deploying the Cloudflare Worker and Vercel production frontend, verifying that the feature is live in production, and **only pausing when it hits a `[HUMAN ACTION GATE]`** (a step requiring your interactive login, external OAuth/API credentials, or local files). When it pauses at a gate, it will walk you through the exact steps to take and ask you to confirm when you are done before proceeding.
 
 ---
 
@@ -20,16 +20,29 @@
 | **Cloudflare Worker Entrypoint & Crons** | Deployed (`https://thecabcall.thecabcall.workers.dev`) | `src/worker.ts`, `wrangler.jsonc` |
 | **D1 SQLite Schema & Migrations** | Applied to remote `cabcall-db` (`094cf69c-0fe3-409b-a871-06f3610a28a6`) & local `.wrangler` | `migrations/0001_init.sql`, `migrations/0002_pipeline_runs.sql` |
 | **Database & Audio Bridge** | Live Cloud Worker Bridge (`/api/snapshot` + R2 audio) with local `.wrangler` fallback | `src/lib/d1-bridge.ts`, `src/lib/store.ts` |
+| **Admin Governance, Auth & Audit Ledger** | Planned in Epic #6 (Issues #6 – #12 below) | `migrations/0003_*.sql`, `src/app/admin/`, `src/lib/audit.ts`, `src/lib/auth.ts` |
 
 ---
 
-## Epic Overview (Synced with GitHub Issues)
+## Epic & Issue Index (Synced with GitHub Issues)
 
+### Completed Foundation Epics (#1 – #4)
 - [x] **Epic #1 ([GitHub Issue #1](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/1)): Repository Baseline, Clean Build & Git Synchronization**
 - [x] **Epic #2 ([GitHub Issue #2](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/2)): Cloudflare Cloud Provisioning (Live D1 Database, R2 Audio Bucket & Worker Deployment)**
 - [x] **Epic #3 ([GitHub Issue #3](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/3)): Cloud Bridge — Connecting the Live Next.js Website to Production Cloudflare D1 & R2**
 - [x] **Epic #4 ([GitHub Issue #4](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/4)): Production Frontend Deployment (Vercel) & Custom Domain Cutover (`thecabcall.com`)**
-- [ ] **Epic #5 ([GitHub Issue #5](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/5)): Legacy Podcast Archive Migration & Voice Cloning / TTS Enhancement**
+
+### Open Archive & Voice Enhancement Epic (#5)
+- [ ] **Epic #5 ([GitHub Issue #5](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/5)): Legacy Podcast Archive Migration & Voice Cloning / TTS Enhancement** (`Issues 5.1 – 5.3`)
+
+### Open Admin Dashboard, Editorial Pipeline & Immutable Audit Trail Epic (#6 — Issues #6 to #12)
+- [ ] **Issue #6 ([GitHub Issue #6](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/6)): Immutable Replayable Audit Ledger & Disclosure Engine (D1 Append-Only Schema, SHA-256 Hash Chain & Replay API)**
+- [ ] **Issue #7 ([GitHub Issue #7](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/7)): Admin Authentication & User Access Control (Google OAuth Owner Lock, Email Invites & Magic Link Fallback)**
+- [ ] **Issue #8 ([GitHub Issue #8](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/8)): Admin Dashboard Shell, Telemetry Command Center & Audit Trail Explorer / Replay Studio (`/admin` & `/admin/audit`)**
+- [ ] **Issue #9 ([GitHub Issue #9](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/9)): Podcast Episode Admin Studio — Delete Episodes, Purge R2 Audio, Edit Transcripts & Generate New Episodes (`/admin/episodes`)**
+- [ ] **Issue #10 ([GitHub Issue #10](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/10)): Dynamic Inbound RSS Feed & Triage Filter Management (`/admin/feeds` & `/admin/filters`)**
+- [ ] **Issue #11 ([GitHub Issue #11](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/11)): Editorial Pipeline & Incident Studio — De-Alarmist Title Rewriting, Image Attachment Pipeline & Brief Overrides (`/admin/incidents` & `/admin/transforms`)**
+- [ ] **Issue #12 ([GitHub Issue #12](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/12)): Outbound Published Feeds & Syndication Studio — Customize Podcast RSS & Publish De-Alarmed Incident Feeds (`/admin/publishing`, `/feed.xml` & `/feeds/incidents.*`)**
 
 ---
 
@@ -73,73 +86,18 @@
 
 ### Issue 2.1: Verify Cloudflare Wrangler Authentication
 - **Status:** `[x] Completed`
-- **Automated Steps for Antigravity:**
-  1. Run `npx wrangler whoami` to check if Wrangler has an active Cloudflare session.
-  2. If authenticated, proceed immediately to Issue 2.2.
-  3. If `npx wrangler whoami` fails with an expired/missing token error, **STOP** and trigger the Human Action Gate below.
-- **[HUMAN ACTION GATE] — Cloudflare Login Required:**
-  > **Why Antigravity paused:** Your Cloudflare Wrangler CLI token is expired or not logged in, and Cloudflare requires an interactive browser login.
-  >
-  > **Steps for you to perform:**
-  > 1. Open your terminal in `d:\repos\thecabcall.com`
-  > 2. Run:
-  >    ```powershell
-  >    npx wrangler login
-  >    ```
-  > 3. Click **Allow** in the browser window that opens.
-  > 4. Come back here and reply: **`"Done, continue"`**
 
 ### Issue 2.2: Provision Production Cloudflare D1 Database & R2 Bucket
 - **Status:** `[x] Completed`
-- **Automated Steps for Antigravity:**
-  1. Check existing D1 databases via `npx wrangler d1 list`. If `cabcall-db` does not exist, create it via:
-     ```powershell
-     npx wrangler d1 create cabcall-db
-     ```
-  2. Extract the real `database_id` UUID from the output and replace `"00000000-0000-0000-0000-000000000000"` in [`wrangler.jsonc`](../wrangler.jsonc).
-  3. Check existing R2 buckets via `npx wrangler r2 bucket list`. If `cabcall-audio` does not exist, create it via:
-     ```powershell
-     npx wrangler r2 bucket create cabcall-audio
-     ```
-- **Verification:** `wrangler.jsonc` contains a real UUID for `cabcall-db`, and both `cabcall-db` and `cabcall-audio` exist in the Cloudflare account.
-- **Human Action Gate:** Only if Cloudflare R2 is not yet enabled on the user's Cloudflare account (if Wrangler reports R2 needs activation, instruct the user to click **R2 Object Storage -> Activate** in the Cloudflare Dashboard at `https://dash.cloudflare.com`).
 
 ### Issue 2.3: Apply D1 Migrations to Remote Production Database
 - **Status:** `[x] Completed`
-- **Automated Steps for Antigravity:**
-  1. Execute remote D1 migrations against Cloudflare:
-     ```powershell
-     npx wrangler d1 migrations apply cabcall-db --remote
-     ```
-  2. Verify tables exist remotely:
-     ```powershell
-     npx wrangler d1 execute cabcall-db --remote --command "SELECT name FROM sqlite_master WHERE type='table';"
-     ```
-- **Verification:** Remote `cabcall-db` contains `telemetry_articles`, `episodes`, and `pipeline_runs`.
-- **Human Action Gate:** None.
 
 ### Issue 2.4: Configure Production Secrets & Deploy Cloudflare Worker
 - **Status:** `[x] Completed`
-- **Automated Steps for Antigravity:**
-  1. Read `TYPESAFE_API_KEY`, `GEMINI_API_KEY`, and `ADMIN_SECRET` from local `.dev.vars` (if `.dev.vars` is missing any key, trigger a Human Action Gate asking the user to add it to `.dev.vars`).
-  2. Deploy the Cloudflare Worker:
-     ```powershell
-     npx wrangler deploy
-     ```
-  3. Push each secret to the deployed Cloudflare Worker (`TYPESAFE_API_KEY`, `GEMINI_API_KEY`, `ADMIN_SECRET`) using `npx wrangler secret put <KEY_NAME>` via stdin pipe.
-  4. Record the live Worker URL (`https://thecabcall.thecabcall.workers.dev`).
-- **Verification:** `GET https://thecabcall.thecabcall.workers.dev/` returns `200 OK` JSON with service health metadata.
-- **Human Action Gate:** Only if `.dev.vars` is missing `TYPESAFE_API_KEY` or `GEMINI_API_KEY`.
 
 ### Issue 2.5: Seed Live Cloud Telemetry (Run Ingest, Synthesis & Rollup on Production Worker)
 - **Status:** `[x] Completed`
-- **Automated Steps for Antigravity:**
-  1. Call `POST https://thecabcall.thecabcall.workers.dev/api/test-jev` with `x-admin-secret` to verify live TypeSafe Jev classification on the edge.
-  2. Call `POST https://thecabcall.thecabcall.workers.dev/api/run-ingest?synthesize=true` with `x-admin-secret` to ingest live RSS feeds into remote D1 and synthesize Socratic briefs via Gemini.
-  3. Call `POST https://thecabcall.thecabcall.workers.dev/api/run-rollup` with `x-admin-secret` to generate the Friday 5-Minute CAB Weekly Brief and store its MP3 in remote R2 (`cabcall-audio`).
-  4. Verify `GET https://thecabcall.thecabcall.workers.dev/audio/cab-weekly-brief-43-2026-10-17.mp3` returns `200 OK` (`audio/mpeg`).
-- **Verification:** Remote D1 contains synthesized articles and a live episode, and remote R2 streams the episode MP3.
-- **Human Action Gate:** None.
 
 ---
 
@@ -149,28 +107,12 @@
 
 ### Issue 3.1: Add Live Telemetry Snapshot Endpoint to Cloudflare Worker (`src/worker.ts`)
 - **Status:** `[x] Completed`
-- **Automated Steps for Antigravity:**
-  1. Add `GET /api/snapshot` to [`src/worker.ts`](../src/worker.ts) that queries `env.DB` (`telemetry_articles`, `episodes`, `pipeline_runs`) and returns the structured snapshot JSON with short edge caching (`Cache-Control: public, s-maxage=30, stale-while-revalidate=120`) and CORS headers.
-  2. Redeploy the Cloudflare Worker via `npx wrangler deploy` and verify `GET <WORKER_URL>/api/snapshot` returns all live D1 rows.
-- **Verification:** `GET <WORKER_URL>/api/snapshot` returns `200 OK` with `articles`, `episodes`, and `pipelineRuns` arrays from production D1.
-- **Human Action Gate:** None.
 
 ### Issue 3.2: Upgrade Next.js Data Layer & API Routes to Use Production Worker Bridge
 - **Status:** `[x] Completed`
-- **Automated Steps for Antigravity:**
-  1. Update [`src/lib/d1-bridge.ts`](../src/lib/d1-bridge.ts) and [`src/lib/store.ts`](../src/lib/store.ts) so that when `WORKER_API_URL` (or `NEXT_PUBLIC_WORKER_URL`) is configured (or in production when local `.wrangler` SQLite is absent), data reads/writes sync with the remote Cloudflare Worker `/api/snapshot`, `/api/run-ingest`, `/api/run-synthesize`, `/api/run-rollup`, and `/audio/:filename` endpoints.
-  2. Update `/audio/[filename]/route.ts`, `/api/cron/ingest/route.ts`, and `/api/cron/weekly-rollup/route.ts` so Vercel Cron or UI triggers proxy cleanly to the production Cloudflare Worker when running in the cloud.
-  3. Preserve local `.wrangler` SQLite support as a seamless local fallback when developing offline.
-- **Verification:** Running Next.js with `WORKER_API_URL` set (and `.wrangler` temporarily bypassed) renders live D1 articles, live posture telemetry, and plays live R2 audio from the production Worker.
-- **Human Action Gate:** None.
 
 ### Issue 3.3: Build, Commit & Push Cloud Bridge
 - **Status:** `[x] Completed`
-- **Automated Steps for Antigravity:**
-  1. Run `npm run build` to ensure all Server Components and API routes compile cleanly.
-  2. Commit and push changes to `origin/main`.
-- **Verification:** `npm run build` succeeds and `git status` is clean.
-- **Human Action Gate:** None.
 
 ---
 
@@ -180,41 +122,12 @@
 
 ### Issue 4.1: Configure Vercel Environment Variables & Deploy Production Release
 - **Status:** `[x] Completed`
-- **Automated Steps for Antigravity:**
-  1. Verify Vercel CLI authentication via `npx vercel whoami` (if not logged in, trigger Human Action Gate for `npx vercel login`).
-  2. Add/update production environment variables on Vercel (`WORKER_API_URL`, `NEXT_PUBLIC_WORKER_URL`, `ADMIN_SECRET`, `TYPESAFE_API_KEY`, `GEMINI_API_KEY`) using `npx vercel env`.
-  3. Trigger a production deployment via `npx vercel --prod --yes`.
-- **Verification:** Production Vercel URL returns `200 OK` and displays live D1 telemetry from the Cloudflare Worker.
-- **Human Action Gate:** Only if `npx vercel whoami` shows the session is expired (instruct user to run `npx vercel login`).
 
 ### Issue 4.2: Custom Domain (`thecabcall.com`) DNS & SSL Cutover
 - **Status:** `[x] Completed`
-- **Automated Steps for Antigravity:**
-  1. Check domain configuration on the Vercel project via `npx vercel domains inspect thecabcall.com` or `npx vercel alias`.
-  2. Check live DNS resolution for `thecabcall.com` and `www.thecabcall.com` using `Resolve-DnsName thecabcall.com`.
-  3. If `thecabcall.com` is not yet attached or DNS points to an old WordPress host, attach the domain to the project and trigger the Human Action Gate with the exact DNS records required.
-- **[HUMAN ACTION GATE] — Domain DNS Cutover (If Needed):**
-  > **Why Antigravity paused:** If `thecabcall.com` is still pointing to your old host or needs DNS records updated in your Cloudflare/Registrar DNS dashboard:
-  >
-  > **Steps for you to perform:**
-  > 1. Log in to your DNS provider (Cloudflare Dashboard -> `thecabcall.com` -> **DNS -> Records**).
-  > 2. Set the root `@` (`thecabcall.com`) `A` record to `76.76.21.21` (with Cloudflare Proxy set to **DNS Only / Grey Cloud** during SSL provisioning, or as instructed by Vercel).
-  > 3. Set `www` `CNAME` to `cname.vercel-dns.com`.
-  > 4. Reply **`"Done, continue"`** once saved.
 
 ### Issue 4.3: End-to-End Production Smoke Test
 - **Status:** `[x] Completed`
-- **Automated Steps for Antigravity:**
-  1. Verify HTTP `200 OK` and live data rendering across all 6 production routes:
-     - `/` (The Trestleboard)
-     - `/incidents/<live-slug>` (Post-Incident Review Brief)
-     - `/knowledge-graph` (6×6 Matrix)
-     - `/archive` (Podcast Hub)
-     - `/rubric` (The Rubric & Working Tools)
-     - `/status` (System Status & Live Sandbox)
-  2. Verify `/feed.xml` returns valid RSS 2.0 XML with `<enclosure>` audio URLs that return HTTP `200`/`206` byte-range responses.
-- **Verification:** All 6 pages, `/api/telemetry`, and `/feed.xml` respond live in production.
-- **Human Action Gate:** None.
 
 ---
 
@@ -249,3 +162,356 @@
   2. Add optional support for `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID` (so if you clone your own voice on ElevenLabs and add those secrets, Friday rollups automatically speak in your cloned voice, while keeping Gemini TTS as the zero-cost default).
 - **Verification:** `npm run build` and Worker deployment succeed with multi-provider TTS support.
 - **Human Action Gate:** Optional — only if the user wants to supply an `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID`.
+
+---
+
+# Epic #6: Admin Dashboard, Google/Magic-Link Auth, Dynamic Feeds/Filters, Editorial Pipeline & Immutable Audit Trail (Issues #6 – #12)
+
+**Objective:** Build a comprehensive, locked-down Admin Dashboard (`/admin`) where only the owner's Google account can log in initially, with the ability to invite or remove other users by email (who can sign in via Google OAuth or passwordless Magic Link), manage podcast episodes (delete, edit, generate on-demand), dynamically add/edit/remove inbound RSS feeds and triage filters, run editorial pipeline transforms (such as de-escalating alarmist news headlines and attaching images to incidents), customize outbound published feeds (`/feed.xml` and `/feeds/incidents.*`), and record **every single mutation** in a cryptographically hash-chained, replayable, immutable D1 audit ledger (`audit_ledger`) ready for public or regulatory disclosure at any time.
+
+---
+
+## Issue #6 (Epic 6.1): Immutable Replayable Audit Ledger & Disclosure Engine
+- **GitHub Issue:** [#6](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/6)
+- **Status:** `[ ] Pending`
+- **Objective:** Create the foundational append-only, cryptographically hash-chained audit trail (`audit_ledger`) in Cloudflare D1 and `src/lib/audit.ts` so that every administrative, editorial, feed, filter, episode, and access-control change across the entire platform is recorded with full `before_state_json`, `after_state_json`, actor attribution, SHA-256 chain integrity, deterministic replay/rollback capability, and one-click disclosure export.
+- **Automated Steps for Antigravity:**
+  1. **D1 Migration (`migrations/0003_audit_ledger.sql`):**
+     - Create `audit_ledger` table with columns:
+       - `id INTEGER PRIMARY KEY AUTOINCREMENT`
+       - `event_id TEXT NOT NULL UNIQUE` (UUIDv4)
+       - `timestamp TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`
+       - `actor_email TEXT NOT NULL`
+       - `actor_role TEXT NOT NULL DEFAULT 'owner'`
+       - `auth_method TEXT NOT NULL` (`'google_oauth' | 'magic_link' | 'admin_secret' | 'system_bootstrap'`)
+       - `actor_ip_hash TEXT`
+       - `action_type TEXT NOT NULL` (e.g., `'user.invite'`, `'user.revoke'`, `'episode.generate'`, `'episode.delete'`, `'episode.update'`, `'feed.create'`, `'feed.update'`, `'feed.delete'`, `'filter.create'`, `'filter.update'`, `'filter.delete'`, `'incident.rewrite_title'`, `'incident.attach_image'`, `'incident.override_brief'`, `'incident.status_change'`, `'outbound_feed.update'`, `'pipeline_transform.update'`, `'audit.replay'`)
+       - `target_type TEXT NOT NULL` (`'user' | 'episode' | 'ingest_feed' | 'ingest_filter' | 'incident_article' | 'outbound_feed' | 'pipeline_transform'`)
+       - `target_id TEXT NOT NULL`
+       - `reason TEXT NOT NULL DEFAULT ''` (human/editorial justification note for disclosure)
+       - `before_state_json TEXT` (full JSON snapshot before change, `null` on creation)
+       - `after_state_json TEXT` (full JSON snapshot after change, `null` on deletion)
+       - `replay_command_json TEXT NOT NULL` (deterministic payload describing how to replay or invert the state change)
+       - `prev_hash TEXT NOT NULL` (`'GENESIS'` for row #1, or `entry_hash` of `id - 1`)
+       - `entry_hash TEXT NOT NULL UNIQUE` (SHA-256 hex digest of canonical `prev_hash | timestamp | actor_email | action_type | target_type | target_id | reason | before_state_json | after_state_json`)
+     - Add SQLite immutability triggers:
+       - `CREATE TRIGGER trg_audit_ledger_no_update BEFORE UPDATE ON audit_ledger BEGIN SELECT RAISE(ABORT, 'Immutable audit_ledger cannot be updated'); END;`
+       - `CREATE TRIGGER trg_audit_ledger_no_delete BEFORE DELETE ON audit_ledger BEGIN SELECT RAISE(ABORT, 'Immutable audit_ledger cannot be deleted'); END;`
+     - Seed a `GENESIS` audit ledger row recording the initialization of the immutable audit system.
+  2. **Audit Engine (`src/pipeline/audit.ts` & `src/lib/audit.ts`):**
+     - Implement `appendAuditEntry(db, input)` using Web Crypto SHA-256 to compute `prev_hash` -> `entry_hash` atomically.
+     - Implement `verifyAuditChainIntegrity(db)` that walks every row from `GENESIS` to head, recomputes each SHA-256 digest, and returns `{ valid: boolean, totalEntries: number, headHash: string, brokenAtId?: number }`.
+     - Implement `replayAuditEntry(db, eventId, mode: 'revert_to_before' | 'reapply_after', actor)` which restores the target entity to its `before_state_json` or `after_state_json` and appends a new `audit.replay` entry to `audit_ledger` referencing the original `event_id`.
+     - Implement `exportAuditDisclosureBundle(db, filters)` producing a signed JSON & Markdown disclosure report suitable for public attachment or compliance auditing.
+  3. **Cloudflare Worker & Next.js API Endpoints:**
+     - Add Worker routes `/api/admin/audit` (`GET` list + filter), `/api/admin/audit/verify` (`GET` chain verification), `/api/admin/audit/replay` (`POST` state replay/revert), and `/api/admin/audit/export` (`GET` JSON/Markdown disclosure bundle).
+     - Expose matching Next.js API route handlers under `src/app/api/admin/audit/`.
+  4. **Apply & Deploy Live:**
+     - Apply `0003_audit_ledger.sql` locally and to remote Cloudflare D1 (`npx wrangler d1 migrations apply cabcall-db --local` and `--remote`).
+     - Run `npx tsc --noEmit` and `npm run build`.
+     - Deploy Worker (`npx wrangler deploy`) and Vercel production (`npx vercel --prod --yes`).
+- **Verification:**
+  - `GET https://thecabcall.thecabcall.workers.dev/api/admin/audit/verify` returns `200 OK` with `{ valid: true, totalEntries: >= 1 }`.
+  - Attempting an `UPDATE` or `DELETE` on `audit_ledger` fails with SQLite `ABORT: Immutable audit_ledger cannot be updated/deleted`.
+- **Human Action Gate:** None.
+
+---
+
+## Issue #7 (Epic 6.2): Admin Authentication & User Access Control (Google OAuth Owner Lock, Email Invites & Magic Link Fallback)
+- **GitHub Issue:** [#7](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/7)
+- **Status:** `[ ] Pending`
+- **Objective:** Lock down the Admin Dashboard so that **only the owner's Google account** can log in initially, allow the owner to invite or remove other users by email, allow invited users with Google accounts to sign in with Google, and require invited users who do not use Google to sign in via a single-use cryptographic Magic Link sent to their email.
+- **Automated Steps for Antigravity:**
+  1. **D1 Migration (`migrations/0004_admin_auth.sql`):**
+     - Create `admin_users` table:
+       - `id INTEGER PRIMARY KEY AUTOINCREMENT`
+       - `email TEXT NOT NULL UNIQUE` (normalized lowercase)
+       - `display_name TEXT`
+       - `avatar_url TEXT`
+       - `role TEXT NOT NULL DEFAULT 'editor'` (`'owner' | 'admin' | 'editor' | 'auditor'`)
+       - `auth_provider_pref TEXT NOT NULL DEFAULT 'any'` (`'google' | 'magic_link' | 'any'`)
+       - `status TEXT NOT NULL DEFAULT 'invited'` (`'active' | 'invited' | 'revoked'`)
+       - `invited_by_email TEXT`
+       - `created_at TEXT NOT NULL DEFAULT (datetime('now'))`
+       - `last_login_at TEXT`
+     - Create `admin_magic_links` table:
+       - `id INTEGER PRIMARY KEY AUTOINCREMENT`
+       - `email TEXT NOT NULL`
+       - `token_hash TEXT NOT NULL UNIQUE` (SHA-256 hash of single-use raw token; raw token is never stored in DB)
+       - `purpose TEXT NOT NULL DEFAULT 'login'` (`'login' | 'invite'`)
+       - `expires_at TEXT NOT NULL` (15-minute TTL for login links, 7-day TTL for initial invite links)
+       - `used_at TEXT`
+       - `created_at TEXT NOT NULL DEFAULT (datetime('now'))`
+     - Create `admin_sessions` table:
+       - `id INTEGER PRIMARY KEY AUTOINCREMENT`
+       - `session_token_hash TEXT NOT NULL UNIQUE`
+       - `user_id INTEGER NOT NULL`
+       - `email TEXT NOT NULL`
+       - `role TEXT NOT NULL`
+       - `auth_method TEXT NOT NULL` (`'google_oauth' | 'magic_link'`)
+       - `expires_at TEXT NOT NULL`
+       - `revoked_at TEXT`
+       - `created_at TEXT NOT NULL DEFAULT (datetime('now'))`
+  2. **Authentication Engine (`src/lib/auth.ts` & Worker Auth Routes):**
+     - **Owner Bootstrap:** Automatically ensure `OWNER_ADMIN_EMAIL` is seeded in `admin_users` with `role = 'owner'` and `status = 'active'`. Any login attempt from an email **not** in `admin_users` (or with `status = 'revoked'`) is strictly denied (`403 Forbidden`) and logged.
+     - **Google OAuth 2.0 / OIDC Flow (`/api/auth/google` & `/api/auth/google/callback`):**
+       - Verify Google OAuth ID token / authorization code against Google's OAuth2 endpoints (`https://oauth2.googleapis.com/tokeninfo` / JWKS), confirm `email_verified === true`, verify the email is in `admin_users` (`status IN ('active', 'invited')`), promote `'invited'` -> `'active'`, create an `HttpOnly`, `Secure`, `SameSite=Lax` signed session cookie (`cabcall_admin_session`), and record the login.
+     - **Magic Link Flow for Non-Google Invited Users (`/api/auth/magic-link/request` & `/api/auth/magic-link/verify`):**
+       - When an invited user enters their email on `/admin/login` and clicks **"Send Magic Link"** (or when the owner invites a user via email), verify the email is in `admin_users` (`status IN ('active', 'invited')`).
+       - Generate a 256-bit cryptographic random token, store only its SHA-256 `token_hash` in `admin_magic_links` with a 15-minute expiration, and dispatch the email via Resend (`RESEND_API_KEY`) / transactional email API containing the one-click login URL `https://thecabcall.com/api/auth/magic-link/verify?token=<RAW_TOKEN>`.
+       - Also allow the Owner in `/admin/users` to generate/copy a one-time invite/magic link directly from the UI if an email provider key is not yet configured or if an invitee's corporate spam filter blocks automated mail.
+     - **User Invite & Revocation API (`/api/admin/users`):**
+       - `GET /api/admin/users`: List all users, roles, status (`active`, `invited`, `revoked`), and last login.
+       - `POST /api/admin/users/invite`: Owner/Admin invites an email address with a specified role (`admin`, `editor`, `auditor`), sends the invite email (supporting both Google Sign-In and Magic Link fallback), and appends a `user.invite` record to `audit_ledger`.
+       - `POST /api/admin/users/revoke` (or `DELETE`): Owner revokes a user's access (cannot revoke `owner`), immediately invalidates all active `admin_sessions` for that user, and appends a `user.revoke` record to `audit_ledger`.
+  3. **Admin Login UI (`/admin/login`) & User Management UI (`/admin/users`):**
+     - Build `/admin/login` with:
+       - **"Continue with Google"** button (primary owner & Google user login).
+       - **"Invited without Google? Sign in with Magic Link"** email form.
+       - Clear security banner stating: *"Restricted Change Advisory Board Console — Access limited to the Owner and explicitly invited email addresses. All actions are recorded in the immutable audit ledger."*
+     - Build `/admin/users` allowing the Owner to invite users by email, select their role, resend invite/magic links, or remove/revoke users with a mandatory audit reason.
+- **[HUMAN ACTION GATE] — Owner Email, Google OAuth Client ID & Optional Email API Key:**
+  > **Why Antigravity will pause during Issue #7:** To lock the dashboard exclusively to your Google account and enable live Google Sign-In (plus automated Magic Link emails), Antigravity needs your Google account email address, a Google OAuth Client ID/Secret, and (optionally) a Resend API key for sending invite/magic-link emails.
+  >
+  > **Exact steps Antigravity will walk you through when you run `"Implement Issue 7"`:**
+  > 1. **Your Owner Google Email:** Confirm the exact Gmail / Google Workspace address that should be the sole initial Owner account (`OWNER_ADMIN_EMAIL`).
+  > 2. **Google OAuth Credentials (2 minutes):**
+  >    - Open [Google Cloud Console -> Credentials](https://console.cloud.google.com/apis/credentials).
+  >    - Click **Create Credentials -> OAuth client ID** (Application type: **Web application**).
+  >    - Under **Authorized JavaScript origins**, add:
+  >      - `https://thecabcall.com`
+  >      - `http://localhost:3000`
+  >    - Under **Authorized redirect URIs**, add:
+  >      - `https://thecabcall.com/api/auth/google/callback`
+  >      - `http://localhost:3000/api/auth/google/callback`
+  >    - Copy the **Client ID** (`GOOGLE_CLIENT_ID`) and **Client Secret** (`GOOGLE_CLIENT_SECRET`).
+  > 3. **Magic Link Email Provider (Optional — Resend):**
+  >    - If you want the site to email Magic Links automatically (in addition to giving you a copyable link in the dashboard), create a free API key at [resend.com](https://resend.com) (`RESEND_API_KEY`) and specify your sender address (`EMAIL_FROM`, e.g., `admin@thecabcall.com` or `onboarding@resend.dev`).
+  > 4. Add these to `.dev.vars` (or paste them in chat) and reply **`"Done, continue"`**. Antigravity will automatically push them to Cloudflare Worker secrets and Vercel Production env vars and deploy live.
+- **Verification:**
+  - Unauthenticated requests to `/admin` redirect to `/admin/login`.
+  - Any Google account not in `admin_users` is rejected with `403 Unauthorized Account`.
+  - The Owner account logs in via Google OAuth, invites a secondary email, verifies Magic Link generation/login, revokes the test invitee, and confirms both `user.invite` and `user.revoke` appear in `audit_ledger`.
+
+---
+
+## Issue #8 (Epic 6.3): Admin Dashboard Shell, Telemetry Command Center & Audit Trail Explorer / Replay Studio (`/admin` & `/admin/audit`)
+- **GitHub Issue:** [#8](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/8)
+- **Status:** `[ ] Pending`
+- **Objective:** Build the unified Admin Dashboard navigation shell (`/admin`) and the interactive **Immutable Audit Trail Explorer, Replay & Disclosure Studio** (`/admin/audit`) so you can inspect every change ever made on the site, verify the cryptographic SHA-256 hash chain, view side-by-side `before`/`after` JSON diffs, deterministically revert/replay any change, and export public disclosure reports.
+- **Automated Steps for Antigravity:**
+  1. **Admin Layout & Navigation (`/admin/layout.tsx`, `/admin/page.tsx`):**
+     - Build a protected, high-contrast SRE Command Center layout displaying the logged-in user's email, role badge (`OWNER` / `ADMIN`), auth method badge (`Google OAuth` / `Magic Link`), Chain Integrity status indicator (`AUDIT CHAIN VERIFIED`), and navigation tabs:
+       - **Overview (`/admin`)**: System health, quick-action triggers (Run Ingest, Run Synthesis, Generate Episode), active feed count, active filter count, total incidents, and recent audit events.
+       - **Episodes (`/admin/episodes`)**: Manage, delete, edit, and generate podcast episodes.
+       - **Inbound Feeds (`/admin/feeds`)**: Manage RSS/Atom source feeds.
+       - **Triage Filters (`/admin/filters`)**: Manage keyword, regex, and Jev threshold filters.
+       - **Incidents & Transforms (`/admin/incidents`)**: De-alarmist headline rewriter, image attachments, and brief overrides.
+       - **Published Feeds (`/admin/publishing`)**: Outbound podcast & incident RSS/Atom/JSON feed customization.
+       - **Users & Invites (`/admin/users`)**: Google & Magic Link user access control.
+       - **Audit Ledger (`/admin/audit`)**: Full immutable replayable audit trail & disclosure exporter.
+  2. **Audit Trail Explorer & Replay Studio (`/admin/audit/page.tsx`):**
+     - **Cryptographic Chain Verifier Banner:** Live check against `/api/admin/audit/verify` showing total ledger entries, `GENESIS` hash, current `HEAD` hash, and green verification seal.
+     - **Filterable Event Log:** Filter by `action_type`, `target_type`, `actor_email`, `target_id`, or date range.
+     - **Side-by-Side Diff & Replay Drawer:** Click any audit event to inspect the exact `before_state_json` vs. `after_state_json` field-level diff, the actor's disclosure `reason`, and a **"Revert / Replay State"** button (with confirmation modal + reason input) that restores the prior state while appending a new audit record.
+     - **One-Click Disclosure Export:** Download a complete or filtered **Public Disclosure Report** in Markdown (`.md`) or signed JSON (`.json`) showing the full provenance and edit history of any incident, feed, filter, or episode.
+  3. **Build, Test & Deploy Live:**
+     - Run `npx tsc --noEmit` and `npm run build`.
+     - Deploy Worker (`npx wrangler deploy`) and Vercel frontend (`npx vercel --prod --yes`).
+- **Verification:** `/admin` and `/admin/audit` render live data from production D1, verify the SHA-256 hash chain, display diffs, and export a disclosure bundle.
+- **Human Action Gate:** None.
+
+---
+
+## Issue #9 (Epic 6.4): Podcast Episode Admin Studio — Delete Episodes, Purge R2 Audio, Edit Transcripts & Generate New Episodes (`/admin/episodes`)
+- **GitHub Issue:** [#9](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/9)
+- **Status:** `[ ] Pending`
+- **Objective:** Give the Admin complete lifecycle control over all podcast episodes in `/admin/episodes`: delete any episode (removing it from D1 `episodes` and deleting/archiving its `.mp3` object in Cloudflare R2 `cabcall-audio`), generate a new podcast episode on-demand with customizable parameters, edit existing episode titles/summaries/transcripts, or restore a deleted episode directly from its immutable `audit_ledger` snapshot.
+- **Automated Steps for Antigravity:**
+  1. **R2 Delete Support & Worker Episode Admin Endpoints (`src/pipeline/rollup.ts`, `src/worker.ts`):**
+     - Extend `R2BucketLike` interface with `delete(key: string | string[]): Promise<void>`.
+     - Add `DELETE /api/admin/episodes/:id` (or `POST /api/admin/episodes/delete`):
+       - Fetches the full existing episode row from `episodes` (`before_state_json`).
+       - Deletes the row from D1 `episodes` (and optionally purges the R2 `.mp3` object if `purgeAudio=true`).
+       - Appends an `episode.delete` entry to `audit_ledger` containing the complete `before_state_json` (including full transcript, metadata, and audio URL) so the episode can be 1-click restored via Audit Replay if ever needed.
+     - Add `POST /api/admin/episodes/generate`:
+       - Triggers `runWeeklyRollupPipeline` on-demand with optional admin overrides:
+         - Custom `episodeNumber` or auto-increment
+         - Custom `titleOverride` or `editorialFocusNote`
+         - Custom `windowDays` (e.g., 7, 14, 30 days) or hand-picked `incidentIds: number[]`
+         - TTS Voice / Provider selection
+       - Appends an `episode.generate` entry to `audit_ledger` with `after_state_json`.
+     - Add `PUT /api/admin/episodes/:id`:
+       - Updates episode `title`, `summary`, `transcript`, `episode_number`, or `published_at`.
+       - Option to re-synthesize TTS audio into R2 from the edited transcript.
+       - Appends an `episode.update` entry to `audit_ledger` with `before_state_json` and `after_state_json`.
+  2. **Admin Episodes UI (`/admin/episodes/page.tsx`):**
+     - List all live D1 episodes with inline audio preview player, episode number, slug, R2 audio key, file size, duration, and published timestamp.
+     - **"Generate New Episode" Modal/Panel:** Choose auto or custom episode number, select specific synthesized incidents (or use top 7-day incidents), add optional producer notes, and click **Generate & Publish Episode**.
+     - **"Edit Episode" Drawer:** Edit title, summary, or 3-part transcript (`[00:00]`, `[01:15]`, `[03:30]`), with a checkbox to regenerate the R2 MP3 audio.
+     - **"Delete Episode" Button:** Confirmation modal requiring an audit reason (e.g., `"Superseded by re-recorded Episode #44"`), checkbox to also purge the `.mp3` from R2, and instant cache invalidation so `/archive` and `/feed.xml` update immediately.
+  3. **Build, Test & Deploy Live:**
+     - Run `npx tsc --noEmit` and `npm run build`.
+     - Deploy Worker (`npx wrangler deploy`) and Vercel frontend (`npx vercel --prod --yes`).
+- **Verification:**
+  - Generate a test episode via `/admin/episodes`, verify it appears in `/archive` and `/feed.xml`, then delete the test episode via `/admin/episodes`, verify it is removed from `/archive` and `/feed.xml`, and verify both `episode.generate` and `episode.delete` are recorded in `audit_ledger`.
+- **Human Action Gate:** None.
+
+---
+
+## Issue #10 (Epic 6.5): Dynamic Inbound RSS Feed & Triage Filter Management (`/admin/feeds` & `/admin/filters`)
+- **GitHub Issue:** [#10](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/10)
+- **Status:** `[ ] Pending`
+- **Objective:** Replace hardcoded RSS feed arrays and static filter patterns with dynamic D1-backed tables (`ingest_feeds` and `ingest_filters`) and build `/admin/feeds` and `/admin/filters` so you can add new feeds, remove or pause existing feeds, test/preview any RSS/Atom URL before adding it, and add/edit/remove ingestion filters (keyword/regex drop rules, priority boost rules, domain rules, and Jev systemic probability thresholds)—all backed by the immutable audit trail.
+- **Automated Steps for Antigravity:**
+  1. **D1 Migration (`migrations/0005_dynamic_feeds_and_filters.sql`):**
+     - Create `ingest_feeds` table:
+       - `id INTEGER PRIMARY KEY AUTOINCREMENT`
+       - `name TEXT NOT NULL UNIQUE`
+       - `url TEXT NOT NULL UNIQUE`
+       - `focus_area TEXT NOT NULL`
+       - `domain_sector_override TEXT` (optional default sector)
+       - `items_per_poll INTEGER NOT NULL DEFAULT 5`
+       - `enabled INTEGER NOT NULL DEFAULT 1`
+       - `last_polled_at TEXT`
+       - `last_status TEXT DEFAULT 'nominal'`
+       - `last_error TEXT`
+       - `total_ingested INTEGER NOT NULL DEFAULT 0`
+       - `created_at TEXT NOT NULL DEFAULT (datetime('now'))`
+       - `updated_at TEXT NOT NULL DEFAULT (datetime('now'))`
+     - Seed `ingest_feeds` with the 5 baseline feeds (`NPR Top News`, `PBS NewsHour Nation`, `NYT HomePage`, `WSJ US Business`, `Ars Technica`).
+     - Create `ingest_filters` table:
+       - `id INTEGER PRIMARY KEY AUTOINCREMENT`
+       - `name TEXT NOT NULL`
+       - `description TEXT NOT NULL DEFAULT ''`
+       - `filter_type TEXT NOT NULL` (`'Drop_Keyword_Regex' | 'Require_Keyword_Regex' | 'Boost_Systemic_Prob' | 'Block_Source_Pattern' | 'Force_Working_Tool'`)
+       - `match_target TEXT NOT NULL DEFAULT 'title_and_excerpt'` (`'title' | 'excerpt' | 'title_and_excerpt' | 'url'`)
+       - `pattern TEXT NOT NULL` (comma-separated keywords or regular expression)
+       - `scope_feed_id INTEGER` (`NULL` = applies to all feeds, or specific `ingest_feeds.id`)
+       - `action_value TEXT` (e.g. `'drop'`, `'+0.20'`, `'square'`, etc.)
+       - `enabled INTEGER NOT NULL DEFAULT 1`
+       - `hit_count INTEGER NOT NULL DEFAULT 0`
+       - `created_at TEXT NOT NULL DEFAULT (datetime('now'))`
+       - `updated_at TEXT NOT NULL DEFAULT (datetime('now'))`
+     - Seed `ingest_filters` with the baseline low-signal noise exclusion rules (sports, celebrity, box office, recipes, horoscopes, wordle, etc.) and high-signal institutional boost rules from `src/pipeline/jev.ts`, plus a `system_settings` table holding global thresholds (`jev_min_systemic_prob = 0.70`, `jev_min_confidence = 0.50`, `max_net_new_per_run = 10`).
+  2. **Upgrade Ingestion & Jev Pipeline (`src/pipeline/ingest.ts`, `src/pipeline/jev.ts`):**
+     - Update `collectLatestUsRssItems` and `runD1IngestPipeline` to load active `ingest_feeds` (`WHERE enabled = 1`) from D1 (falling back to `US_HIGH_IMPACT_FEEDS` only if the table doesn't exist).
+     - Before and after calling Jev, evaluate all active `ingest_filters` from D1:
+       - `Drop_Keyword_Regex`: Immediately mark as `dropped` (or skip) before wasting System-2 tokens, incrementing `hit_count` on the filter row.
+       - `Boost_Systemic_Prob`: Adjust systemic probability by the configured delta.
+       - Apply the dynamic `jev_min_systemic_prob` threshold from `system_settings`.
+     - Update `last_polled_at`, `last_status`, `last_error`, and `total_ingested` on each `ingest_feeds` row during ingestion.
+  3. **Worker & Next.js Admin Endpoints:**
+     - `GET / POST / PUT / DELETE /api/admin/feeds` + `POST /api/admin/feeds/test` (fetches and parses any candidate RSS/Atom URL live and returns a 5-item preview).
+     - `GET / POST / PUT / DELETE /api/admin/filters` + `POST /api/admin/filters/test` (tests all active filters + a candidate pattern against live D1 articles or sample text to preview what gets dropped vs. triaged).
+     - Every create, update, enable/disable toggle, threshold change, or delete logs a full `before`/`after` record in `audit_ledger`.
+  4. **Admin Feeds UI (`/admin/feeds`) & Filters UI (`/admin/filters`):**
+     - **`/admin/feeds`**: Add new feed (with **"Test RSS URL"** live preview button), edit feed name/URL/focus area/items-per-poll, toggle active/paused, or delete feed (with audit reason). Shows live health status and last poll timestamp for each feed.
+     - **`/admin/filters`**: Add/edit/remove drop filters, boost rules, and regex patterns; adjust the global Jev Systemic Probability threshold slider (`0.50` – `0.95`); run the interactive **Filter Dry-Run Tester** against recent headlines.
+  5. **Build, Apply Migrations & Deploy Live:**
+     - Apply `0005_dynamic_feeds_and_filters.sql` locally and to remote D1 (`--remote`).
+     - Deploy Worker (`npx wrangler deploy`) and Vercel (`npx vercel --prod --yes`).
+- **Verification:**
+  - Add a new RSS feed and a new filter rule via the API/UI, verify they persist in D1, verify the ingestion pipeline uses them, and verify `feed.create` / `filter.create` entries appear in `audit_ledger`.
+- **Human Action Gate:** None.
+
+---
+
+## Issue #11 (Epic 6.6): Editorial Pipeline & Incident Studio — De-Alarmist Title Rewriting, Image Attachment Pipeline & Brief Overrides (`/admin/incidents` & `/admin/transforms`)
+- **GitHub Issue:** [#11](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/11)
+- **Status:** `[ ] Pending`
+- **Objective:** Enable both manual and automated editorial governance over articles and incidents: rewrite sensationalized, clickbait, or alarmist source headlines into calm, clinical SRE incident titles (while preserving `original_title` for audit disclosure), attach or generate incident images (via R2 upload, RSS media extraction, external URL, or SVG/PNG telemetry card generation), edit Socratic briefs/classifications, and configure automated pipeline transforms.
+- **Automated Steps for Antigravity:**
+  1. **D1 Migration (`migrations/0006_editorial_pipeline_and_images.sql`):**
+     - Alter `telemetry_articles` to add editorial & media columns:
+       - `original_title TEXT` (populated automatically with the raw RSS `<title>` on ingest so `title` can serve as the active display title, or vice versa—never losing the source headline)
+       - `title_rewritten INTEGER NOT NULL DEFAULT 0`
+       - `title_rewrite_reason TEXT`
+       - `image_url TEXT`
+       - `image_alt TEXT`
+       - `image_caption TEXT`
+       - `image_source_type TEXT` (`'rss_extracted' | 'r2_upload' | 'external_url' | 'generated_card' | NULL`)
+       - `editorial_notes TEXT`
+       - `is_pinned INTEGER NOT NULL DEFAULT 0`
+       - `is_hidden INTEGER NOT NULL DEFAULT 0`
+     - Backfill `original_title = title` for all existing rows in `telemetry_articles`.
+     - Create `pipeline_transforms` table to configure automated pipeline stages:
+       - `id INTEGER PRIMARY KEY AUTOINCREMENT`
+       - `transform_key TEXT NOT NULL UNIQUE` (`'auto_deescalate_titles' | 'auto_extract_rss_images' | 'auto_generate_fallback_cards' | 'custom_system2_directive'`)
+       - `name TEXT NOT NULL`
+       - `description TEXT NOT NULL`
+       - `enabled INTEGER NOT NULL DEFAULT 0`
+       - `config_json TEXT NOT NULL DEFAULT '{}'`
+       - `updated_at TEXT NOT NULL DEFAULT (datetime('now'))`
+     - Seed default `pipeline_transforms` rows:
+       1. `auto_deescalate_titles`: Automatically rewrites alarmist, partisan, or clickbait headlines during System-2 synthesis into neutral, operational SRE incident titles while preserving `original_title`.
+       2. `auto_extract_rss_images`: Extracts `<media:content>`, `<media:thumbnail>`, `<enclosure type="image/*">`, or `<img>` URLs from RSS items during ingestion.
+       3. `auto_generate_fallback_cards`: Attaches a dynamic SVG/PNG Working Tool + SRE Failure Mode visual telemetry card when an incident has no source image.
+       4. `custom_system2_directive`: Custom editorial prompt addendum injected into Gemini System-2 synthesis.
+  2. **De-Alarmist Headline Rewriter & Image Pipeline (`src/pipeline/synthesize.ts`, `src/pipeline/ingest.ts`, `src/worker.ts`):**
+     - Add `deescalateHeadlineWithGemini(title, excerpt, geminiApiKey)` (plus deterministic de-alarmist fallback) that strips sensational adjectives, all-caps shouting, partisan framing, and emotional bait, returning `{ neutralTitle: string, rationale: string }`.
+     - When `auto_deescalate_titles` is enabled in `pipeline_transforms` (or when an Admin clicks **"De-Escalate Headline"** on any incident in `/admin/incidents`), save `original_title`, update `title` to the neutralized headline, set `title_rewritten = 1`, and log an `incident.rewrite_title` event to `audit_ledger` with both the original and rewritten titles.
+     - Add R2 image upload & serving route (`POST /api/admin/media/upload` -> stores in R2 under `media/<timestamp>-<slug>.<ext>` and serves via `GET /media/:filename`).
+     - Update RSS parser (`parseRssFeedItems`) to extract `<media:content>`, `<media:thumbnail>`, or image `<enclosure>` tags when `auto_extract_rss_images` is enabled.
+  3. **Public UI & Admin Incident Studio (`/admin/incidents`):**
+     - Build `/admin/incidents`:
+       - Search and filter all `synthesized`, `triaged`, and `dropped` articles.
+       - **Headline De-Escalation Panel:** View `Original Source Headline` vs. `Published Display Title`. Click **"AI De-Escalate Title"** to generate a clinical, non-alarmist rewrite, or type a manual title override with an audit reason.
+       - **Image Attachment Panel:** Upload an image file to R2, paste an image URL, extract from source RSS, or attach a generated Working Tool telemetry card, with alt text and caption.
+       - **Brief & Classification Override Editor:** Edit the Executive Summary, Socratic Brief, Proportionality Check, Questions, Primary/Secondary Working Tool, SRE Failure Mode, or status (`synthesized` / `triaged` / `dropped` / `hidden`), recording every edit in `audit_ledger`.
+     - Update public Trestleboard (`src/app/page.tsx`) and Incident Detail page (`src/app/incidents/[slug]/page.tsx`) to display attached incident images (when present) and a subtle **"Title Neutralized · View Original in Audit Log"** transparency badge whenever `title_rewritten === 1`.
+  4. **Build, Apply Migrations & Deploy Live:**
+     - Apply `0006_editorial_pipeline_and_images.sql` locally and to remote D1 (`--remote`).
+     - Deploy Worker (`npx wrangler deploy`) and Vercel (`npx vercel --prod --yes`).
+- **Verification:**
+  - In `/admin/incidents`, rewrite an alarmist headline and attach an image to a live incident; verify the updated title, transparency badge, and image render on `https://thecabcall.com/incidents/<slug>`, and verify `incident.rewrite_title` and `incident.attach_image` entries exist in `audit_ledger`.
+- **Human Action Gate:** None.
+
+---
+
+## Issue #12 (Epic 6.7): Outbound Published Feeds & Syndication Studio (`/admin/publishing`, `/feed.xml` & `/feeds/incidents.*`)
+- **GitHub Issue:** [#12](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/12)
+- **Status:** `[ ] Pending`
+- **Objective:** Give the Admin full control over all feeds that `thecabcall.com` publishes to the outside world—allowing you to modify the podcast RSS feed (`/feed.xml`) metadata and rules, and publishing new syndicated **Incident Brief Feeds** (`/feeds/incidents.xml` RSS 2.0, `/feeds/incidents.json` JSON Feed) where you can choose whether subscribers receive de-alarmed titles, attached incident images (`<media:content>` / `<enclosure>`), full Socratic briefs or executive summaries, and optional inline audit provenance links.
+- **Automated Steps for Antigravity:**
+  1. **D1 Migration (`migrations/0007_outbound_published_feeds.sql`):**
+     - Create `outbound_feeds` table:
+       - `id INTEGER PRIMARY KEY AUTOINCREMENT`
+       - `slug TEXT NOT NULL UNIQUE` (`'podcast-rss'`, `'incidents-rss'`, `'incidents-json'`)
+       - `title TEXT NOT NULL`
+       - `subtitle TEXT NOT NULL`
+       - `description TEXT NOT NULL`
+       - `author_name TEXT NOT NULL`
+       - `owner_email TEXT NOT NULL`
+       - `cover_image_url TEXT`
+       - `language TEXT NOT NULL DEFAULT 'en-us'`
+       - `category TEXT NOT NULL DEFAULT 'Technology'`
+       - `max_items INTEGER NOT NULL DEFAULT 50`
+       - `use_deescalated_titles INTEGER NOT NULL DEFAULT 1`
+       - `include_original_title_note INTEGER NOT NULL DEFAULT 1`
+       - `include_attached_images INTEGER NOT NULL DEFAULT 1`
+       - `include_full_socratic_brief INTEGER NOT NULL DEFAULT 1`
+       - `include_audit_ledger_footer INTEGER NOT NULL DEFAULT 1`
+       - `filter_working_tool TEXT` (`NULL` = all tools)
+       - `enabled INTEGER NOT NULL DEFAULT 1`
+       - `updated_at TEXT NOT NULL DEFAULT (datetime('now'))`
+     - Seed default rows for `'podcast-rss'` (`/feed.xml`), `'incidents-rss'` (`/feeds/incidents.xml`), and `'incidents-json'` (`/feeds/incidents.json`).
+  2. **Dynamic Outbound Feed Endpoints (`src/app/feed.xml/route.ts`, `src/app/feeds/incidents.xml/route.ts`, `src/app/feeds/incidents.json/route.ts`):**
+     - Upgrade `/feed.xml` to read its channel title, description, author, cover image, max items, and episode list dynamically from D1 `outbound_feeds` + `episodes`.
+     - Create `/feeds/incidents.xml` (valid RSS 2.0 with `xmlns:media="http://search.yahoo.com/mrss/"` and `xmlns:content="http://purl.org/rss/1.0/modules/content/"`) and `/feeds/incidents.json` (JSON Feed 1.1):
+       - Respects `use_deescalated_titles` (outputs the neutralized `title` or raw `original_title`).
+       - When `include_original_title_note = 1` and a headline was rewritten, appends a transparent provenance line in the item body (`Original source headline: "..."`).
+       - When `include_attached_images = 1` and an incident has `image_url`, emits `<media:content url="..." medium="image" />` and `<enclosure>` / JSON Feed `image` fields so RSS readers and newsletter tools automatically render the attached images.
+       - When `include_audit_ledger_footer = 1`, includes the cryptographic audit verification summary in each item footer.
+       - Supports query filter `?tool=square` or custom admin-created feed slugs (`/feeds/[slug].xml`).
+  3. **Admin Publishing Studio UI (`/admin/publishing/page.tsx`):**
+     - Edit channel metadata (Title, Subtitle, Description, Cover Art upload/URL, Author, Max Items) for both Podcast RSS (`/feed.xml`) and Incident Feeds (`/feeds/incidents.xml`, `/feeds/incidents.json`).
+     - Toggle feed behavior switches (`Use De-Alarmed Titles`, `Show Original Headline Provenance Note`, `Attach Incident Images (<media:content>)`, `Include Full Socratic Brief`, `Include Audit Trail Verification Footer`).
+     - Create custom filtered outbound feeds (e.g. a dedicated feed for `The Square` or `Technology & Cyber`).
+     - Live XML / JSON previewer inside `/admin/publishing` and full `outbound_feed.update` audit logging in `audit_ledger`.
+  4. **Build, Apply Migrations & Deploy Live:**
+     - Apply `0007_outbound_published_feeds.sql` locally and to remote D1 (`--remote`).
+     - Deploy Worker (`npx wrangler deploy`) and Vercel (`npx vercel --prod --yes`).
+- **Verification:**
+  - Verify `https://thecabcall.com/feed.xml`, `https://thecabcall.com/feeds/incidents.xml`, and `https://thecabcall.com/feeds/incidents.json` return `200 OK` with valid XML/JSON, reflect settings modified in `/admin/publishing`, include `<media:content>` images and de-alarmed titles, and log `outbound_feed.update` in `audit_ledger`.
+- **Human Action Gate:** None.
