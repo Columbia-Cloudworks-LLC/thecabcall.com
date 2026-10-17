@@ -1,3 +1,5 @@
 TYPESAFE_API_KEY="your_typesafe_jev_key_here"
 GEMINI_API_KEY="your_gemini_key_here"
 ADMIN_SECRET="local-dev-secret"
+WORKER_API_URL="https://thecabcall.thecabcall.workers.dev"
+NEXT_PUBLIC_WORKER_URL="https://thecabcall.thecabcall.workers.dev"

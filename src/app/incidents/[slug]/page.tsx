@@ -1,6 +1,10 @@
 import React from "react";
 import { notFound } from "next/navigation";
-import { getAllIncidents, getIncidentBySlug } from "@/lib/store";
+import {
+  ensureD1Snapshot,
+  getAllIncidents,
+  getIncidentBySlug,
+} from "@/lib/store";
 import { IncidentBriefClient } from "@/components/IncidentBriefClient";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +14,7 @@ export default async function IncidentBriefPage({
 }: {
   params: Promise<{ slug: string }>;
 }) {
+  await ensureD1Snapshot();
   const { slug } = await params;
   const incident = getIncidentBySlug(slug);
 

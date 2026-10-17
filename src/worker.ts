@@ -33,11 +33,23 @@ const DEFAULT_SAMPLE_ARTICLE = {
     "Federal investigators reported Tuesday that routine inspection alerts were repeatedly dismissed over six months due to staffing shortages before the dispatch system failed.",
 };
 
-function jsonResponse(data: unknown, status = 200): Response {
+const CORS_HEADERS: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, HEAD, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, x-admin-secret",
+};
+
+function jsonResponse(
+  data: unknown,
+  status = 200,
+  extraHeaders?: Record<string, string>
+): Response {
   return new Response(JSON.stringify(data, null, 2), {
     status,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
+      ...CORS_HEADERS,
+      ...(extraHeaders || {}),
     },
   });
 }
@@ -89,6 +101,13 @@ const worker = {
   ): Promise<Response> {
     const url = new URL(request.url);
 
+    if (request.method === "OPTIONS") {
+      return new Response(null, {
+        status: 204,
+        headers: CORS_HEADERS,
+      });
+    }
+
     // Health & status check
     if (request.method === "GET" && url.pathname === "/") {
       return jsonResponse({
@@ -97,6 +116,8 @@ const worker = {
         system2Model: "gemini-2.5-flash (with gemini-3.8-flash fallback)",
         feeds: US_HIGH_IMPACT_FEEDS,
         endpoints: {
+          snapshot:
+            "GET /api/snapshot (public edge-cached D1 telemetry snapshot)",
           testJev: "POST /api/test-jev (requires x-admin-secret header)",
           runIngest:
             "POST /api/run-ingest (requires x-admin-secret header; optional ?synthesize=true)",
@@ -106,6 +127,86 @@ const worker = {
           audioStream: "GET /audio/:filename (supports Range requests)",
         },
       });
+    }
+
+    // Public Route: GET /api/snapshot (Returns live D1 telemetry_articles, episodes, and pipeline_runs)
+    if (request.method === "GET" && url.pathname === "/api/snapshot") {
+      try {
+        const articlesRes = await env.DB.prepare(
+          `SELECT * FROM telemetry_articles
+           ORDER BY
+             CASE WHEN status = 'synthesized' THEN 0 WHEN status = 'triaged' THEN 1 ELSE 2 END,
+             published_at DESC,
+             id DESC`
+        ).all<Record<string, unknown>>();
+        const articles = articlesRes.results || [];
+
+        let episodes: Record<string, unknown>[] = [];
+        try {
+          const episodesRes = await env.DB.prepare(
+            "SELECT * FROM episodes ORDER BY published_at DESC, id DESC"
+          ).all<Record<string, unknown>>();
+          episodes = episodesRes.results || [];
+        } catch {
+          episodes = [];
+        }
+
+        let pipelineRuns: Record<string, unknown>[] = [];
+        try {
+          const runsRes = await env.DB.prepare(
+            "SELECT * FROM pipeline_runs ORDER BY started_at DESC, id DESC LIMIT 50"
+          ).all<Record<string, unknown>>();
+          pipelineRuns = runsRes.results || [];
+        } catch {
+          pipelineRuns = [];
+        }
+
+        const synthesizedCount = articles.filter(
+          (r) => r.status === "synthesized"
+        ).length;
+        const triagedCount = articles.filter(
+          (r) => r.status === "triaged"
+        ).length;
+        const droppedCount = articles.filter(
+          (r) => r.status === "dropped"
+        ).length;
+
+        const forceFresh =
+          url.searchParams.get("fresh") === "1" ||
+          url.searchParams.get("fresh") === "true";
+
+        return jsonResponse(
+          {
+            ok: true,
+            source: "cloudflare-d1",
+            database: "cabcall-db",
+            timestamp: new Date().toISOString(),
+            counts: {
+              synthesizedCount,
+              triagedCount,
+              droppedCount,
+              totalEvaluated: articles.length,
+            },
+            articles,
+            episodes,
+            pipelineRuns,
+          },
+          200,
+          {
+            "Cache-Control": forceFresh
+              ? "no-store"
+              : "public, s-maxage=30, stale-while-revalidate=120",
+          }
+        );
+      } catch (err) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          },
+          500
+        );
+      }
     }
 
     // Public Route: GET /audio/:filename (Streams episode MP3 from R2 with byte-range support)
@@ -240,6 +341,12 @@ const worker = {
         synthesize?: boolean;
         synthesizeLimit?: number;
         maxNetNew?: number;
+        customArticle?: {
+          title: string;
+          description: string;
+          sourceFeed: string;
+          link?: string;
+        };
       } = {};
       try {
         const rawText = await request.text();
@@ -252,7 +359,8 @@ const worker = {
 
       const chainSynthesize =
         url.searchParams.get("synthesize") === "true" ||
-        body.synthesize === true;
+        body.synthesize === true ||
+        Boolean(body.customArticle);
 
       try {
         const summary = await runD1IngestPipeline({
@@ -260,14 +368,19 @@ const worker = {
           typesafeApiKey: env.TYPESAFE_API_KEY,
           maxNetNew: body.maxNetNew ?? 10,
           itemsPerFeed: 5,
+          customArticle: body.customArticle,
         });
 
         let synthesisSummary = undefined;
         if (chainSynthesize) {
+          const insertedId = body.customArticle
+            ? summary.articles[0]?.id
+            : undefined;
           synthesisSummary = await runSynthesizePipeline({
             db: env.DB,
             geminiApiKey: env.GEMINI_API_KEY,
             limit: body.synthesizeLimit ?? 5,
+            articleIds: insertedId ? [insertedId] : undefined,
           });
         }
 

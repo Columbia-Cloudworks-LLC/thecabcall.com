@@ -3,6 +3,8 @@ import {
   createLocalR2AudioAdapter,
   createLocalSqliteD1Adapter,
   loadLocalEnvVars,
+  shouldUseRemoteWorker,
+  triggerRemoteWorkerRollup,
 } from "@/lib/d1-bridge";
 import { runWeeklyRollupPipeline } from "@/pipeline/rollup";
 
@@ -17,6 +19,21 @@ export async function POST(req: NextRequest) {
       { error: "Unauthorized: Invalid or missing x-admin-secret header" },
       { status: 401 }
     );
+  }
+
+  if (shouldUseRemoteWorker()) {
+    try {
+      const remoteResult = await triggerRemoteWorkerRollup();
+      return NextResponse.json(remoteResult);
+    } catch (err) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        },
+        { status: 500 }
+      );
+    }
   }
 
   const db = createLocalSqliteD1Adapter();

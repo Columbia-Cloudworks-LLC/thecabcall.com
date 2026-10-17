@@ -1,48 +1,22 @@
-import fs from "node:fs";
-import path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
-import { createLocalSqliteD1Adapter } from "@/lib/d1-bridge";
+import {
+  createLocalSqliteD1Adapter,
+  loadLocalEnvVars,
+  shouldUseRemoteWorker,
+  triggerRemoteWorkerSynthesize,
+} from "@/lib/d1-bridge";
 import { runSynthesizePipeline } from "@/pipeline/synthesize";
 
 export const dynamic = "force-dynamic";
 
-function loadDevVars(): Record<string, string> {
-  const vars: Record<string, string> = {};
-  try {
-    const devVarsPath = path.join(process.cwd(), ".dev.vars");
-    if (fs.existsSync(devVarsPath)) {
-      const content = fs.readFileSync(devVarsPath, "utf8");
-      for (const line of content.split(/\r?\n/)) {
-        const match = line.match(/^([A-Z0-9_]+)=(.*)$/);
-        if (match) {
-          vars[match[1]] = match[2].replace(/^["']|["']$/g, "").trim();
-        }
-      }
-    }
-  } catch {
-    // ignore
-  }
-  return vars;
-}
-
 export async function POST(req: NextRequest) {
-  const devVars = loadDevVars();
-  const expectedSecret =
-    process.env.ADMIN_SECRET || devVars.ADMIN_SECRET || "local-dev-secret";
+  const envVars = loadLocalEnvVars();
   const providedSecret = req.headers.get("x-admin-secret");
 
-  if (!providedSecret || providedSecret !== expectedSecret) {
+  if (!providedSecret || providedSecret !== envVars.ADMIN_SECRET) {
     return NextResponse.json(
       { error: "Unauthorized: Invalid or missing x-admin-secret header" },
       { status: 401 }
-    );
-  }
-
-  const db = createLocalSqliteD1Adapter();
-  if (!db) {
-    return NextResponse.json(
-      { error: "Local Wrangler D1 database not found in .wrangler/state/v3/d1" },
-      { status: 500 }
     );
   }
 
@@ -56,10 +30,32 @@ export async function POST(req: NextRequest) {
     // default limit 5
   }
 
-  const geminiApiKey = process.env.GEMINI_API_KEY || devVars.GEMINI_API_KEY;
+  if (shouldUseRemoteWorker()) {
+    try {
+      const remoteResult = await triggerRemoteWorkerSynthesize({ limit });
+      return NextResponse.json(remoteResult);
+    } catch (err) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        },
+        { status: 500 }
+      );
+    }
+  }
+
+  const db = createLocalSqliteD1Adapter();
+  if (!db) {
+    return NextResponse.json(
+      { error: "Local Wrangler D1 database not found in .wrangler/state/v3/d1" },
+      { status: 500 }
+    );
+  }
+
   const result = await runSynthesizePipeline({
     db,
-    geminiApiKey,
+    geminiApiKey: envVars.GEMINI_API_KEY,
     limit,
   });
 

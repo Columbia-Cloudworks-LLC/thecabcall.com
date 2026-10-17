@@ -448,6 +448,7 @@ export function mapD1RowToPipelineRun(row: D1PipelineRunRow): PipelineRunRecord 
 
 export interface LocalD1Snapshot {
   available: boolean;
+  source?: "remote-worker" | "local-sqlite" | "none";
   sqlitePath: string | null;
   synthesizedCount: number;
   triagedCount: number;
@@ -458,24 +459,154 @@ export interface LocalD1Snapshot {
   pipelineRuns: PipelineRunRecord[];
 }
 
+export const DEFAULT_PRODUCTION_WORKER_URL =
+  "https://thecabcall.thecabcall.workers.dev";
+
+/**
+ * Loads `.dev.vars` keys merged with `process.env` so Next.js API routes have access
+ * to `TYPESAFE_API_KEY`, `GEMINI_API_KEY`, `ADMIN_SECRET`, and `WORKER_API_URL`.
+ */
+export function loadLocalEnvVars(): {
+  TYPESAFE_API_KEY?: string;
+  GEMINI_API_KEY?: string;
+  ADMIN_SECRET: string;
+  WORKER_API_URL?: string;
+  NEXT_PUBLIC_WORKER_URL?: string;
+} {
+  const vars: Record<string, string> = {};
+  try {
+    const devVarsPath = path.join(process.cwd(), ".dev.vars");
+    if (fs.existsSync(devVarsPath)) {
+      const content = fs.readFileSync(devVarsPath, "utf8");
+      for (const line of content.split(/\r?\n/)) {
+        const match = line.match(/^([A-Z0-9_]+)=(.*)$/);
+        if (match) {
+          vars[match[1]] = match[2].replace(/^["']|["']$/g, "").trim();
+        }
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  const workerApiUrl = (
+    process.env.WORKER_API_URL ||
+    process.env.NEXT_PUBLIC_WORKER_URL ||
+    vars.WORKER_API_URL ||
+    vars.NEXT_PUBLIC_WORKER_URL ||
+    ""
+  )
+    .trim()
+    .replace(/\/+$/, "");
+
+  return {
+    TYPESAFE_API_KEY: process.env.TYPESAFE_API_KEY || vars.TYPESAFE_API_KEY,
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY || vars.GEMINI_API_KEY,
+    ADMIN_SECRET:
+      process.env.ADMIN_SECRET || vars.ADMIN_SECRET || "local-dev-secret",
+    WORKER_API_URL: workerApiUrl || undefined,
+    NEXT_PUBLIC_WORKER_URL:
+      (
+        process.env.NEXT_PUBLIC_WORKER_URL ||
+        vars.NEXT_PUBLIC_WORKER_URL ||
+        ""
+      )
+        .trim()
+        .replace(/\/+$/, "") || undefined,
+  };
+}
+
+/**
+ * Returns explicitly configured `WORKER_API_URL` or `NEXT_PUBLIC_WORKER_URL` if set.
+ */
+export function getConfiguredWorkerUrl(): string | null {
+  const envVars = loadLocalEnvVars();
+  return envVars.WORKER_API_URL || envVars.NEXT_PUBLIC_WORKER_URL || null;
+}
+
+/**
+ * Returns the effective Cloudflare Worker URL (explicitly configured URL or the deployed production Worker URL).
+ */
+export function getEffectiveWorkerUrl(): string {
+  return getConfiguredWorkerUrl() || DEFAULT_PRODUCTION_WORKER_URL;
+}
+
+/**
+ * Determines whether Next.js should use the remote Cloudflare Worker bridge:
+ * - True whenever `WORKER_API_URL` or `NEXT_PUBLIC_WORKER_URL` is explicitly configured
+ * - True whenever local `.wrangler` SQLite is absent (e.g., on Vercel in production)
+ */
+export function shouldUseRemoteWorker(): boolean {
+  if (getConfiguredWorkerUrl()) {
+    return true;
+  }
+  return findLocalWranglerD1SqlitePath() === null;
+}
+
+function emptyD1Snapshot(sqlitePath: string | null = null): LocalD1Snapshot {
+  return {
+    available: false,
+    source: "none",
+    sqlitePath,
+    synthesizedCount: 0,
+    triagedCount: 0,
+    droppedCount: 0,
+    totalEvaluated: 0,
+    incidents: [],
+    episodes: [],
+    pipelineRuns: [],
+  };
+}
+
+function buildSnapshotFromRows(
+  allArticleRows: TelemetryArticleRow[],
+  episodeRows: D1EpisodeRow[],
+  runRows: D1PipelineRunRow[],
+  sqlitePath: string,
+  source: "remote-worker" | "local-sqlite"
+): LocalD1Snapshot {
+  const synthesizedCount = allArticleRows.filter(
+    (r) => r.status === "synthesized"
+  ).length;
+  const triagedCount = allArticleRows.filter(
+    (r) => r.status === "triaged"
+  ).length;
+  const droppedCount = allArticleRows.filter(
+    (r) => r.status === "dropped"
+  ).length;
+
+  const visibleRows = allArticleRows.filter(
+    (r) => r.status === "synthesized" || r.status === "triaged"
+  );
+  const incidents = visibleRows.map(mapD1RowToIncidentArticle);
+
+  const episodes = episodeRows.map((ep) =>
+    mapD1RowToPodcastEpisode(ep, incidents)
+  );
+  const pipelineRuns = runRows.map(mapD1RowToPipelineRun);
+
+  return {
+    available: true,
+    source,
+    sqlitePath,
+    synthesizedCount,
+    triagedCount,
+    droppedCount,
+    totalEvaluated: allArticleRows.length,
+    incidents,
+    episodes,
+    pipelineRuns,
+  };
+}
+
 /**
  * Synchronously reads live `telemetry_articles`, `episodes`, and `pipeline_runs` from the local Wrangler D1 SQLite database
  * using Node's built-in `node:sqlite` (`DatabaseSync`), mapping rows to frontend types.
  */
-export function readLocalD1Snapshot(): LocalD1Snapshot {
+export function readLocalSqliteSnapshot(): LocalD1Snapshot {
   const sqlitePath = findLocalWranglerD1SqlitePath();
   if (!sqlitePath) {
-    return {
-      available: false,
-      sqlitePath: null,
-      synthesizedCount: 0,
-      triagedCount: 0,
-      droppedCount: 0,
-      totalEvaluated: 0,
-      incidents: [],
-      episodes: [],
-      pipelineRuns: [],
-    };
+    return emptyD1Snapshot(null);
   }
 
   try {
@@ -495,21 +626,6 @@ export function readLocalD1Snapshot(): LocalD1Snapshot {
         )
         .all() as TelemetryArticleRow[];
 
-      const synthesizedCount = allArticleRows.filter(
-        (r) => r.status === "synthesized"
-      ).length;
-      const triagedCount = allArticleRows.filter(
-        (r) => r.status === "triaged"
-      ).length;
-      const droppedCount = allArticleRows.filter(
-        (r) => r.status === "dropped"
-      ).length;
-
-      const visibleRows = allArticleRows.filter(
-        (r) => r.status === "synthesized" || r.status === "triaged"
-      );
-      const incidents = visibleRows.map(mapD1RowToIncidentArticle);
-
       let episodeRows: D1EpisodeRow[] = [];
       try {
         episodeRows = db
@@ -518,10 +634,6 @@ export function readLocalD1Snapshot(): LocalD1Snapshot {
       } catch {
         episodeRows = [];
       }
-
-      const episodes = episodeRows.map((ep) =>
-        mapD1RowToPodcastEpisode(ep, incidents)
-      );
 
       let runRows: D1PipelineRunRow[] = [];
       try {
@@ -534,76 +646,323 @@ export function readLocalD1Snapshot(): LocalD1Snapshot {
         runRows = [];
       }
 
-      const pipelineRuns = runRows.map(mapD1RowToPipelineRun);
-
-      return {
-        available: true,
+      return buildSnapshotFromRows(
+        allArticleRows,
+        episodeRows,
+        runRows,
         sqlitePath,
-        synthesizedCount,
-        triagedCount,
-        droppedCount,
-        totalEvaluated: allArticleRows.length,
-        incidents,
-        episodes,
-        pipelineRuns,
-      };
+        "local-sqlite"
+      );
     } finally {
       db.close();
     }
   } catch (err) {
     console.warn("[D1 Bridge] Failed to read local D1 SQLite:", err);
-    return {
-      available: false,
-      sqlitePath,
-      synthesizedCount: 0,
-      triagedCount: 0,
-      droppedCount: 0,
-      totalEvaluated: 0,
-      incidents: [],
-      episodes: [],
-      pipelineRuns: [],
-    };
+    return emptyD1Snapshot(sqlitePath);
   }
 }
 
+let cachedRemoteSnapshot: LocalD1Snapshot | null = null;
+let cachedRemoteSnapshotAtMs = 0;
+let inFlightRemoteSnapshotPromise: Promise<LocalD1Snapshot | null> | null =
+  null;
+const REMOTE_SNAPSHOT_TTL_MS = 15_000;
+
 /**
- * Reads `pipeline_runs` rows directly from the local Wrangler D1 database.
+ * Fetches `/api/snapshot` from the remote Cloudflare Worker and populates the in-memory snapshot cache.
+ */
+export async function fetchRemoteWorkerSnapshot(
+  forceFresh = false
+): Promise<LocalD1Snapshot | null> {
+  const now = Date.now();
+  if (
+    !forceFresh &&
+    cachedRemoteSnapshot &&
+    now - cachedRemoteSnapshotAtMs < REMOTE_SNAPSHOT_TTL_MS
+  ) {
+    return cachedRemoteSnapshot;
+  }
+
+  if (!forceFresh && inFlightRemoteSnapshotPromise) {
+    return inFlightRemoteSnapshotPromise;
+  }
+
+  const workerUrl = getEffectiveWorkerUrl();
+  const snapshotUrl = `${workerUrl}/api/snapshot${
+    forceFresh ? "?fresh=1" : ""
+  }`;
+
+  const fetchPromise = (async (): Promise<LocalD1Snapshot | null> => {
+    try {
+      const response = await fetch(snapshotUrl, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+        },
+        cache: forceFresh ? "no-store" : "default",
+        signal: AbortSignal.timeout(8000),
+      });
+
+      if (!response.ok) {
+        console.warn(
+          `[D1 Bridge] Remote Worker /api/snapshot returned HTTP ${response.status}`
+        );
+        return cachedRemoteSnapshot;
+      }
+
+      const data = (await response.json()) as {
+        ok?: boolean;
+        articles?: TelemetryArticleRow[];
+        episodes?: D1EpisodeRow[];
+        pipelineRuns?: D1PipelineRunRow[];
+      };
+
+      if (!data || !Array.isArray(data.articles)) {
+        return cachedRemoteSnapshot;
+      }
+
+      const snap = buildSnapshotFromRows(
+        data.articles,
+        Array.isArray(data.episodes) ? data.episodes : [],
+        Array.isArray(data.pipelineRuns) ? data.pipelineRuns : [],
+        `${workerUrl}/api/snapshot`,
+        "remote-worker"
+      );
+
+      cachedRemoteSnapshot = snap;
+      cachedRemoteSnapshotAtMs = Date.now();
+      return snap;
+    } catch (err) {
+      console.warn(
+        `[D1 Bridge] Failed to fetch remote Worker snapshot (${snapshotUrl}):`,
+        err
+      );
+      return cachedRemoteSnapshot;
+    } finally {
+      inFlightRemoteSnapshotPromise = null;
+    }
+  })();
+
+  if (!forceFresh) {
+    inFlightRemoteSnapshotPromise = fetchPromise;
+  }
+
+  return fetchPromise;
+}
+
+/**
+ * Ensures the active D1 snapshot (remote Cloudflare Worker or local `.wrangler` SQLite) is loaded and warm
+ * before Server Components or API Route Handlers read from `store.ts` or `readLocalD1Snapshot()`.
+ */
+export async function ensureD1Snapshot(
+  forceFresh = false
+): Promise<LocalD1Snapshot> {
+  if (shouldUseRemoteWorker()) {
+    const remoteSnap = await fetchRemoteWorkerSnapshot(forceFresh);
+    if (remoteSnap && remoteSnap.available) {
+      return remoteSnap;
+    }
+    const localFallback = readLocalSqliteSnapshot();
+    if (localFallback.available) {
+      return localFallback;
+    }
+    return emptyD1Snapshot(`${getEffectiveWorkerUrl()}/api/snapshot`);
+  }
+
+  const localSnap = readLocalSqliteSnapshot();
+  if (localSnap.available) {
+    return localSnap;
+  }
+
+  const remoteFallback = await fetchRemoteWorkerSnapshot(forceFresh);
+  if (remoteFallback && remoteFallback.available) {
+    return remoteFallback;
+  }
+
+  return localSnap;
+}
+
+/**
+ * Synchronously returns the active D1 snapshot:
+ * - When `WORKER_API_URL` / `NEXT_PUBLIC_WORKER_URL` is configured (or when local `.wrangler` SQLite is absent),
+ *   returns the synced remote Cloudflare Worker snapshot (with local `.wrangler` fallback if offline).
+ * - When developing locally offline with `.wrangler` present and `WORKER_API_URL` unset,
+ *   reads local `.wrangler` SQLite directly.
+ */
+export function readLocalD1Snapshot(): LocalD1Snapshot {
+  if (shouldUseRemoteWorker()) {
+    if (cachedRemoteSnapshot && cachedRemoteSnapshot.available) {
+      return cachedRemoteSnapshot;
+    }
+    // Kick off non-blocking background warm if called before ensureD1Snapshot
+    void fetchRemoteWorkerSnapshot(false);
+    const localFallback = readLocalSqliteSnapshot();
+    if (localFallback.available) {
+      return localFallback;
+    }
+    return emptyD1Snapshot(`${getEffectiveWorkerUrl()}/api/snapshot`);
+  }
+
+  const localSnap = readLocalSqliteSnapshot();
+  if (localSnap.available) {
+    return localSnap;
+  }
+
+  if (cachedRemoteSnapshot && cachedRemoteSnapshot.available) {
+    return cachedRemoteSnapshot;
+  }
+
+  return localSnap;
+}
+
+/**
+ * Reads `pipeline_runs` rows from the active D1 snapshot (remote Worker or local Wrangler D1).
  */
 export function getPipelineRuns(): PipelineRunRecord[] {
   return readLocalD1Snapshot().pipelineRuns;
 }
 
 /**
- * Loads `.dev.vars` keys merged with `process.env` so Next.js API routes have access
- * to `TYPESAFE_API_KEY`, `GEMINI_API_KEY`, and `ADMIN_SECRET`.
+ * Triggers `POST /api/run-ingest` on the production Cloudflare Worker and refreshes the snapshot cache.
  */
-export function loadLocalEnvVars(): {
-  TYPESAFE_API_KEY?: string;
-  GEMINI_API_KEY?: string;
-  ADMIN_SECRET: string;
-} {
-  const vars: Record<string, string> = {};
-  try {
-    const devVarsPath = path.join(process.cwd(), ".dev.vars");
-    if (fs.existsSync(devVarsPath)) {
-      const content = fs.readFileSync(devVarsPath, "utf8");
-      for (const line of content.split(/\r?\n/)) {
-        const match = line.match(/^([A-Z0-9_]+)=(.*)$/);
-        if (match) {
-          vars[match[1]] = match[2].replace(/^["']|["']$/g, "").trim();
-        }
-      }
-    }
-  } catch {
-    // ignore
+export async function triggerRemoteWorkerIngest(options?: {
+  synthesize?: boolean;
+  synthesizeLimit?: number;
+  maxNetNew?: number;
+  customArticle?: {
+    title: string;
+    description: string;
+    sourceFeed: string;
+    link?: string;
+  };
+}): Promise<Record<string, unknown>> {
+  const workerUrl = getEffectiveWorkerUrl();
+  const envVars = loadLocalEnvVars();
+  const query = options?.synthesize ? "?synthesize=true" : "";
+
+  const response = await fetch(`${workerUrl}/api/run-ingest${query}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-secret": envVars.ADMIN_SECRET,
+    },
+    body: JSON.stringify({
+      synthesize: options?.synthesize,
+      synthesizeLimit: options?.synthesizeLimit,
+      maxNetNew: options?.maxNetNew,
+      customArticle: options?.customArticle,
+    }),
+    cache: "no-store",
+  });
+
+  const data = (await response.json()) as Record<string, unknown>;
+  if (!response.ok) {
+    throw new Error(
+      typeof data?.error === "string"
+        ? data.error
+        : `Worker /api/run-ingest failed with HTTP ${response.status}`
+    );
   }
 
-  return {
-    TYPESAFE_API_KEY: process.env.TYPESAFE_API_KEY || vars.TYPESAFE_API_KEY,
-    GEMINI_API_KEY: process.env.GEMINI_API_KEY || vars.GEMINI_API_KEY,
-    ADMIN_SECRET:
-      process.env.ADMIN_SECRET || vars.ADMIN_SECRET || "local-dev-secret",
-  };
+  await ensureD1Snapshot(true);
+  return data;
+}
+
+/**
+ * Triggers `POST /api/run-synthesize` on the production Cloudflare Worker and refreshes the snapshot cache.
+ */
+export async function triggerRemoteWorkerSynthesize(options?: {
+  limit?: number;
+}): Promise<Record<string, unknown>> {
+  const workerUrl = getEffectiveWorkerUrl();
+  const envVars = loadLocalEnvVars();
+
+  const response = await fetch(`${workerUrl}/api/run-synthesize`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-secret": envVars.ADMIN_SECRET,
+    },
+    body: JSON.stringify({
+      limit: options?.limit ?? 5,
+    }),
+    cache: "no-store",
+  });
+
+  const data = (await response.json()) as Record<string, unknown>;
+  if (!response.ok) {
+    throw new Error(
+      typeof data?.error === "string"
+        ? data.error
+        : `Worker /api/run-synthesize failed with HTTP ${response.status}`
+    );
+  }
+
+  await ensureD1Snapshot(true);
+  return data;
+}
+
+/**
+ * Triggers `POST /api/run-rollup` on the production Cloudflare Worker and refreshes the snapshot cache.
+ */
+export async function triggerRemoteWorkerRollup(): Promise<
+  Record<string, unknown>
+> {
+  const workerUrl = getEffectiveWorkerUrl();
+  const envVars = loadLocalEnvVars();
+
+  const response = await fetch(`${workerUrl}/api/run-rollup`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-admin-secret": envVars.ADMIN_SECRET,
+    },
+    cache: "no-store",
+  });
+
+  const data = (await response.json()) as Record<string, unknown>;
+  if (!response.ok) {
+    throw new Error(
+      typeof data?.error === "string"
+        ? data.error
+        : `Worker /api/run-rollup failed with HTTP ${response.status}`
+    );
+  }
+
+  await ensureD1Snapshot(true);
+  return data;
+}
+
+/**
+ * Fetches MP3 audio bytes from the remote Cloudflare Worker `/audio/:filename` R2 endpoint.
+ */
+export async function fetchRemoteWorkerAudioBytes(
+  filename: string
+): Promise<Uint8Array | null> {
+  try {
+    const workerUrl = getEffectiveWorkerUrl();
+    const response = await fetch(
+      `${workerUrl}/audio/${encodeURIComponent(filename)}`,
+      {
+        method: "GET",
+        signal: AbortSignal.timeout(10000),
+      }
+    );
+    if (!response.ok) {
+      return null;
+    }
+    const ab = await response.arrayBuffer();
+    if (ab.byteLength === 0) {
+      return null;
+    }
+    return new Uint8Array(ab);
+  } catch (err) {
+    console.warn(
+      `[R2 Bridge] Failed to fetch remote audio (${filename}):`,
+      err
+    );
+    return null;
+  }
 }
 
 /**
@@ -688,7 +1047,9 @@ export function createLocalSqliteD1Adapter(): D1DatabaseLike | null {
           const db = new DatabaseSync(sqlitePath, { open: true });
           try {
             const stmt = db.prepare(query);
-            const row = stmt.get(...boundValues) as Record<string, unknown> | undefined;
+            const row = stmt.get(...boundValues) as
+              | Record<string, unknown>
+              | undefined;
             if (!row) return null;
             if (colName) return (row[colName] as T) ?? null;
             return row as T;
@@ -761,6 +1122,28 @@ export function triggerAutoRefreshIfStale(maxAgeHours = 6): void {
   const hasPendingTriaged = snap.triagedCount > 0;
 
   if (ageHours < maxAgeHours && !hasPendingTriaged) {
+    return;
+  }
+
+  if (shouldUseRemoteWorker()) {
+    autoRefreshInFlight = true;
+    void (async () => {
+      try {
+        if (ageHours >= maxAgeHours) {
+          await triggerRemoteWorkerIngest({
+            synthesize: true,
+            synthesizeLimit: 6,
+            maxNetNew: 6,
+          });
+        } else if (hasPendingTriaged) {
+          await triggerRemoteWorkerSynthesize({ limit: 6 });
+        }
+      } catch (err) {
+        console.warn("[D1 Auto-Refresh] Remote Worker sweep error:", err);
+      } finally {
+        autoRefreshInFlight = false;
+      }
+    })();
     return;
   }
 

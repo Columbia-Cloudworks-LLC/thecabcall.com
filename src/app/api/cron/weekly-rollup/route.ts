@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 import {
   createLocalR2AudioAdapter,
   createLocalSqliteD1Adapter,
+  ensureD1Snapshot,
   loadLocalEnvVars,
+  shouldUseRemoteWorker,
+  triggerRemoteWorkerRollup,
 } from "@/lib/d1-bridge";
 import { generateWeeklyRollupEpisode } from "@/lib/pipeline";
 import {
@@ -15,6 +18,31 @@ import { runWeeklyRollupPipeline } from "@/pipeline/rollup";
 export const dynamic = "force-dynamic";
 
 async function executeD1WeeklyRollup() {
+  if (shouldUseRemoteWorker()) {
+    try {
+      const remoteResult = await triggerRemoteWorkerRollup();
+      await ensureD1Snapshot(true);
+      const episode = getLatestWeeklyRollup();
+      const runs = getPipelineRuns();
+      const posture = getSystemPostureSummary();
+
+      return {
+        ok: true,
+        pipeline: "Cloudflare Worker Bridge (cabcall-db + cabcall-audio)",
+        episode,
+        rollupRecord: remoteResult.episode,
+        run: runs[0],
+        runs,
+        posture,
+      };
+    } catch (err) {
+      console.warn(
+        "[Cron Weekly Rollup] Remote Cloudflare Worker call failed, checking local fallback:",
+        err
+      );
+    }
+  }
+
   const db = createLocalSqliteD1Adapter();
   if (!db) {
     const episode = generateWeeklyRollupEpisode();

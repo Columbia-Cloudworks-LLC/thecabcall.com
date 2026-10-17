@@ -19,7 +19,7 @@
 | **Friday 5-Min Podcast Rollup + TTS Audio** | Live on Cloudflare Edge & R2 (`cabcall-audio`) | `src/pipeline/rollup.ts` |
 | **Cloudflare Worker Entrypoint & Crons** | Deployed (`https://thecabcall.thecabcall.workers.dev`) | `src/worker.ts`, `wrangler.jsonc` |
 | **D1 SQLite Schema & Migrations** | Applied to remote `cabcall-db` (`094cf69c-0fe3-409b-a871-06f3610a28a6`) & local `.wrangler` | `migrations/0001_init.sql`, `migrations/0002_pipeline_runs.sql` |
-| **Database & Audio Bridge** | Reads local `.wrangler` SQLite/R2 only | `src/lib/d1-bridge.ts`, `src/lib/store.ts` |
+| **Database & Audio Bridge** | Live Cloud Worker Bridge (`/api/snapshot` + R2 audio) with local `.wrangler` fallback | `src/lib/d1-bridge.ts`, `src/lib/store.ts` |
 
 ---
 
@@ -27,7 +27,7 @@
 
 - [x] **Epic #1 ([GitHub Issue #1](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/1)): Repository Baseline, Clean Build & Git Synchronization**
 - [x] **Epic #2 ([GitHub Issue #2](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/2)): Cloudflare Cloud Provisioning (Live D1 Database, R2 Audio Bucket & Worker Deployment)**
-- [ ] **Epic #3 ([GitHub Issue #3](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/3)): Cloud Bridge — Connecting the Live Next.js Website to Production Cloudflare D1 & R2**
+- [x] **Epic #3 ([GitHub Issue #3](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/3)): Cloud Bridge — Connecting the Live Next.js Website to Production Cloudflare D1 & R2**
 - [ ] **Epic #4 ([GitHub Issue #4](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/4)): Production Frontend Deployment (Vercel) & Custom Domain Cutover (`thecabcall.com`)**
 - [ ] **Epic #5 ([GitHub Issue #5](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/5)): Legacy Podcast Archive Migration & Voice Cloning / TTS Enhancement**
 
@@ -148,7 +148,7 @@
 **Objective:** Upgrade `src/worker.ts`, `src/lib/d1-bridge.ts`, `src/lib/store.ts`, and the Next.js API routes so that when the Next.js frontend runs in the cloud (e.g., on Vercel where `.wrangler/` local SQLite files do not exist), it automatically reads and writes live incidents, episodes, pipeline runs, and MP3 audio from the deployed Cloudflare Worker (`WORKER_API_URL`) instead of falling back to static dummy data.
 
 ### Issue 3.1: Add Live Telemetry Snapshot Endpoint to Cloudflare Worker (`src/worker.ts`)
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Automated Steps for Antigravity:**
   1. Add `GET /api/snapshot` to [`src/worker.ts`](../src/worker.ts) that queries `env.DB` (`telemetry_articles`, `episodes`, `pipeline_runs`) and returns the structured snapshot JSON with short edge caching (`Cache-Control: public, s-maxage=30, stale-while-revalidate=120`) and CORS headers.
   2. Redeploy the Cloudflare Worker via `npx wrangler deploy` and verify `GET <WORKER_URL>/api/snapshot` returns all live D1 rows.
@@ -156,7 +156,7 @@
 - **Human Action Gate:** None.
 
 ### Issue 3.2: Upgrade Next.js Data Layer & API Routes to Use Production Worker Bridge
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Automated Steps for Antigravity:**
   1. Update [`src/lib/d1-bridge.ts`](../src/lib/d1-bridge.ts) and [`src/lib/store.ts`](../src/lib/store.ts) so that when `WORKER_API_URL` (or `NEXT_PUBLIC_WORKER_URL`) is configured (or in production when local `.wrangler` SQLite is absent), data reads/writes sync with the remote Cloudflare Worker `/api/snapshot`, `/api/run-ingest`, `/api/run-synthesize`, `/api/run-rollup`, and `/audio/:filename` endpoints.
   2. Update `/audio/[filename]/route.ts`, `/api/cron/ingest/route.ts`, and `/api/cron/weekly-rollup/route.ts` so Vercel Cron or UI triggers proxy cleanly to the production Cloudflare Worker when running in the cloud.
@@ -165,7 +165,7 @@
 - **Human Action Gate:** None.
 
 ### Issue 3.3: Build, Commit & Push Cloud Bridge
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Automated Steps for Antigravity:**
   1. Run `npm run build` to ensure all Server Components and API routes compile cleanly.
   2. Commit and push changes to `origin/main`.

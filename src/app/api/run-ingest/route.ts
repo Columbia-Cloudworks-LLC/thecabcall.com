@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   createLocalSqliteD1Adapter,
   loadLocalEnvVars,
+  shouldUseRemoteWorker,
+  triggerRemoteWorkerIngest,
 } from "@/lib/d1-bridge";
 import { runD1IngestPipeline } from "@/pipeline/ingest";
 import { runSynthesizePipeline } from "@/pipeline/synthesize";
@@ -19,18 +21,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const db = createLocalSqliteD1Adapter();
-  if (!db) {
-    return NextResponse.json(
-      { error: "Local Wrangler D1 database not found in .wrangler/state/v3/d1" },
-      { status: 500 }
-    );
-  }
-
   let body: {
     synthesize?: boolean;
     synthesizeLimit?: number;
     maxNetNew?: number;
+    customArticle?: {
+      title: string;
+      description: string;
+      sourceFeed: string;
+      link?: string;
+    };
   } = {};
   try {
     body = await req.json();
@@ -42,11 +42,40 @@ export async function POST(req: NextRequest) {
   const chainSynthesize =
     url.searchParams.get("synthesize") === "true" || body.synthesize === true;
 
+  if (shouldUseRemoteWorker()) {
+    try {
+      const remoteResult = await triggerRemoteWorkerIngest({
+        synthesize: chainSynthesize,
+        synthesizeLimit: body.synthesizeLimit ?? 5,
+        maxNetNew: body.maxNetNew ?? 10,
+        customArticle: body.customArticle,
+      });
+      return NextResponse.json(remoteResult);
+    } catch (err) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: err instanceof Error ? err.message : String(err),
+        },
+        { status: 500 }
+      );
+    }
+  }
+
+  const db = createLocalSqliteD1Adapter();
+  if (!db) {
+    return NextResponse.json(
+      { error: "Local Wrangler D1 database not found in .wrangler/state/v3/d1" },
+      { status: 500 }
+    );
+  }
+
   const summary = await runD1IngestPipeline({
     db,
     typesafeApiKey: envVars.TYPESAFE_API_KEY,
     maxNetNew: body.maxNetNew ?? 10,
     itemsPerFeed: 5,
+    customArticle: body.customArticle,
   });
 
   let synthesisSummary = undefined;

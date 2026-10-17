@@ -6,7 +6,7 @@ import {
   Newsreader,
 } from "next/font/google";
 import "./globals.css";
-import { getLatestWeeklyRollup } from "@/lib/store";
+import { ensureD1Snapshot, getLatestWeeklyRollup } from "@/lib/store";
 import { TelemetryProvider } from "@/components/TelemetryContext";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -54,11 +54,12 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  await ensureD1Snapshot();
   const initialEpisode = getLatestWeeklyRollup();
 
   return (

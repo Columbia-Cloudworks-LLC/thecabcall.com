@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAllEpisodes } from "@/lib/store";
+import { ensureD1Snapshot, getAllEpisodes } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +13,7 @@ function escapeXml(unsafe: string): string {
 }
 
 export async function GET() {
+  await ensureD1Snapshot();
   const episodes = getAllEpisodes();
   const siteUrl = "https://thecabcall.com";
 
@@ -20,6 +21,9 @@ export async function GET() {
     .map((ep) => {
       const pubDate = new Date(ep.publishedAt).toUTCString();
       const episodeUrl = `${siteUrl}/archive#${ep.slug}`;
+      const enclosureUrl = ep.audioUrl.startsWith("http")
+        ? ep.audioUrl
+        : `${siteUrl}${ep.audioUrl.startsWith("/") ? "" : "/"}${ep.audioUrl}`;
       return `    <item>
       <title>${escapeXml(ep.title)}</title>
       <link>${episodeUrl}</link>
@@ -27,7 +31,7 @@ export async function GET() {
       <pubDate>${pubDate}</pubDate>
       <description>${escapeXml(ep.summary)}</description>
       <content:encoded><![CDATA[<p>${ep.summary}</p><pre>${ep.transcript}</pre>]]></content:encoded>
-      <enclosure url="${escapeXml(ep.audioUrl)}" length="${ep.fileSizeBytes}" type="audio/mpeg" />
+      <enclosure url="${escapeXml(enclosureUrl)}" length="${ep.fileSizeBytes}" type="audio/mpeg" />
       <itunes:episode>${ep.episodeNumber}</itunes:episode>
       <itunes:duration>${ep.durationSeconds}</itunes:duration>
       <itunes:summary>${escapeXml(ep.summary)}</itunes:summary>

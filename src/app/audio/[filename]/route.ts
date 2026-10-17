@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   createLocalR2AudioAdapter,
-  readLocalD1Snapshot,
+  ensureD1Snapshot,
+  fetchRemoteWorkerAudioBytes,
+  shouldUseRemoteWorker,
 } from "@/lib/d1-bridge";
 import { buildValidMp3AudioBytes } from "@/pipeline/rollup";
 
@@ -18,16 +20,27 @@ export async function GET(
   }
 
   let audioBytes: Uint8Array | null = null;
-  const localR2 = createLocalR2AudioAdapter();
-  const r2Obj = await localR2.get(cleanName);
-  if (r2Obj) {
-    const ab = await r2Obj.arrayBuffer();
-    audioBytes = new Uint8Array(ab);
+
+  if (shouldUseRemoteWorker()) {
+    audioBytes = await fetchRemoteWorkerAudioBytes(cleanName);
+  }
+
+  if (!audioBytes) {
+    const localR2 = createLocalR2AudioAdapter();
+    const r2Obj = await localR2.get(cleanName);
+    if (r2Obj) {
+      const ab = await r2Obj.arrayBuffer();
+      audioBytes = new Uint8Array(ab);
+    }
+  }
+
+  if (!audioBytes && !shouldUseRemoteWorker()) {
+    audioBytes = await fetchRemoteWorkerAudioBytes(cleanName);
   }
 
   if (!audioBytes) {
     const slug = cleanName.replace(/\.mp3$/i, "");
-    const d1 = readLocalD1Snapshot();
+    const d1 = await ensureD1Snapshot();
     const episode =
       d1.episodes.find(
         (ep) => ep.slug === slug || ep.audioUrl.endsWith(cleanName)

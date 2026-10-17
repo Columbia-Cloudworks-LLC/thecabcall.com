@@ -1,5 +1,5 @@
 import React, { Suspense } from "react";
-import { getAllIncidents } from "@/lib/store";
+import { ensureD1Snapshot, getAllIncidents } from "@/lib/store";
 import { KnowledgeGraphClient } from "@/components/KnowledgeGraphClient";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +8,8 @@ export const metadata = {
   title: "The Knowledge Graph — Dual-Axis Taxonomy & Archive Explorer",
 };
 
-export default function KnowledgeGraphPage() {
+export default async function KnowledgeGraphPage() {
+  await ensureD1Snapshot();
   const incidents = getAllIncidents();
 
   return (

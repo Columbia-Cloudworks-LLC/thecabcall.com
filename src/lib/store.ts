@@ -1,7 +1,10 @@
 import {
+  ensureD1Snapshot,
   getPipelineRuns as getD1PipelineRuns,
   readLocalD1Snapshot,
 } from "./d1-bridge";
+
+export { ensureD1Snapshot };
 import {
   INITIAL_EPISODES,
   INITIAL_INCIDENTS,

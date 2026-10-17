@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   createLocalSqliteD1Adapter,
+  ensureD1Snapshot,
   loadLocalEnvVars,
   readLocalD1Snapshot,
+  shouldUseRemoteWorker,
+  triggerRemoteWorkerIngest,
+  triggerRemoteWorkerSynthesize,
 } from "@/lib/d1-bridge";
 import { runIngestionPipeline } from "@/lib/pipeline";
 import { getPipelineRuns, getSystemPostureSummary } from "@/lib/store";
@@ -22,6 +26,86 @@ async function executeD1CronWorkflow(body: {
     link?: string;
   };
 }) {
+  const stage = body.stage || "ingest";
+
+  if (shouldUseRemoteWorker()) {
+    try {
+      let ingestSummary: Record<string, unknown> | undefined = undefined;
+      let synthesisSummary: Record<string, unknown> | undefined = undefined;
+      const affectedHashes = new Set<string>();
+      const affectedIds = new Set<number>();
+
+      if (body.customArticle) {
+        const res = await triggerRemoteWorkerIngest({
+          synthesize: true,
+          synthesizeLimit: 1,
+          customArticle: body.customArticle,
+        });
+        ingestSummary = res;
+        synthesisSummary = res.synthesis as Record<string, unknown> | undefined;
+        const articles = (res.articles as Array<{ id?: number; url_hash?: string }>) || [];
+        for (const art of articles) {
+          if (art.url_hash) affectedHashes.add(art.url_hash);
+          if (art.id) affectedIds.add(art.id);
+        }
+      } else if (stage === "synthesize") {
+        const res = await triggerRemoteWorkerSynthesize({
+          limit: body.limit ?? 5,
+        });
+        synthesisSummary = res;
+        const articles = (res.articles as Array<{ id?: number; url_hash?: string }>) || [];
+        for (const art of articles) {
+          if (art.url_hash) affectedHashes.add(art.url_hash);
+          if (art.id) affectedIds.add(art.id);
+        }
+      } else {
+        const res = await triggerRemoteWorkerIngest({
+          synthesize: stage === "both",
+          synthesizeLimit: body.limit ?? 5,
+          maxNetNew: body.maxNetNew ?? 10,
+        });
+        ingestSummary = res;
+        synthesisSummary = res.synthesis as Record<string, unknown> | undefined;
+        const articles = (res.articles as Array<{ id?: number; url_hash?: string }>) || [];
+        for (const art of articles) {
+          if (art.url_hash) affectedHashes.add(art.url_hash);
+          if (art.id) affectedIds.add(art.id);
+        }
+      }
+
+      const snap = await ensureD1Snapshot(true);
+      const createdIncidents = snap.incidents.filter(
+        (inc) =>
+          affectedHashes.has(inc.urlHash) ||
+          Array.from(affectedIds).some((id) => inc.id === `d1-inc-${id}`)
+      );
+
+      const runs = getPipelineRuns();
+      const posture = getSystemPostureSummary();
+
+      return {
+        ok: true,
+        pipeline:
+          "Cloudflare Worker Bridge (cabcall-db) // System-1 Jev (jev-1.14.0) + System-2 Gemini Synthesis",
+        stage: body.customArticle ? "custom_sandbox" : stage,
+        ingestSummary,
+        synthesisSummary,
+        run: runs[0],
+        runs,
+        posture,
+        createdIncidents:
+          createdIncidents.length > 0
+            ? createdIncidents
+            : snap.incidents.slice(0, 1),
+      };
+    } catch (err) {
+      console.warn(
+        "[Cron Ingest] Remote Cloudflare Worker call failed, checking local fallback:",
+        err
+      );
+    }
+  }
+
   const db = createLocalSqliteD1Adapter();
   if (!db) {
     const fallback = await runIngestionPipeline(
@@ -48,7 +132,6 @@ async function executeD1CronWorkflow(body: {
   }
 
   const envVars = loadLocalEnvVars();
-  const stage = body.stage || "ingest";
 
   let ingestSummary = undefined;
   let synthesisSummary = undefined;

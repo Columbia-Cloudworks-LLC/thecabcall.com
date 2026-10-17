@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import {
-  readLocalD1Snapshot,
+  ensureD1Snapshot,
   triggerAutoRefreshIfStale,
 } from "@/lib/d1-bridge";
 import {
@@ -13,12 +13,14 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const d1 = await ensureD1Snapshot();
   triggerAutoRefreshIfStale(6);
-  const d1 = readLocalD1Snapshot();
 
   return NextResponse.json({
     d1: {
       available: d1.available,
+      source: d1.source || "none",
+      endpoint: d1.sqlitePath,
       synthesizedCount: d1.synthesizedCount,
       triagedCount: d1.triagedCount,
       droppedCount: d1.droppedCount,
