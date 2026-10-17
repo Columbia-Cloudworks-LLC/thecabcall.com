@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+:root {
+  --bg-obsidian: #0B0E14;
+  --bg-lodgeroom: #111726;
+  --accent-brass: #C5A059;
+  --accent-bronze: #8A6D3B;
+  --text-parchment: #F3EFE6;
+  --text-slate: #94A3B8;
+  --status-emerald: #10B981;
+  --status-amber: #F59E0B;
+  --status-crimson: #EF4444;
+}
+
+@layer base {
+  body {
+    background-color: #0B0E14;
+    color: #F3EFE6;
+    font-family: var(--font-inter), sans-serif;
+    overflow-x: hidden;
+  }
+}
+
+.font-display {
+  font-family: var(--font-cinzel), Georgia, serif;
+}
+
+.font-serif {
+  font-family: var(--font-newsreader), Georgia, serif;
+}
+
+.font-mono {
+  font-family: var(--font-jetbrains-mono), monospace;
+}
+
+/* Subtle 4% opacity geometric Masonic Checkered Pavement SVG pattern for header and footer */
+.checkered-pavement {
+  background-image: url("data:image/svg+xml,%3Csvg width='48' height='48' viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23C5A059' fill-opacity='0.038'%3E%3Cpath d='M0 0h24v24H0V0zm24 24h24v24H24V24z'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* Ornate double-line brass frame utility */
+.tracing-board-frame {
+  position: relative;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background-color: #111726;
+}
+
+.tracing-board-frame::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border: 1px solid rgba(197, 160, 89, 0.45);
+  pointer-events: none;
+}
