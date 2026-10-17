@@ -480,7 +480,7 @@ export function generateWeeklyRollupEpisode(): PodcastEpisode {
     durationSeconds: 300,
     durationFormatted: "05:00",
     fileSizeBytes: 4800000,
-    audioUrl: `https://media.thecabcall.com/episodes/cab-weekly-brief-0${nextEpisodeNum}.mp3`,
+    audioUrl: `/audio/cab-weekly-brief-0${nextEpisodeNum}.mp3`,
     dominantTool: posture.dominantTool,
     dominantToolPercentage: posture.dominantToolPercentage,
     dominantFailureMode: posture.topFailureMode,

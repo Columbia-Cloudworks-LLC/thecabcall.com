@@ -13,7 +13,7 @@
 
 | Component | Current Status | Location |
 | :--- | :--- | :--- |
-| **Next.js 15 Frontend (6 Core Pages)** | Built & working locally | `src/app/`, `src/components/` |
+| **Next.js 15 Frontend (6 Core Pages)** | Live in Production (`https://thecabcall.com`) & working locally | `src/app/`, `src/components/` |
 | **System-1 Classifier (TypeSafe Jev `jev-1.14.0`)** | Live on Cloudflare Edge & working locally | `src/pipeline/jev.ts`, `src/pipeline/ingest.ts` |
 | **System-2 Synthesis (Gemini 2.5 Flash)** | Live on Cloudflare Edge & working locally | `src/pipeline/synthesize.ts` |
 | **Friday 5-Min Podcast Rollup + TTS Audio** | Live on Cloudflare Edge & R2 (`cabcall-audio`) | `src/pipeline/rollup.ts` |
@@ -28,7 +28,7 @@
 - [x] **Epic #1 ([GitHub Issue #1](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/1)): Repository Baseline, Clean Build & Git Synchronization**
 - [x] **Epic #2 ([GitHub Issue #2](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/2)): Cloudflare Cloud Provisioning (Live D1 Database, R2 Audio Bucket & Worker Deployment)**
 - [x] **Epic #3 ([GitHub Issue #3](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/3)): Cloud Bridge — Connecting the Live Next.js Website to Production Cloudflare D1 & R2**
-- [ ] **Epic #4 ([GitHub Issue #4](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/4)): Production Frontend Deployment (Vercel) & Custom Domain Cutover (`thecabcall.com`)**
+- [x] **Epic #4 ([GitHub Issue #4](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/4)): Production Frontend Deployment (Vercel) & Custom Domain Cutover (`thecabcall.com`)**
 - [ ] **Epic #5 ([GitHub Issue #5](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/5)): Legacy Podcast Archive Migration & Voice Cloning / TTS Enhancement**
 
 ---
@@ -179,7 +179,7 @@
 **Objective:** Deploy the Next.js frontend to Vercel production with all cloud environment variables wired to the production Cloudflare Worker, verify that `thecabcall.com` points to the live deployment, and verify all 6 pages + podcast RSS feed (`/feed.xml`) in production.
 
 ### Issue 4.1: Configure Vercel Environment Variables & Deploy Production Release
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Automated Steps for Antigravity:**
   1. Verify Vercel CLI authentication via `npx vercel whoami` (if not logged in, trigger Human Action Gate for `npx vercel login`).
   2. Add/update production environment variables on Vercel (`WORKER_API_URL`, `NEXT_PUBLIC_WORKER_URL`, `ADMIN_SECRET`, `TYPESAFE_API_KEY`, `GEMINI_API_KEY`) using `npx vercel env`.
@@ -188,7 +188,7 @@
 - **Human Action Gate:** Only if `npx vercel whoami` shows the session is expired (instruct user to run `npx vercel login`).
 
 ### Issue 4.2: Custom Domain (`thecabcall.com`) DNS & SSL Cutover
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Automated Steps for Antigravity:**
   1. Check domain configuration on the Vercel project via `npx vercel domains inspect thecabcall.com` or `npx vercel alias`.
   2. Check live DNS resolution for `thecabcall.com` and `www.thecabcall.com` using `Resolve-DnsName thecabcall.com`.
@@ -203,7 +203,7 @@
   > 4. Reply **`"Done, continue"`** once saved.
 
 ### Issue 4.3: End-to-End Production Smoke Test
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Automated Steps for Antigravity:**
   1. Verify HTTP `200 OK` and live data rendering across all 6 production routes:
      - `/` (The Trestleboard)
