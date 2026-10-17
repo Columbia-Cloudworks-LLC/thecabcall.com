@@ -12,9 +12,23 @@ export function middleware(req: NextRequest) {
     .toLowerCase()
     .split(":")[0];
 
-  const isAdminSubdomain = host === "admin.thecabcall.com" || host.startsWith("admin.");
+  const isGithubSubdomain =
+    host === "github.thecabcall.com" || host.startsWith("github.");
+  const isAdminSubdomain =
+    host === "admin.thecabcall.com" || host.startsWith("admin.");
   const isPublicProdDomain =
     host === "thecabcall.com" || host === "www.thecabcall.com";
+
+  // 0. On github.thecabcall.com, redirect to the GitHub repository (preserving optional path/query)
+  if (isGithubSubdomain) {
+    const suffix = pathname && pathname !== "/" ? pathname : "";
+    return NextResponse.redirect(
+      `https://github.com/Columbia-Cloudworks-LLC/thecabcall.com${suffix}${
+        search || ""
+      }`,
+      308
+    );
+  }
 
   // 1. On the public production domain (thecabcall.com), redirect any /admin/* path to admin.thecabcall.com
   if (isPublicProdDomain && (pathname === "/admin" || pathname.startsWith("/admin/"))) {
