@@ -22,8 +22,17 @@ export async function GET(req: NextRequest) {
   if (token) {
     await logoutSessionBridge(token);
   }
-  const url = new URL("/admin/login", req.url);
-  const res = NextResponse.redirect(url);
+  const host = (
+    req.headers.get("x-forwarded-host") ||
+    req.headers.get("host") ||
+    "admin.thecabcall.com"
+  ).toLowerCase();
+  const isLocal = host.includes("localhost") || host.startsWith("127.0.0.1");
+  const targetUrl = isLocal
+    ? new URL("/admin/login", req.url)
+    : new URL("https://admin.thecabcall.com/login");
+
+  const res = NextResponse.redirect(targetUrl);
   clearAdminSessionCookie(res);
   return res;
 }

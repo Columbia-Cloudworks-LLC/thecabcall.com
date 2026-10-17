@@ -718,7 +718,7 @@ export async function requestAdminMagicLink(options: {
 
   const normalizedEmail = normalizeEmail(options.email);
   const purpose = options.purpose || "login";
-  const baseUrl = (options.baseUrl || "https://thecabcall.com").replace(
+  const baseUrl = (options.baseUrl || "https://admin.thecabcall.com").replace(
     /\/+$/,
     ""
   );
@@ -1094,12 +1094,12 @@ export async function inviteAdminUser(options: {
     .bind(normalizedEmail, tokenHash, expiresAt, nowIso)
     .run();
 
-  const baseUrl = (options.baseUrl || "https://thecabcall.com").replace(
+  const baseUrl = (options.baseUrl || "https://admin.thecabcall.com").replace(
     /\/+$/,
     ""
   );
   const inviteUrl = `${baseUrl}/api/auth/magic-link/verify?token=${rawToken}`;
-  const googleLoginUrl = `${baseUrl}/admin/login`;
+  const googleLoginUrl = `${baseUrl}/login`;
 
   const reason =
     options.reason?.trim() ||

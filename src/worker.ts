@@ -911,7 +911,7 @@ const worker = {
           email: body.email || "",
           purpose: body.purpose || "login",
           clientIp,
-          baseUrl: body.baseUrl || "https://thecabcall.com",
+          baseUrl: body.baseUrl || "https://admin.thecabcall.com",
           resendApiKey: env.RESEND_API_KEY,
           emailFrom: env.EMAIL_FROM,
         });
@@ -1159,7 +1159,7 @@ const worker = {
           role: body.role,
           authProviderPref: body.authProviderPref,
           reason: body.reason,
-          baseUrl: body.baseUrl || "https://thecabcall.com",
+          baseUrl: body.baseUrl || "https://admin.thecabcall.com",
           resendApiKey: env.RESEND_API_KEY,
           emailFrom: env.EMAIL_FROM,
           sendEmail: body.sendEmail !== false,

@@ -81,6 +81,7 @@ export function setAdminSessionCookie(
     secure: isProd,
     sameSite: "lax",
     path: "/",
+    ...(isProd ? { domain: ".thecabcall.com" } : {}),
     expires: expiresDate,
   });
 }
@@ -97,6 +98,7 @@ export function clearAdminSessionCookie(res: NextResponse): void {
     secure: isProd,
     sameSite: "lax",
     path: "/",
+    ...(isProd ? { domain: ".thecabcall.com" } : {}),
     maxAge: 0,
   });
   res.cookies.set({
@@ -106,6 +108,7 @@ export function clearAdminSessionCookie(res: NextResponse): void {
     secure: isProd,
     sameSite: "lax",
     path: "/",
+    ...(isProd ? { domain: ".thecabcall.com" } : {}),
     maxAge: 0,
   });
 }

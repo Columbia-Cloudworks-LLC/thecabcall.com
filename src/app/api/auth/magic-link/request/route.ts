@@ -6,20 +6,17 @@ import {
 
 export const dynamic = "force-dynamic";
 
-function resolvePublicOrigin(req: NextRequest): string {
-  const host =
+function resolveAdminConsoleOrigin(req: NextRequest): string {
+  const host = (
     req.headers.get("x-forwarded-host") ||
     req.headers.get("host") ||
-    "thecabcall.com";
-  const proto =
-    req.headers.get("x-forwarded-proto") ||
-    (host.includes("localhost") || host.startsWith("127.0.0.1")
-      ? "http"
-      : "https");
-  if (host.includes("thecabcall.com") && !host.includes("localhost")) {
-    return "https://thecabcall.com";
+    "admin.thecabcall.com"
+  ).toLowerCase();
+
+  if (host.includes("localhost") || host.startsWith("127.0.0.1")) {
+    return `http://${host}`;
   }
-  return `${proto}://${host}`;
+  return "https://admin.thecabcall.com";
 }
 
 export async function POST(req: NextRequest) {
@@ -48,7 +45,7 @@ export async function POST(req: NextRequest) {
       allowRawLink = adminAuth.authorized;
     }
 
-    const origin = resolvePublicOrigin(req);
+    const origin = resolveAdminConsoleOrigin(req);
     const clientIp =
       req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip");
 

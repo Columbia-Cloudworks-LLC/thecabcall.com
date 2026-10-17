@@ -3,27 +3,28 @@ import { setAdminSessionCookie, verifyMagicLinkBridge } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-function resolvePublicOrigin(req: NextRequest): string {
-  const host =
+function resolveAdminConsoleOrigin(req: NextRequest): string {
+  const host = (
     req.headers.get("x-forwarded-host") ||
     req.headers.get("host") ||
-    "thecabcall.com";
-  const proto =
-    req.headers.get("x-forwarded-proto") ||
-    (host.includes("localhost") || host.startsWith("127.0.0.1")
-      ? "http"
-      : "https");
-  if (host.includes("thecabcall.com") && !host.includes("localhost")) {
-    return "https://thecabcall.com";
+    "admin.thecabcall.com"
+  ).toLowerCase();
+
+  if (host.includes("localhost") || host.startsWith("127.0.0.1")) {
+    return `http://${host}`;
   }
-  return `${proto}://${host}`;
+  return "https://admin.thecabcall.com";
 }
 
 export async function GET(req: NextRequest) {
-  const origin = resolvePublicOrigin(req);
+  const origin = resolveAdminConsoleOrigin(req);
+  const isLocal = origin.includes("localhost") || origin.includes("127.0.0.1");
+  const defaultLoginPath = isLocal ? "/admin/login" : "/login";
+  const defaultDestPath = isLocal ? "/admin/users" : "/users";
+
   const url = new URL(req.url);
   const token = (url.searchParams.get("token") || "").trim();
-  const nextPath = url.searchParams.get("next") || "/admin/users";
+  const nextPath = url.searchParams.get("next") || defaultDestPath;
   const wantsJson =
     url.searchParams.get("format") === "json" ||
     (req.headers.get("accept") || "").includes("application/json");
@@ -37,7 +38,7 @@ export async function GET(req: NextRequest) {
     }
     return NextResponse.redirect(
       new URL(
-        `/admin/login?error=missing_token&message=${encodeURIComponent(
+        `${defaultLoginPath}?error=missing_token&message=${encodeURIComponent(
           "Missing Magic Link token."
         )}`,
         origin
@@ -63,7 +64,7 @@ export async function GET(req: NextRequest) {
         );
       }
 
-      const loginUrl = new URL("/admin/login", origin);
+      const loginUrl = new URL(defaultLoginPath, origin);
       loginUrl.searchParams.set("error", result.code || "INVALID_MAGIC_LINK");
       loginUrl.searchParams.set(
         "message",
@@ -85,7 +86,7 @@ export async function GET(req: NextRequest) {
       return res;
     }
 
-    const safeNext = nextPath.startsWith("/admin") ? nextPath : "/admin/users";
+    const safeNext = nextPath.startsWith("/") ? nextPath : defaultDestPath;
     const redirectResponse = NextResponse.redirect(new URL(safeNext, origin));
     setAdminSessionCookie(
       redirectResponse,
@@ -100,7 +101,9 @@ export async function GET(req: NextRequest) {
     }
     return NextResponse.redirect(
       new URL(
-        `/admin/login?error=verify_error&message=${encodeURIComponent(message)}`,
+        `${defaultLoginPath}?error=verify_error&message=${encodeURIComponent(
+          message
+        )}`,
         origin
       )
     );

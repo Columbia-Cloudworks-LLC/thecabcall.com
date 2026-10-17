@@ -250,12 +250,12 @@ export function AdminLoginClient({
 
           {/* Footer Links */}
           <div className="pt-4 border-t border-[#263147] flex flex-wrap items-center justify-between gap-2 text-xs text-[#8E9BAE] font-mono">
-            <Link
-              href="/"
+            <a
+              href="https://thecabcall.com"
               className="hover:text-[#C5A059] transition-colors"
             >
-              ← Return to Public Trestleboard
-            </Link>
+              ← Return to Public Trestleboard (thecabcall.com)
+            </a>
             <Link
               href="/api/admin/audit/verify"
               className="hover:text-[#C5A059] transition-colors"

@@ -9,24 +9,39 @@ import { loadLocalEnvVars } from "@/lib/d1-bridge";
 
 export const dynamic = "force-dynamic";
 
-function resolvePublicOrigin(req: NextRequest): string {
-  const host =
+function resolveOAuthCallbackOrigin(req: NextRequest): string {
+  const host = (
     req.headers.get("x-forwarded-host") ||
     req.headers.get("host") ||
-    "thecabcall.com";
-  const proto =
-    req.headers.get("x-forwarded-proto") ||
-    (host.includes("localhost") || host.startsWith("127.0.0.1")
-      ? "http"
-      : "https");
-  if (host.includes("thecabcall.com") && !host.includes("localhost")) {
-    return "https://thecabcall.com";
+    "thecabcall.com"
+  ).toLowerCase();
+
+  if (host.includes("localhost") || host.startsWith("127.0.0.1")) {
+    return `http://${host}`;
   }
-  return `${proto}://${host}`;
+  return "https://thecabcall.com";
+}
+
+function resolveAdminConsoleOrigin(req: NextRequest): string {
+  const host = (
+    req.headers.get("x-forwarded-host") ||
+    req.headers.get("host") ||
+    "admin.thecabcall.com"
+  ).toLowerCase();
+
+  if (host.includes("localhost") || host.startsWith("127.0.0.1")) {
+    return `http://${host}`;
+  }
+  return "https://admin.thecabcall.com";
 }
 
 export async function GET(req: NextRequest) {
-  const origin = resolvePublicOrigin(req);
+  const callbackOrigin = resolveOAuthCallbackOrigin(req);
+  const adminOrigin = resolveAdminConsoleOrigin(req);
+  const isLocal = callbackOrigin.includes("localhost") || callbackOrigin.includes("127.0.0.1");
+  const defaultLoginPath = isLocal ? "/admin/login" : "/login";
+  const defaultDestPath = isLocal ? "/admin/users" : "/users";
+
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
   const stateParam = url.searchParams.get("state") || "";
@@ -48,10 +63,10 @@ export async function GET(req: NextRequest) {
     }
     return NextResponse.redirect(
       new URL(
-        `/admin/login?error=oauth_cancelled&message=${encodeURIComponent(
+        `${defaultLoginPath}?error=oauth_cancelled&message=${encodeURIComponent(
           `Google Sign-In was cancelled or denied (${errorParam}).`
         )}`,
-        origin
+        adminOrigin
       )
     );
   }
@@ -69,16 +84,15 @@ export async function GET(req: NextRequest) {
     }
     return NextResponse.redirect(
       new URL(
-        `/admin/login?error=missing_code&message=${encodeURIComponent(
+        `${defaultLoginPath}?error=missing_code&message=${encodeURIComponent(
           "Missing authorization code from Google."
         )}`,
-        origin
+        adminOrigin
       )
     );
   }
 
-  // Extract optional next path from state payload (`nonce:base64url(nextPath)`)
-  let nextPath = "/admin/users";
+  let nextPath = defaultDestPath;
   const [stateNonce, encodedNext] = stateParam.split(":");
   const cookieNonce = req.cookies.get(OAUTH_STATE_COOKIE_NAME)?.value;
 
@@ -95,10 +109,10 @@ export async function GET(req: NextRequest) {
     }
     return NextResponse.redirect(
       new URL(
-        `/admin/login?error=invalid_state&message=${encodeURIComponent(
+        `${defaultLoginPath}?error=invalid_state&message=${encodeURIComponent(
           "OAuth state verification failed. Please try signing in again."
         )}`,
-        origin
+        adminOrigin
       )
     );
   }
@@ -106,17 +120,21 @@ export async function GET(req: NextRequest) {
   if (encodedNext) {
     try {
       const decoded = Buffer.from(encodedNext, "base64url").toString("utf8");
-      if (decoded.startsWith("/admin")) {
-        nextPath = decoded;
+      if (decoded.startsWith("/")) {
+        nextPath = isLocal
+          ? decoded.startsWith("/admin")
+            ? decoded
+            : `/admin${decoded}`
+          : decoded.replace(/^\/admin/, "") || "/";
       }
     } catch {
-      // keep default /admin/users
+      // keep defaultDestPath
     }
   }
 
   const clientIp =
     req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip");
-  const redirectUri = `${origin}/api/auth/google/callback`;
+  const redirectUri = `${callbackOrigin}/api/auth/google/callback`;
 
   try {
     const authResult = await exchangeGoogleCodeAndAuthenticate({
@@ -140,7 +158,7 @@ export async function GET(req: NextRequest) {
         );
       }
 
-      const loginUrl = new URL("/admin/login", origin);
+      const loginUrl = new URL(defaultLoginPath, adminOrigin);
       loginUrl.searchParams.set(
         "error",
         authResult.code || "UNAUTHORIZED_ACCOUNT"
@@ -173,13 +191,14 @@ export async function GET(req: NextRequest) {
       return res;
     }
 
-    const redirectResponse = NextResponse.redirect(new URL(nextPath, origin));
+    const redirectResponse = NextResponse.redirect(
+      new URL(nextPath, adminOrigin)
+    );
     setAdminSessionCookie(
       redirectResponse,
       authResult.rawSessionToken,
       authResult.expiresAt
     );
-    redirectResponse.cookies.delete(OAUTH_STATE_COOKIE_NAME);
     return redirectResponse;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -191,19 +210,15 @@ export async function GET(req: NextRequest) {
     }
     return NextResponse.redirect(
       new URL(
-        `/admin/login?error=callback_error&message=${encodeURIComponent(
+        `${defaultLoginPath}?error=callback_error&message=${encodeURIComponent(
           message
         )}`,
-        origin
+        adminOrigin
       )
     );
   }
 }
 
-/**
- * POST /api/auth/google/callback (Admin/Test verification endpoint requiring x-admin-secret)
- * Allows deterministic verification of Google OAuth account lock & 403 audit logging.
- */
 export async function POST(req: NextRequest) {
   const envVars = loadLocalEnvVars();
   const providedSecret = req.headers.get("x-admin-secret");
