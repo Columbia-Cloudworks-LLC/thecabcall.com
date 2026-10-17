@@ -25,8 +25,22 @@ import {
   verifyAdminSession,
 } from "./pipeline/auth";
 import {
+  createIngestFeed,
+  createIngestFilter,
   D1DatabaseLike,
+  deleteIngestFeed,
+  deleteIngestFilter,
+  getSystemThresholds,
+  IngestFilterMatchTarget,
+  IngestFilterType,
+  listIngestFeeds,
+  listIngestFilters,
   runD1IngestPipeline,
+  testCandidateRssFeed,
+  testIngestFiltersDryRun,
+  updateIngestFeed,
+  updateIngestFilter,
+  updateSystemThresholds,
   US_HIGH_IMPACT_FEEDS,
 } from "./pipeline/ingest";
 import { evaluateArticleWithJev } from "./pipeline/jev";
@@ -1396,6 +1410,700 @@ const worker = {
         return jsonResponse(result, result.status, {
           "Cache-Control": "no-store",
         });
+      } catch (err) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          },
+          500
+        );
+      }
+    }
+
+    // Admin Feeds Route 1: GET / POST / PUT / DELETE /api/admin/feeds
+    if (url.pathname === "/api/admin/feeds") {
+      if (request.method === "GET") {
+        const actor = await resolveAdminActor(request, env);
+        if (!actor) {
+          return jsonResponse(
+            { ok: false, error: "Unauthorized: Admin authentication required" },
+            401
+          );
+        }
+
+        try {
+          const feeds = await listIngestFeeds(env.DB);
+          return jsonResponse(
+            {
+              ok: true,
+              feeds,
+              activeCount: feeds.filter((f) => f.enabled).length,
+            },
+            200,
+            { "Cache-Control": "no-store" }
+          );
+        } catch (err) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            500
+          );
+        }
+      }
+
+      if (request.method === "POST") {
+        const actor = await resolveAdminActor(request, env);
+        if (!actor) {
+          return jsonResponse(
+            { ok: false, error: "Unauthorized: Admin authentication required" },
+            401
+          );
+        }
+        if (actor.role === "auditor") {
+          return jsonResponse(
+            {
+              ok: false,
+              error: "Forbidden: Auditor role is read-only.",
+            },
+            403
+          );
+        }
+
+        try {
+          const body = (await request.json()) as {
+            name?: string;
+            url?: string;
+            focusArea?: string;
+            domainSectorOverride?: string | null;
+            itemsPerPoll?: number;
+            enabled?: boolean;
+            reason?: string;
+            actorEmail?: string;
+            actorRole?: string;
+            authMethod?: AuditAuthMethod;
+          };
+
+          const clientIp =
+            request.headers.get("cf-connecting-ip") ||
+            request.headers.get("x-forwarded-for");
+
+          const result = await createIngestFeed(
+            env.DB,
+            {
+              name: body.name || "",
+              url: body.url || "",
+              focusArea: body.focusArea || "General US Telemetry",
+              domainSectorOverride: body.domainSectorOverride,
+              itemsPerPoll: body.itemsPerPoll,
+              enabled: body.enabled,
+              reason: body.reason,
+            },
+            {
+              actorEmail: body.actorEmail || actor.email,
+              actorRole: body.actorRole || actor.role,
+              authMethod: body.authMethod || actor.authMethod,
+              actorIpHash: await hashActorIp(clientIp),
+            }
+          );
+
+          const feeds = await listIngestFeeds(env.DB);
+          return jsonResponse(
+            {
+              ok: true,
+              ...result,
+              feeds,
+            },
+            201,
+            { "Cache-Control": "no-store" }
+          );
+        } catch (err) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            400
+          );
+        }
+      }
+
+      if (request.method === "PUT") {
+        const actor = await resolveAdminActor(request, env);
+        if (!actor) {
+          return jsonResponse(
+            { ok: false, error: "Unauthorized: Admin authentication required" },
+            401
+          );
+        }
+        if (actor.role === "auditor") {
+          return jsonResponse(
+            {
+              ok: false,
+              error: "Forbidden: Auditor role is read-only.",
+            },
+            403
+          );
+        }
+
+        try {
+          const body = (await request.json()) as {
+            id?: number;
+            name?: string;
+            url?: string;
+            focusArea?: string;
+            domainSectorOverride?: string | null;
+            itemsPerPoll?: number;
+            enabled?: boolean;
+            reason?: string;
+            actorEmail?: string;
+            actorRole?: string;
+            authMethod?: AuditAuthMethod;
+          };
+
+          const id = Number(body.id || url.searchParams.get("id"));
+          if (!id) {
+            return jsonResponse(
+              { ok: false, error: "Missing required feed id" },
+              400
+            );
+          }
+
+          const clientIp =
+            request.headers.get("cf-connecting-ip") ||
+            request.headers.get("x-forwarded-for");
+
+          const result = await updateIngestFeed(
+            env.DB,
+            id,
+            {
+              name: body.name,
+              url: body.url,
+              focusArea: body.focusArea,
+              domainSectorOverride: body.domainSectorOverride,
+              itemsPerPoll: body.itemsPerPoll,
+              enabled: body.enabled,
+              reason: body.reason,
+            },
+            {
+              actorEmail: body.actorEmail || actor.email,
+              actorRole: body.actorRole || actor.role,
+              authMethod: body.authMethod || actor.authMethod,
+              actorIpHash: await hashActorIp(clientIp),
+            }
+          );
+
+          const feeds = await listIngestFeeds(env.DB);
+          return jsonResponse(
+            {
+              ok: true,
+              ...result,
+              feeds,
+            },
+            200,
+            { "Cache-Control": "no-store" }
+          );
+        } catch (err) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            400
+          );
+        }
+      }
+
+      if (request.method === "DELETE") {
+        const actor = await resolveAdminActor(request, env);
+        if (!actor) {
+          return jsonResponse(
+            { ok: false, error: "Unauthorized: Admin authentication required" },
+            401
+          );
+        }
+        if (actor.role === "auditor") {
+          return jsonResponse(
+            {
+              ok: false,
+              error: "Forbidden: Auditor role is read-only.",
+            },
+            403
+          );
+        }
+
+        try {
+          let body: {
+            id?: number;
+            reason?: string;
+            actorEmail?: string;
+            actorRole?: string;
+            authMethod?: AuditAuthMethod;
+          } = {};
+          try {
+            const raw = await request.text();
+            if (raw.trim()) body = JSON.parse(raw);
+          } catch {
+            // ignore
+          }
+
+          const id = Number(body.id || url.searchParams.get("id"));
+          if (!id) {
+            return jsonResponse(
+              { ok: false, error: "Missing required feed id" },
+              400
+            );
+          }
+
+          const clientIp =
+            request.headers.get("cf-connecting-ip") ||
+            request.headers.get("x-forwarded-for");
+
+          const result = await deleteIngestFeed(
+            env.DB,
+            id,
+            body.reason || url.searchParams.get("reason") || "",
+            {
+              actorEmail: body.actorEmail || actor.email,
+              actorRole: body.actorRole || actor.role,
+              authMethod: body.authMethod || actor.authMethod,
+              actorIpHash: await hashActorIp(clientIp),
+            }
+          );
+
+          const feeds = await listIngestFeeds(env.DB);
+          return jsonResponse(
+            {
+              ok: true,
+              ...result,
+              feeds,
+            },
+            200,
+            { "Cache-Control": "no-store" }
+          );
+        } catch (err) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            400
+          );
+        }
+      }
+    }
+
+    // Admin Feeds Route 2: POST /api/admin/feeds/test (Live RSS/Atom URL Preview)
+    if (
+      request.method === "POST" &&
+      url.pathname === "/api/admin/feeds/test"
+    ) {
+      const actor = await resolveAdminActor(request, env);
+      if (!actor) {
+        return jsonResponse(
+          { ok: false, error: "Unauthorized: Admin authentication required" },
+          401
+        );
+      }
+
+      try {
+        const body = (await request.json()) as {
+          url?: string;
+          maxItems?: number;
+        };
+        const preview = await testCandidateRssFeed(
+          body.url || "",
+          body.maxItems ?? 5
+        );
+        return jsonResponse(preview, preview.ok ? 200 : 400, {
+          "Cache-Control": "no-store",
+        });
+      } catch (err) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          },
+          500
+        );
+      }
+    }
+
+    // Admin Filters Route 1: GET / POST / PUT / DELETE /api/admin/filters
+    if (url.pathname === "/api/admin/filters") {
+      if (request.method === "GET") {
+        const actor = await resolveAdminActor(request, env);
+        if (!actor) {
+          return jsonResponse(
+            { ok: false, error: "Unauthorized: Admin authentication required" },
+            401
+          );
+        }
+
+        try {
+          const [filters, thresholds, feeds] = await Promise.all([
+            listIngestFilters(env.DB),
+            getSystemThresholds(env.DB),
+            listIngestFeeds(env.DB),
+          ]);
+          return jsonResponse(
+            {
+              ok: true,
+              filters,
+              thresholds,
+              feeds,
+              activeCount: filters.filter((f) => f.enabled).length,
+            },
+            200,
+            { "Cache-Control": "no-store" }
+          );
+        } catch (err) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            500
+          );
+        }
+      }
+
+      if (request.method === "POST") {
+        const actor = await resolveAdminActor(request, env);
+        if (!actor) {
+          return jsonResponse(
+            { ok: false, error: "Unauthorized: Admin authentication required" },
+            401
+          );
+        }
+        if (actor.role === "auditor") {
+          return jsonResponse(
+            {
+              ok: false,
+              error: "Forbidden: Auditor role is read-only.",
+            },
+            403
+          );
+        }
+
+        try {
+          const body = (await request.json()) as {
+            name?: string;
+            description?: string;
+            filterType?: IngestFilterType;
+            matchTarget?: IngestFilterMatchTarget;
+            pattern?: string;
+            scopeFeedId?: number | null;
+            actionValue?: string | null;
+            enabled?: boolean;
+            reason?: string;
+            actorEmail?: string;
+            actorRole?: string;
+            authMethod?: AuditAuthMethod;
+          };
+
+          const clientIp =
+            request.headers.get("cf-connecting-ip") ||
+            request.headers.get("x-forwarded-for");
+
+          const result = await createIngestFilter(
+            env.DB,
+            {
+              name: body.name || "",
+              description: body.description,
+              filterType: body.filterType || "Drop_Keyword_Regex",
+              matchTarget: body.matchTarget || "title_and_excerpt",
+              pattern: body.pattern || "",
+              scopeFeedId: body.scopeFeedId,
+              actionValue: body.actionValue,
+              enabled: body.enabled,
+              reason: body.reason,
+            },
+            {
+              actorEmail: body.actorEmail || actor.email,
+              actorRole: body.actorRole || actor.role,
+              authMethod: body.authMethod || actor.authMethod,
+              actorIpHash: await hashActorIp(clientIp),
+            }
+          );
+
+          const [filters, thresholds] = await Promise.all([
+            listIngestFilters(env.DB),
+            getSystemThresholds(env.DB),
+          ]);
+          return jsonResponse(
+            {
+              ok: true,
+              ...result,
+              filters,
+              thresholds,
+            },
+            201,
+            { "Cache-Control": "no-store" }
+          );
+        } catch (err) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            400
+          );
+        }
+      }
+
+      if (request.method === "PUT") {
+        const actor = await resolveAdminActor(request, env);
+        if (!actor) {
+          return jsonResponse(
+            { ok: false, error: "Unauthorized: Admin authentication required" },
+            401
+          );
+        }
+        if (actor.role === "auditor") {
+          return jsonResponse(
+            {
+              ok: false,
+              error: "Forbidden: Auditor role is read-only.",
+            },
+            403
+          );
+        }
+
+        try {
+          const body = (await request.json()) as {
+            action?: "update_thresholds" | "update_filter";
+            id?: number;
+            name?: string;
+            description?: string;
+            filterType?: IngestFilterType;
+            matchTarget?: IngestFilterMatchTarget;
+            pattern?: string;
+            scopeFeedId?: number | null;
+            actionValue?: string | null;
+            enabled?: boolean;
+            jevMinSystemicProb?: number;
+            jevMinConfidence?: number;
+            maxNetNewPerRun?: number;
+            defaultItemsPerPoll?: number;
+            reason?: string;
+            actorEmail?: string;
+            actorRole?: string;
+            authMethod?: AuditAuthMethod;
+          };
+
+          const clientIp =
+            request.headers.get("cf-connecting-ip") ||
+            request.headers.get("x-forwarded-for");
+
+          const auditActor = {
+            actorEmail: body.actorEmail || actor.email,
+            actorRole: body.actorRole || actor.role,
+            authMethod: body.authMethod || actor.authMethod,
+            actorIpHash: await hashActorIp(clientIp),
+          };
+
+          if (
+            body.action === "update_thresholds" ||
+            body.jevMinSystemicProb !== undefined ||
+            body.jevMinConfidence !== undefined ||
+            body.maxNetNewPerRun !== undefined ||
+            body.defaultItemsPerPoll !== undefined
+          ) {
+            const thresholdRes = await updateSystemThresholds(
+              env.DB,
+              {
+                jevMinSystemicProb: body.jevMinSystemicProb,
+                jevMinConfidence: body.jevMinConfidence,
+                maxNetNewPerRun: body.maxNetNewPerRun,
+                defaultItemsPerPoll: body.defaultItemsPerPoll,
+                reason: body.reason,
+              },
+              auditActor
+            );
+            const filters = await listIngestFilters(env.DB);
+            return jsonResponse(
+              {
+                ok: true,
+                thresholds: thresholdRes.settings,
+                auditEntry: thresholdRes.auditEntry,
+                filters,
+              },
+              200,
+              { "Cache-Control": "no-store" }
+            );
+          }
+
+          const id = Number(body.id || url.searchParams.get("id"));
+          if (!id) {
+            return jsonResponse(
+              { ok: false, error: "Missing required filter id" },
+              400
+            );
+          }
+
+          const result = await updateIngestFilter(
+            env.DB,
+            id,
+            {
+              name: body.name,
+              description: body.description,
+              filterType: body.filterType,
+              matchTarget: body.matchTarget,
+              pattern: body.pattern,
+              scopeFeedId: body.scopeFeedId,
+              actionValue: body.actionValue,
+              enabled: body.enabled,
+              reason: body.reason,
+            },
+            auditActor
+          );
+
+          const [filters, thresholds] = await Promise.all([
+            listIngestFilters(env.DB),
+            getSystemThresholds(env.DB),
+          ]);
+          return jsonResponse(
+            {
+              ok: true,
+              ...result,
+              filters,
+              thresholds,
+            },
+            200,
+            { "Cache-Control": "no-store" }
+          );
+        } catch (err) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            400
+          );
+        }
+      }
+
+      if (request.method === "DELETE") {
+        const actor = await resolveAdminActor(request, env);
+        if (!actor) {
+          return jsonResponse(
+            { ok: false, error: "Unauthorized: Admin authentication required" },
+            401
+          );
+        }
+        if (actor.role === "auditor") {
+          return jsonResponse(
+            {
+              ok: false,
+              error: "Forbidden: Auditor role is read-only.",
+            },
+            403
+          );
+        }
+
+        try {
+          let body: {
+            id?: number;
+            reason?: string;
+            actorEmail?: string;
+            actorRole?: string;
+            authMethod?: AuditAuthMethod;
+          } = {};
+          try {
+            const raw = await request.text();
+            if (raw.trim()) body = JSON.parse(raw);
+          } catch {
+            // ignore
+          }
+
+          const id = Number(body.id || url.searchParams.get("id"));
+          if (!id) {
+            return jsonResponse(
+              { ok: false, error: "Missing required filter id" },
+              400
+            );
+          }
+
+          const clientIp =
+            request.headers.get("cf-connecting-ip") ||
+            request.headers.get("x-forwarded-for");
+
+          const result = await deleteIngestFilter(
+            env.DB,
+            id,
+            body.reason || url.searchParams.get("reason") || "",
+            {
+              actorEmail: body.actorEmail || actor.email,
+              actorRole: body.actorRole || actor.role,
+              authMethod: body.authMethod || actor.authMethod,
+              actorIpHash: await hashActorIp(clientIp),
+            }
+          );
+
+          const [filters, thresholds] = await Promise.all([
+            listIngestFilters(env.DB),
+            getSystemThresholds(env.DB),
+          ]);
+          return jsonResponse(
+            {
+              ok: true,
+              ...result,
+              filters,
+              thresholds,
+            },
+            200,
+            { "Cache-Control": "no-store" }
+          );
+        } catch (err) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            400
+          );
+        }
+      }
+    }
+
+    // Admin Filters Route 2: POST /api/admin/filters/test (Filter Dry-Run Tester)
+    if (
+      request.method === "POST" &&
+      url.pathname === "/api/admin/filters/test"
+    ) {
+      const actor = await resolveAdminActor(request, env);
+      if (!actor) {
+        return jsonResponse(
+          { ok: false, error: "Unauthorized: Admin authentication required" },
+          401
+        );
+      }
+
+      try {
+        const body = (await request.json()) as {
+          candidateFilter?: {
+            name?: string;
+            filterType: IngestFilterType;
+            matchTarget?: IngestFilterMatchTarget;
+            pattern: string;
+            actionValue?: string | null;
+            scopeFeedId?: number | null;
+          };
+          customSamples?: Array<{
+            title: string;
+            excerpt?: string;
+            sourceFeed?: string;
+            sourceUrl?: string;
+          }>;
+          minSystemicProbOverride?: number;
+          limit?: number;
+        };
+
+        const dryRunResult = await testIngestFiltersDryRun(env.DB, body);
+        return jsonResponse(dryRunResult, 200, { "Cache-Control": "no-store" });
       } catch (err) {
         return jsonResponse(
           {

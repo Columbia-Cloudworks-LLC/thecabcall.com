@@ -18,9 +18,9 @@
 | **System-2 Synthesis (Gemini 2.5 Flash)** | Live on Cloudflare Edge & working locally | `src/pipeline/synthesize.ts` |
 | **Friday 5-Min Podcast Rollup + TTS Audio** | Live on Cloudflare Edge & R2 (`cabcall-audio`) | `src/pipeline/rollup.ts` |
 | **Cloudflare Worker Entrypoint & Crons** | Deployed (`https://thecabcall.thecabcall.workers.dev`) | `src/worker.ts`, `wrangler.jsonc` |
-| **D1 SQLite Schema & Migrations** | Applied to remote `cabcall-db` (`094cf69c-0fe3-409b-a871-06f3610a28a6`) & local `.wrangler` | `migrations/0001_init.sql`, `migrations/0002_pipeline_runs.sql`, `migrations/0003_audit_ledger.sql`, `migrations/0004_admin_auth.sql` |
-| **Database & Audio Bridge** | Live Cloud Worker Bridge (`/api/snapshot` + R2 audio) with local `.wrangler` fallback | `src/lib/d1-bridge.ts`, `src/lib/store.ts` |
-| **Admin Governance, Auth & Audit Ledger** | Issues #6, #7 & #8 (Audit Ledger, Admin OAuth/Magic-Link Auth & Invites, Command Center Shell & Audit Replay Studio) live in Production; Issues #9 – #12 planned below | `migrations/0003_audit_ledger.sql`, `migrations/0004_admin_auth.sql`, `src/pipeline/audit.ts`, `src/pipeline/auth.ts`, `src/lib/audit.ts`, `src/lib/auth.ts`, `src/app/admin/`, `src/app/admin/audit/` |
+| **D1 SQLite Schema & Migrations** | Applied to remote `cabcall-db` (`094cf69c-0fe3-409b-a871-06f3610a28a6`) & local `.wrangler` | `migrations/0001_init.sql`, `migrations/0002_pipeline_runs.sql`, `migrations/0003_audit_ledger.sql`, `migrations/0004_admin_auth.sql`, `migrations/0005_dynamic_feeds_and_filters.sql` |
+| **Database & Audio Bridge** | Live Cloud Worker Bridge (`/api/snapshot` + R2 audio) with local `.wrangler` fallback | `src/lib/d1-bridge.ts`, `src/lib/store.ts`, `src/lib/feeds-filters.ts` |
+| **Admin Governance, Auth & Audit Ledger** | Issues #6, #7, #8 & #10 (Audit Ledger, Admin OAuth/Magic-Link Auth & Invites, Command Center Shell & Audit Replay Studio, Dynamic Feeds & Filters Studio) live in Production; Issues #9, #11 & #12 planned below | `migrations/0003_audit_ledger.sql`, `migrations/0004_admin_auth.sql`, `migrations/0005_dynamic_feeds_and_filters.sql`, `src/pipeline/audit.ts`, `src/pipeline/auth.ts`, `src/pipeline/ingest.ts`, `src/lib/audit.ts`, `src/lib/auth.ts`, `src/lib/feeds-filters.ts`, `src/app/admin/` |
 
 ---
 
@@ -40,7 +40,7 @@
 - [x] **Issue #7 ([GitHub Issue #7](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/7)): Admin Authentication & User Access Control (Google OAuth Owner Lock, Email Invites & Magic Link Fallback)**
 - [x] **Issue #8 ([GitHub Issue #8](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/8)): Admin Dashboard Shell, Telemetry Command Center & Audit Trail Explorer / Replay Studio (`/admin` & `/admin/audit`)**
 - [ ] **Issue #9 ([GitHub Issue #9](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/9)): Podcast Episode Admin Studio — Delete Episodes, Purge R2 Audio, Edit Transcripts & Generate New Episodes (`/admin/episodes`)**
-- [ ] **Issue #10 ([GitHub Issue #10](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/10)): Dynamic Inbound RSS Feed & Triage Filter Management (`/admin/feeds` & `/admin/filters`)**
+- [x] **Issue #10 ([GitHub Issue #10](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/10)): Dynamic Inbound RSS Feed & Triage Filter Management (`/admin/feeds` & `/admin/filters`)**
 - [ ] **Issue #11 ([GitHub Issue #11](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/11)): Editorial Pipeline & Incident Studio — De-Alarmist Title Rewriting, Image Attachment Pipeline & Brief Overrides (`/admin/incidents` & `/admin/transforms`)**
 - [ ] **Issue #12 ([GitHub Issue #12](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/12)): Outbound Published Feeds & Syndication Studio — Customize Podcast RSS & Publish De-Alarmed Incident Feeds (`/admin/publishing`, `/feed.xml` & `/feeds/incidents.*`)**
 
@@ -361,7 +361,7 @@
 
 ## Issue #10 (Epic 6.5): Dynamic Inbound RSS Feed & Triage Filter Management (`/admin/feeds` & `/admin/filters`)
 - **GitHub Issue:** [#10](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/10)
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Objective:** Replace hardcoded RSS feed arrays and static filter patterns with dynamic D1-backed tables (`ingest_feeds` and `ingest_filters`) and build `/admin/feeds` and `/admin/filters` so you can add new feeds, remove or pause existing feeds, test/preview any RSS/Atom URL before adding it, and add/edit/remove ingestion filters (keyword/regex drop rules, priority boost rules, domain rules, and Jev systemic probability thresholds)—all backed by the immutable audit trail.
 - **Automated Steps for Antigravity:**
   1. **D1 Migration (`migrations/0005_dynamic_feeds_and_filters.sql`):**

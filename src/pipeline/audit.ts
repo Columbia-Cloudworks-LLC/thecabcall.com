@@ -22,6 +22,7 @@ export type AuditActionType =
   | "filter.create"
   | "filter.update"
   | "filter.delete"
+  | "settings.threshold_update"
   | "incident.rewrite_title"
   | "incident.attach_image"
   | "incident.override_brief"

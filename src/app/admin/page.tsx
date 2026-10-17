@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { AdminOverviewClient } from "@/components/AdminOverviewClient";
 import { getAuditLedgerEntries } from "@/lib/audit";
 import { getAdminUsersBridge, getCurrentAdminSession } from "@/lib/auth";
+import { getIngestFiltersAndThresholdsBridge } from "@/lib/feeds-filters";
 import {
   ensureD1Snapshot,
   getAllEpisodes,
@@ -23,11 +24,13 @@ export default async function AdminHomePage() {
     redirect("/admin/login?next=/admin");
   }
 
-  const [d1Snap, { users, ownerEmail }, auditData] = await Promise.all([
-    ensureD1Snapshot(true),
-    getAdminUsersBridge(),
-    getAuditLedgerEntries({ limit: 20 }),
-  ]);
+  const [d1Snap, { users, ownerEmail }, auditData, feedsAndFilters] =
+    await Promise.all([
+      ensureD1Snapshot(true),
+      getAdminUsersBridge(),
+      getAuditLedgerEntries({ limit: 20 }),
+      getIngestFiltersAndThresholdsBridge(),
+    ]);
 
   const posture = getSystemPostureSummary();
   const incidents = getAllIncidents();
@@ -37,6 +40,18 @@ export default async function AdminHomePage() {
   const activeUsersCount = users.filter((u) => u.status === "active").length;
   const invitedUsersCount = users.filter((u) => u.status === "invited").length;
   const latestEpisode = episodes[0];
+
+  const enabledFeeds =
+    feedsAndFilters.feeds.length > 0
+      ? feedsAndFilters.feeds.filter((f) => f.enabled)
+      : US_HIGH_IMPACT_FEEDS.map((f) => ({
+          name: f.name,
+          focusArea: f.focusArea,
+        }));
+  const enabledFiltersCount =
+    feedsAndFilters.filters.length > 0
+      ? feedsAndFilters.filters.filter((f) => f.enabled).length
+      : 12;
 
   const systemHealth = {
     d1Source: d1Snap.source || "cloudflare-d1",
@@ -51,12 +66,12 @@ export default async function AdminHomePage() {
     noiseRejectionRate: posture.noiseRejectionRate,
     avgClassifierLatencyMs: posture.avgClassifierLatencyMs,
     avgJevConfidence: posture.avgSignalConfidence,
-    activeFeedCount: US_HIGH_IMPACT_FEEDS.length,
-    activeFeedsList: US_HIGH_IMPACT_FEEDS.map((f) => ({
+    activeFeedCount: enabledFeeds.length,
+    activeFeedsList: enabledFeeds.map((f) => ({
       name: f.name,
       focus: f.focusArea,
     })),
-    activeFilterCount: 12,
+    activeFilterCount: enabledFiltersCount,
     activeUsersCount,
     invitedUsersCount,
   };

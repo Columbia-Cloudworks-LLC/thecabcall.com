@@ -71,6 +71,14 @@ export interface JevSystemOneResponse {
   };
 }
 
+export interface JevEvaluationOptions {
+  minSystemicProb?: number;
+  minConfidence?: number;
+  systemicProbDelta?: number;
+  forcedPrimaryTool?: JevWorkingToolKey;
+  appliedFilterNames?: string[];
+}
+
 export interface JevEvaluationResult {
   isSystemicProb: number;
   jevConfidence: number;
@@ -324,12 +332,43 @@ function evaluateDeterministicFallback(
 }
 
 /**
+ * Constructs a deterministic dropped JevEvaluationResult when an article is rejected
+ * by a pre-Jev `Drop_Keyword_Regex`, `Block_Source_Pattern`, or `Require_Keyword_Regex` filter rule.
+ */
+export function buildDroppedByFilterJevResult(
+  article: JevArticleInput,
+  matchedFilterNames: string[]
+): JevEvaluationResult {
+  const payload = buildJevRequestPayload(article);
+  const fallback = evaluateDeterministicFallback(payload);
+  fallback.answers.is_systemic_event.noul = 0.08;
+  const rawWithFilterMeta = {
+    ...fallback,
+    dropped_by_filters: matchedFilterNames,
+  };
+  return {
+    isSystemicProb: 0.08,
+    jevConfidence: 0.95,
+    primaryTool: "common_gavel",
+    secondaryTool: "twenty_four_inch_gauge",
+    sreFailureMode: "alert_fatigue",
+    workingToolProbabilities: fallback.answers.working_tool.probabilities,
+    sreFailureModeProbabilities: fallback.answers.sre_failure_mode.probabilities,
+    status: "dropped",
+    rawJson: JSON.stringify(rawWithFilterMeta),
+    rawResponse: fallback,
+  };
+}
+
+/**
  * Calls TypeSafe Jev (`POST https://api.typesafe.ai/v1/systemone`, model `jev-1.14.0`)
- * to evaluate `is_systemic_event`, `working_tool`, and `sre_failure_mode` in parallel.
+ * to evaluate `is_systemic_event`, `working_tool`, and `sre_failure_mode` in parallel,
+ * applying optional dynamic filter boosts, tool overrides, and systemic probability thresholds.
  */
 export async function evaluateArticleWithJev(
   article: JevArticleInput,
-  apiKey?: string
+  apiKey?: string,
+  options?: JevEvaluationOptions
 ): Promise<JevEvaluationResult> {
   const payload = buildJevRequestPayload(article);
   const trimmedKey = apiKey?.trim() || "";
@@ -382,6 +421,13 @@ export async function evaluateArticleWithJev(
                 : 0;
   }
 
+  if (typeof options?.systemicProbDelta === "number" && options.systemicProbDelta !== 0) {
+    isSystemicProb = Math.min(
+      0.99,
+      Math.max(0.01, Math.round((isSystemicProb + options.systemicProbDelta) * 1000) / 1000)
+    );
+  }
+
   // 2. Parse working_tool probabilities
   const defaultToolProbs: Record<JevWorkingToolKey, number> = {
     twenty_four_inch_gauge: 0,
@@ -393,7 +439,7 @@ export async function evaluateArticleWithJev(
   };
   const rawToolProbs =
     answers.working_tool?.probabilities || answers.working_tool || {};
-  const workingToolProbabilities: Record<JevWorkingToolKey, number> = {
+  let workingToolProbabilities: Record<JevWorkingToolKey, number> = {
     ...defaultToolProbs,
   };
   for (const key of Object.keys(defaultToolProbs) as JevWorkingToolKey[]) {
@@ -402,13 +448,22 @@ export async function evaluateArticleWithJev(
     }
   }
 
+  if (options?.forcedPrimaryTool && options.forcedPrimaryTool in workingToolProbabilities) {
+    workingToolProbabilities[options.forcedPrimaryTool] = Math.max(
+      workingToolProbabilities[options.forcedPrimaryTool] || 0,
+      0.65
+    );
+    workingToolProbabilities = normalizeDistribution(workingToolProbabilities);
+  }
+
   const sortedTools = (
     Object.entries(workingToolProbabilities) as [JevWorkingToolKey, number][]
   ).sort((a, b) => b[1] - a[1]);
 
-  const primaryTool: JevWorkingToolKey = sortedTools[0]?.[0] || "square";
+  const primaryTool: JevWorkingToolKey =
+    options?.forcedPrimaryTool || sortedTools[0]?.[0] || "square";
   const secondaryTool: JevWorkingToolKey =
-    sortedTools[1]?.[0] || "twenty_four_inch_gauge";
+    sortedTools.find(([k]) => k !== primaryTool)?.[0] || "twenty_four_inch_gauge";
 
   // 3. Parse sre_failure_mode probabilities
   const defaultSreProbs: Record<JevSreFailureModeKey, number> = {
@@ -445,8 +500,22 @@ export async function evaluateArticleWithJev(
       ? answers.working_tool.confidence
       : sortedTools[0]?.[1] || isSystemicProb;
 
+  const minSystemicProb = options?.minSystemicProb ?? 0.7;
+  const minConfidence = options?.minConfidence ?? 0.5;
+
   const status: "triaged" | "dropped" =
-    isSystemicProb >= 0.7 ? "triaged" : "dropped";
+    isSystemicProb >= minSystemicProb && jevConfidence >= minConfidence
+      ? "triaged"
+      : "dropped";
+
+  const enrichedRaw =
+    options?.appliedFilterNames && options.appliedFilterNames.length > 0
+      ? {
+          ...rawData,
+          applied_filters: options.appliedFilterNames,
+          adjusted_is_systemic_prob: isSystemicProb,
+        }
+      : rawData;
 
   return {
     isSystemicProb,
@@ -457,7 +526,7 @@ export async function evaluateArticleWithJev(
     workingToolProbabilities,
     sreFailureModeProbabilities,
     status,
-    rawJson: JSON.stringify(rawData),
+    rawJson: JSON.stringify(enrichedRaw),
     rawResponse: rawData,
   };
 }
