@@ -92,21 +92,26 @@ export function SquareAndCompassesCrest({
 export function BrassSectionDivider({ label }: { label?: string }) {
   return (
     <div className="relative flex items-center justify-center my-8 select-none">
-      <div className="flex-grow border-t border-[#8A6D3B]/45" />
+      <div className="flex-grow border-t border-[#8A6D3B]/50" />
       <div className="mx-4 flex items-center gap-2.5 text-[#C5A059]">
         <svg
-          width="14"
-          height="14"
-          viewBox="0 0 16 16"
+          width="16"
+          height="16"
+          viewBox="0 0 20 20"
           fill="none"
-          className="opacity-80"
+          className="opacity-90"
         >
           <polygon
-            points="8,1 15,8 8,15 1,8"
+            points="10,1 19,10 10,19 1,10"
             stroke="#C5A059"
             strokeWidth="1.2"
           />
-          <circle cx="8" cy="8" r="2" fill="#C5A059" />
+          <polygon
+            points="10,4.5 15.5,10 10,15.5 4.5,10"
+            stroke="#8A6D3B"
+            strokeWidth="0.8"
+          />
+          <circle cx="10" cy="10" r="2" fill="#C5A059" />
         </svg>
         {label && (
           <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#C5A059]/90">
@@ -115,23 +120,148 @@ export function BrassSectionDivider({ label }: { label?: string }) {
         )}
         {label && (
           <svg
-            width="14"
-            height="14"
-            viewBox="0 0 16 16"
+            width="16"
+            height="16"
+            viewBox="0 0 20 20"
             fill="none"
-            className="opacity-80"
+            className="opacity-90"
           >
             <polygon
-              points="8,1 15,8 8,15 1,8"
+              points="10,1 19,10 10,19 1,10"
               stroke="#C5A059"
               strokeWidth="1.2"
             />
-            <circle cx="8" cy="8" r="2" fill="#C5A059" />
+            <circle cx="10" cy="10" r="2" fill="#C5A059" />
           </svg>
         )}
       </div>
-      <div className="flex-grow border-t border-[#8A6D3B]/45" />
+      <div className="flex-grow border-t border-[#8A6D3B]/50" />
     </div>
+  );
+}
+
+export function MasonSquareWatermark({
+  className = "w-64 h-64",
+}: {
+  className?: string;
+}) {
+  return (
+    <svg
+      viewBox="0 0 220 220"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-hidden="true"
+    >
+      {/* Outer faint geometric construction circle & plumb axis */}
+      <circle
+        cx="110"
+        cy="110"
+        r="96"
+        stroke="#C5A059"
+        strokeWidth="0.8"
+        strokeDasharray="4 4"
+      />
+      <circle
+        cx="110"
+        cy="110"
+        r="88"
+        stroke="#C5A059"
+        strokeWidth="0.5"
+      />
+      {/* 18th-Century Copperplate Try-Square (L-Square) */}
+      <path
+        d="M44 36 L74 36 L74 146 L184 146 L184 176 L44 176 Z"
+        stroke="#C5A059"
+        strokeWidth="2"
+        fill="none"
+      />
+      {/* Inner recessed brass molding */}
+      <path
+        d="M50 42 L68 42 L68 152 L178 152 L178 170 L50 170 Z"
+        stroke="#C5A059"
+        strokeWidth="0.9"
+        fill="none"
+      />
+      {/* Miter joint line at 45 degrees in the heel */}
+      <line
+        x1="44"
+        y1="176"
+        x2="74"
+        y2="146"
+        stroke="#C5A059"
+        strokeWidth="1.2"
+      />
+      {/* Copperplate cross-hatching lines along vertical blade */}
+      {Array.from({ length: 14 }).map((_, i) => {
+        const y = 48 + i * 7;
+        return (
+          <line
+            key={`v-${i}`}
+            x1="52"
+            y1={y}
+            x2="66"
+            y2={y - 4}
+            stroke="#C5A059"
+            strokeWidth="0.65"
+          />
+        );
+      })}
+      {/* Copperplate cross-hatching lines along horizontal blade */}
+      {Array.from({ length: 14 }).map((_, i) => {
+        const x = 82 + i * 7;
+        return (
+          <line
+            key={`h-${i}`}
+            x1={x}
+            y1="154"
+            x2={x - 4}
+            y2="168"
+            stroke="#C5A059"
+            strokeWidth="0.65"
+          />
+        );
+      })}
+      {/* Scale graduations along inner edge */}
+      {Array.from({ length: 9 }).map((_, i) => {
+        const offset = 86 + i * 10;
+        return (
+          <line
+            key={`tick-h-${i}`}
+            x1={offset}
+            y1="146"
+            x2={offset}
+            y2={i % 2 === 0 ? "155" : "151"}
+            stroke="#C5A059"
+            strokeWidth="0.9"
+          />
+        );
+      })}
+      {Array.from({ length: 9 }).map((_, i) => {
+        const offset = 50 + i * 10;
+        return (
+          <line
+            key={`tick-v-${i}`}
+            x1="74"
+            y1={offset}
+            x2={i % 2 === 0 ? "65" : "69"}
+            y2={offset}
+            stroke="#C5A059"
+            strokeWidth="0.9"
+          />
+        );
+      })}
+      {/* Right-angle geometric proof square in inner corner */}
+      <rect
+        x="74"
+        y="126"
+        width="20"
+        height="20"
+        stroke="#C5A059"
+        strokeWidth="1"
+      />
+      <circle cx="84" cy="136" r="2" fill="#C5A059" />
+    </svg>
   );
 }
 

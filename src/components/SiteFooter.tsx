@@ -4,7 +4,7 @@ import { SquareAndCompassesCrest } from "./MasonicEngravings";
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-[#8A6D3B]/45 bg-[#0B0E14] checkered-pavement pb-28 pt-12 mt-20">
+    <footer className="border-t border-[#8A6D3B]/50 bg-[#0B0E14] checkered-pavement pb-16 pt-12 mt-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pb-10 border-b border-[#8A6D3B]/30">
           <div className="md:col-span-2 space-y-3">
@@ -12,34 +12,26 @@ export function SiteFooter() {
               <SquareAndCompassesCrest className="w-9 h-9" />
               <div>
                 <h2 className="font-display text-lg text-[#F3EFE6] tracking-wider">
-                  CHANGE ADVISORY BOARD (THE CAB CALL)
+                  CHANGE ADVISORY BOARD
                 </h2>
-                <p className="font-mono text-[10px] text-[#C5A059] uppercase tracking-widest">
-                  SYSTEM 1 TRIAGE + SYSTEM 2 SOCRATIC SYNTHESIS
+                <p className="font-serif italic text-xs text-[#C5A059]">
+                  The CAB Call — Site Reliability Engineering &amp; the Working Tools of Freemasonry
                 </p>
               </div>
             </div>
-            <p className="text-sm text-[#94A3B8] max-w-xl leading-relaxed">
-              An automated observability platform treating current events as active system incidents. Every article is triaged by a zero-shot classifier against the Six Working Tools of Freemasonry and Site Reliability Engineering failure modes—presenting sourced facts and Socratic questions rather than partisan conclusions.
+            <p className="font-serif text-sm text-[#94A3B8] max-w-xl leading-relaxed">
+              An editorial broadsheet examining public infrastructure, institutional governance, and technical post-mortems through the diagnostic discipline of Site Reliability Engineering and the Six Working Tools of Operative and Speculative Masonry. Every brief separates sourced facts from public panic to pose Socratic inquiries rather than partisan conclusions.
             </p>
           </div>
 
           <div>
-            <h3 className="font-mono text-xs uppercase tracking-widest text-[#C5A059] mb-3">
-              Architecture &amp; Pages
+            <h3 className="font-display text-xs uppercase tracking-widest text-[#C5A059] mb-3">
+              Broadsheet Sections
             </h3>
-            <ul className="space-y-2 text-sm text-[#94A3B8]">
+            <ul className="space-y-2 text-sm text-[#94A3B8] font-serif">
               <li>
                 <Link href="/" className="hover:text-[#F3EFE6] transition-colors">
-                  1. The Trestleboard (Live Dashboard)
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/incidents/municipal-water-scada-patch-deferral-audit"
-                  className="hover:text-[#F3EFE6] transition-colors"
-                >
-                  2. Incident Brief (PIR Deep-Dive)
+                  The Trestleboard (Home)
                 </Link>
               </li>
               <li>
@@ -47,7 +39,7 @@ export function SiteFooter() {
                   href="/knowledge-graph"
                   className="hover:text-[#F3EFE6] transition-colors"
                 >
-                  3. The Knowledge Graph (Matrix)
+                  The Archive &amp; Knowledge Graph
                 </Link>
               </li>
               <li>
@@ -55,7 +47,7 @@ export function SiteFooter() {
                   href="/archive"
                   className="hover:text-[#F3EFE6] transition-colors"
                 >
-                  4. The CAB Call Archive (Podcast)
+                  The CAB Call Podcast
                 </Link>
               </li>
               <li>
@@ -63,7 +55,7 @@ export function SiteFooter() {
                   href="/rubric"
                   className="hover:text-[#F3EFE6] transition-colors"
                 >
-                  5. The Rubric &amp; Working Tools
+                  The Working Tools &amp; Rubric
                 </Link>
               </li>
               <li>
@@ -71,48 +63,45 @@ export function SiteFooter() {
                   href="/status"
                   className="hover:text-[#F3EFE6] transition-colors"
                 >
-                  6. System Status &amp; Pipeline Colophon
+                  About &amp; Feeds
                 </Link>
               </li>
             </ul>
           </div>
 
           <div>
-            <h3 className="font-mono text-xs uppercase tracking-widest text-[#C5A059] mb-3">
-              Feeds &amp; Governance
+            <h3 className="font-display text-xs uppercase tracking-widest text-[#C5A059] mb-3">
+              Colophon &amp; Feeds
             </h3>
-            <ul className="space-y-2 text-xs font-mono text-[#94A3B8]">
-              <li>
+            <ul className="space-y-2 text-xs text-[#94A3B8]">
+              <li className="font-mono">
                 <a
                   href="/feed.xml"
                   className="text-[#C5A059] hover:underline"
                 >
-                  RSS 2.0 Podcast Feed (/feed.xml)
+                  Podcast RSS Feed (/feed.xml)
                 </a>
               </li>
-              <li>
-                <a
-                  href="/api/telemetry"
-                  className="hover:text-[#F3EFE6]"
+              <li className="font-mono">
+                <Link
+                  href="/incidents/municipal-water-scada-patch-deferral-audit"
+                  className="hover:text-[#F3EFE6] transition-colors"
                 >
-                  JSON Telemetry API (/api/telemetry)
-                </a>
+                  Lead Brief: SCADA Segmentation Audit
+                </Link>
               </li>
-              <li className="pt-2 text-[#94A3B8]/80">
-                Zero AI-Generated Imagery Policy: All visual geometry is rendered via deterministic SVG copperplate vectors.
-              </li>
-              <li className="text-[#10B981]">
-                Epistemic Humility Charter Active
+              <li className="pt-2 font-serif text-[#94A3B8]/85 leading-relaxed">
+                Crafted in Deep Obsidian &amp; Burnished Brass with authentic 18th-century copperplate vector engravings of the Working Tools (strictly zero AI-generated art).
               </li>
             </ul>
           </div>
         </div>
 
-        <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono text-xs text-[#94A3B8]">
-          <span>
+        <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#94A3B8]">
+          <span className="font-mono">
             © {new Date().getFullYear()} Change Advisory Board (thecabcall.com). All rights reserved.
           </span>
-          <span className="text-[#C5A059]">
+          <span className="font-serif italic text-sm text-[#C5A059]">
             &ldquo;Tried by the Plumb, Proved by the Square, Leveled by Accountability.&rdquo;
           </span>
         </div>

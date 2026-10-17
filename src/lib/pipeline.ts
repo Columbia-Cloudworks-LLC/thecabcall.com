@@ -30,12 +30,24 @@ export interface RawFeedItem {
 
 export const TARGET_RSS_FEEDS = [
   {
-    name: "ARS TECHNICA",
-    url: "https://feeds.arstechnica.com/arstechnica/index",
+    name: "NPR TOP NEWS",
+    url: "https://feeds.npr.org/1001/rss.xml",
   },
   {
-    name: "HACKER NEWS",
-    url: "https://hnrss.org/frontpage?points=100&count=10",
+    name: "PBS NEWSHOUR",
+    url: "https://www.pbs.org/newshour/feeds/rss/nation",
+  },
+  {
+    name: "NYT HOMEPAGE",
+    url: "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml",
+  },
+  {
+    name: "WSJ US BUSINESS",
+    url: "https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml",
+  },
+  {
+    name: "ARS TECHNICA",
+    url: "https://feeds.arstechnica.com/arstechnica/index",
   },
 ];
 

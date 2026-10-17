@@ -3,21 +3,20 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import {
-  Activity,
-  CheckCircle2,
   Cpu,
-  Database,
   Play,
+  Radio,
   RefreshCw,
-  ShieldAlert,
   Sparkles,
   ArrowUpRight,
 } from "lucide-react";
 import {
   IncidentArticle,
   PipelineRunRecord,
+  PodcastEpisode,
   SystemPostureSummary,
 } from "@/lib/types";
+import { useTelemetry } from "./TelemetryContext";
 import { BrassSectionDivider } from "./MasonicEngravings";
 
 export function SystemStatusClient({
@@ -27,10 +26,18 @@ export function SystemStatusClient({
   initialRuns: PipelineRunRecord[];
   posture: SystemPostureSummary;
 }) {
+  const { playEpisode, refreshTelemetry } = useTelemetry();
+
   const [runs, setRuns] = useState<PipelineRunRecord[]>(initialRuns);
+  const [livePosture, setLivePosture] = useState<SystemPostureSummary>(posture);
   const [isRunningSweep, setIsRunningSweep] = useState(false);
+  const [isRunningSynthesize, setIsRunningSynthesize] = useState(false);
+  const [isRunningRollup, setIsRunningRollup] = useState(false);
+  const [statusBanner, setStatusBanner] = useState<string | null>(null);
   const [createdIncident, setCreatedIncident] =
     useState<IncidentArticle | null>(null);
+  const [createdRollupEpisode, setCreatedRollupEpisode] =
+    useState<PodcastEpisode | null>(null);
 
   const [customTitle, setCustomTitle] = useState(
     "Cloud Provider Regional Control Plane Outage Traced to Unreviewed Automated BGP Policy Push"
@@ -41,21 +48,118 @@ export function SystemStatusClient({
   const [customSource, setCustomSource] = useState("REUTERS // INFRASTRUCTURE");
   const [isSimulatingCustom, setIsSimulatingCustom] = useState(false);
 
-  const handleTriggerRssCron = async () => {
-    setIsRunningSweep(true);
+  const syncFromTelemetryEndpoint = async () => {
     try {
-      const res = await fetch("/api/cron/ingest", { method: "POST" });
+      const res = await fetch("/api/telemetry", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
-        if (data.run) {
+        if (Array.isArray(data.pipelineRuns)) {
+          setRuns(data.pipelineRuns);
+        }
+        if (data.posture) {
+          setLivePosture(data.posture);
+        }
+      }
+      await refreshTelemetry();
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleTriggerRssCron = async () => {
+    setIsRunningSweep(true);
+    setStatusBanner(null);
+    try {
+      const res = await fetch("/api/cron/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stage: "ingest" }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.runs)) {
+          setRuns(data.runs);
+        } else if (data.run) {
           setRuns((prev) => [data.run, ...prev]);
+        }
+        if (data.posture) {
+          setLivePosture(data.posture);
         }
         if (data.createdIncidents?.[0]) {
           setCreatedIncident(data.createdIncidents[0]);
         }
+        setStatusBanner(
+          data.run?.notes ||
+            "Completed Stage 1–2 Ingest + Jev (jev-1.14.0) Triage against local D1."
+        );
       }
+      await syncFromTelemetryEndpoint();
     } finally {
       setIsRunningSweep(false);
+    }
+  };
+
+  const handleTriggerSynthesize = async () => {
+    setIsRunningSynthesize(true);
+    setStatusBanner(null);
+    try {
+      const res = await fetch("/api/cron/ingest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stage: "synthesize", limit: 5 }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.runs)) {
+          setRuns(data.runs);
+        } else if (data.run) {
+          setRuns((prev) => [data.run, ...prev]);
+        }
+        if (data.posture) {
+          setLivePosture(data.posture);
+        }
+        if (data.createdIncidents?.[0]) {
+          setCreatedIncident(data.createdIncidents[0]);
+        }
+        setStatusBanner(
+          data.run?.notes ||
+            "Completed Stage 4 System-2 Gemini Socratic Synthesis on D1 queue."
+        );
+      }
+      await syncFromTelemetryEndpoint();
+    } finally {
+      setIsRunningSynthesize(false);
+    }
+  };
+
+  const handleTriggerWeeklyRollup = async () => {
+    setIsRunningRollup(true);
+    setStatusBanner(null);
+    try {
+      const res = await fetch("/api/cron/weekly-rollup", {
+        method: "POST",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.runs)) {
+          setRuns(data.runs);
+        } else if (data.run) {
+          setRuns((prev) => [data.run, ...prev]);
+        }
+        if (data.posture) {
+          setLivePosture(data.posture);
+        }
+        if (data.episode) {
+          setCreatedRollupEpisode(data.episode);
+        }
+        setStatusBanner(
+          data.run?.notes ||
+            `Generated Friday CAB Weekly Brief #${data.episode?.episodeNumber || 43} in D1 & R2.`
+        );
+      }
+      await syncFromTelemetryEndpoint();
+    } finally {
+      setIsRunningRollup(false);
     }
   };
 
@@ -63,6 +167,7 @@ export function SystemStatusClient({
     e.preventDefault();
     if (!customTitle.trim()) return;
     setIsSimulatingCustom(true);
+    setStatusBanner(null);
     try {
       const res = await fetch("/api/cron/ingest", {
         method: "POST",
@@ -78,13 +183,23 @@ export function SystemStatusClient({
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.run) {
+        if (Array.isArray(data.runs)) {
+          setRuns(data.runs);
+        } else if (data.run) {
           setRuns((prev) => [data.run, ...prev]);
+        }
+        if (data.posture) {
+          setLivePosture(data.posture);
         }
         if (data.createdIncidents?.[0]) {
           setCreatedIncident(data.createdIncidents[0]);
         }
+        setStatusBanner(
+          data.run?.notes ||
+            "Classified custom event with Jev and synthesized Socratic brief in D1."
+        );
       }
+      await syncFromTelemetryEndpoint();
     } finally {
       setIsSimulatingCustom(false);
     }
@@ -119,10 +234,10 @@ export function SystemStatusClient({
               RSS Items Evaluated (7D)
             </span>
             <div className="text-2xl font-bold text-[#F3EFE6] mt-1">
-              {posture.totalEvaluatedWindow}
+              {livePosture.totalEvaluatedWindow}
             </div>
             <span className="text-[11px] text-[#10B981]">
-              URL Hash Deduplication Active
+              {livePosture.totalIncidentsWindow} High-Signal Synthesized in D1
             </span>
           </div>
 
@@ -131,10 +246,10 @@ export function SystemStatusClient({
               System-1 Noise Rejection
             </span>
             <div className="text-2xl font-bold text-[#10B981] mt-1">
-              {posture.noiseRejectionRate}%
+              {livePosture.noiseRejectionRate}%
             </div>
             <span className="text-[11px] text-[#94A3B8]">
-              Gate: Jev Confidence &ge; 0.75
+              Gate: Jev Systemic &ge; 0.60
             </span>
           </div>
 
@@ -143,7 +258,7 @@ export function SystemStatusClient({
               Avg Classifier Latency
             </span>
             <div className="text-2xl font-bold text-[#C5A059] mt-1">
-              {posture.avgClassifierLatencyMs}ms
+              {livePosture.avgClassifierLatencyMs}ms
             </div>
             <span className="text-[11px] text-[#94A3B8]">
               Single Forward Pass (70–500ms SLO)
@@ -168,7 +283,7 @@ export function SystemStatusClient({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
         {/* Left: 4-Stage Architecture Diagram (7 cols) */}
         <div className="lg:col-span-7 tracing-board-frame p-6 sm:p-7 space-y-5">
-          <div className="flex items-center justify-between border-b border-[#8A6D3B]/35 pb-3">
+          <div className="flex flex-col gap-3 border-b border-[#8A6D3B]/35 pb-4">
             <div>
               <span className="font-mono text-xs text-[#C5A059] uppercase">
                 PIPELINE ARCHITECTURE // SYSTEM 1 TRIAGE + SYSTEM 2 SYNTHESIS
@@ -178,21 +293,93 @@ export function SystemStatusClient({
               </h2>
             </div>
 
-            <button
-              type="button"
-              onClick={handleTriggerRssCron}
-              disabled={isRunningSweep}
-              className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#C5A059] text-[#0B0E14] font-mono text-xs font-bold uppercase hover:bg-[#d6b36a] transition-colors cursor-pointer disabled:opacity-50"
-            >
-              <RefreshCw
-                className={`w-3.5 h-3.5 ${
-                  isRunningSweep ? "animate-spin" : ""
-                }`}
-              />
-              <span>
-                {isRunningSweep ? "Running Cron Sweep..." : "Trigger RSS Cron"}
-              </span>
-            </button>
+            {/* 3 Live Pipeline Trigger Buttons */}
+            <div className="flex flex-wrap items-center gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={handleTriggerRssCron}
+                disabled={
+                  isRunningSweep || isRunningSynthesize || isRunningRollup
+                }
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#C5A059] text-[#0B0E14] font-mono text-[11px] font-bold uppercase hover:bg-[#d6b36a] transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw
+                  className={`w-3.5 h-3.5 ${
+                    isRunningSweep ? "animate-spin" : ""
+                  }`}
+                />
+                <span>
+                  {isRunningSweep ? "Running Jev Triage..." : "Ingest + Jev Triage"}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleTriggerSynthesize}
+                disabled={
+                  isRunningSweep || isRunningSynthesize || isRunningRollup
+                }
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#111726] border border-[#10B981]/75 text-[#10B981] font-mono text-[11px] font-bold uppercase hover:bg-[#10B981]/15 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Cpu
+                  className={`w-3.5 h-3.5 ${
+                    isRunningSynthesize ? "animate-spin" : ""
+                  }`}
+                />
+                <span>
+                  {isRunningSynthesize
+                    ? "Synthesizing D1 Queue..."
+                    : "System-2 Gemini Synthesis"}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleTriggerWeeklyRollup}
+                disabled={
+                  isRunningSweep || isRunningSynthesize || isRunningRollup
+                }
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#111726] border border-[#C5A059]/75 text-[#C5A059] font-mono text-[11px] font-bold uppercase hover:bg-[#C5A059]/15 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                <Radio
+                  className={`w-3.5 h-3.5 ${
+                    isRunningRollup ? "animate-pulse" : ""
+                  }`}
+                />
+                <span>
+                  {isRunningRollup
+                    ? "Generating Weekly Brief..."
+                    : "Friday Weekly Rollup"}
+                </span>
+              </button>
+            </div>
+
+            {statusBanner && (
+              <div className="p-3 bg-[#0B0E14] border border-[#10B981]/50 font-mono text-xs text-[#10B981] flex items-center justify-between gap-3">
+                <span>✓ {statusBanner}</span>
+              </div>
+            )}
+
+            {createdRollupEpisode && (
+              <div className="p-3.5 bg-[#0B0E14] border border-[#C5A059]/65 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="font-mono text-[11px] text-[#C5A059]">
+                    NEW D1 ROLLUP EPISODE #{createdRollupEpisode.episodeNumber} READY
+                  </div>
+                  <div className="font-display text-sm text-[#F3EFE6]">
+                    {createdRollupEpisode.title}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => playEpisode(createdRollupEpisode, 0)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#C5A059] text-[#0B0E14] font-mono text-xs font-bold uppercase cursor-pointer shrink-0"
+                >
+                  <Play className="w-3.5 h-3.5" />
+                  <span>Play Rollup</span>
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="space-y-4">

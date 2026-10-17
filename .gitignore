@@ -20,14 +20,18 @@ yarn-debug.log*
 yarn-error.log*
 
 # local env files
-.env*.local
-.env
+.env*
+.dev.vars
+!.dev.vars.example
+
+# cloudflare wrangler
+.wrangler/
+.wrangler
 
 # vercel
+.vercel/
 .vercel
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-.vercel

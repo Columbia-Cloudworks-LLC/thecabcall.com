@@ -19,11 +19,13 @@ interface TelemetryContextValue {
   currentTime: number;
   playbackRate: number;
   isDockVisible: boolean;
+  audioRef: React.RefObject<HTMLAudioElement | null>;
   playEpisode: (episode: PodcastEpisode, startSeconds?: number) => void;
   togglePlayPause: () => void;
   seekTo: (seconds: number) => void;
   cyclePlaybackRate: () => void;
   closeDock: () => void;
+  refreshTelemetry: () => Promise<void>;
 
   // Slide-Over Rubric Inspection Drawer state
   inspectedTool: WorkingToolId | null;
@@ -37,14 +39,20 @@ interface TelemetryContextValue {
 
 const TelemetryContext = createContext<TelemetryContextValue | null>(null);
 
-export function TelemetryProvider({ children }: { children: React.ReactNode }) {
+export function TelemetryProvider({
+  children,
+  initialEpisode,
+}: {
+  children: React.ReactNode;
+  initialEpisode?: PodcastEpisode;
+}) {
   const [activeEpisode, setActiveEpisode] = useState<PodcastEpisode>(
-    INITIAL_EPISODES[0]
+    initialEpisode || INITIAL_EPISODES[0]
   );
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
-  const [isDockVisible, setIsDockVisible] = useState(true);
+  const [isDockVisible, setIsDockVisible] = useState(false);
 
   const [inspectedTool, setInspectedTool] = useState<WorkingToolId | null>(
     null
@@ -53,6 +61,37 @@ export function TelemetryProvider({ children }: { children: React.ReactNode }) {
     useState<SreFailureModeId | null>(null);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const isPlayingRef = useRef(false);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
+  // Fetch latest live D1 episode from /api/telemetry on mount (and on manual refresh)
+  const refreshTelemetry = useCallback(async () => {
+    try {
+      const res = await fetch("/api/telemetry", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (Array.isArray(data?.episodes) && data.episodes.length > 0) {
+        const latestEp = data.episodes[0] as PodcastEpisode;
+        setActiveEpisode((prev) => {
+          // If not currently playing another episode, or if prev is the seed default, switch to newest D1 episode
+          if (!isPlayingRef.current || prev.id === latestEp.id) {
+            return latestEp;
+          }
+          return prev;
+        });
+      }
+    } catch {
+      // Ignore network error during background refresh
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshTelemetry();
+  }, [refreshTelemetry]);
 
   // Stop Web Speech synthesis helper
   const stopSpeech = useCallback(() => {
@@ -60,6 +99,49 @@ export function TelemetryProvider({ children }: { children: React.ReactNode }) {
       window.speechSynthesis.cancel();
     }
   }, []);
+
+  // Stop HTML5 <audio> playback helper
+  const pauseAudioElement = useCallback(() => {
+    if (audioRef.current) {
+      try {
+        audioRef.current.pause();
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
+
+  // Start or sync HTML5 <audio> element from offset
+  const playAudioElement = useCallback(
+    (episode: PodcastEpisode, seconds: number, rate: number) => {
+      const el = audioRef.current;
+      if (!el) return;
+      try {
+        if (
+          episode.audioUrl &&
+          !el.src.endsWith(episode.audioUrl) &&
+          el.src !== episode.audioUrl
+        ) {
+          el.src = episode.audioUrl;
+        }
+        el.playbackRate = rate;
+        if (Number.isFinite(el.duration) && el.duration > 0) {
+          el.currentTime = seconds % el.duration;
+        } else if (seconds === 0) {
+          el.currentTime = 0;
+        }
+        const playPromise = el.play();
+        if (playPromise && typeof playPromise.catch === "function") {
+          playPromise.catch(() => {
+            // Browser autoplay policy or external stream fallback; Web Speech narration continues seamlessly
+          });
+        }
+      } catch {
+        // ignore audio element error
+      }
+    },
+    []
+  );
 
   // Start Web Speech narration from the transcript corresponding to currentTime
   const startSpeechFromOffset = useCallback(
@@ -92,6 +174,7 @@ export function TelemetryProvider({ children }: { children: React.ReactNode }) {
           if (prev + 1 >= activeEpisode.durationSeconds) {
             setIsPlaying(false);
             stopSpeech();
+            pauseAudioElement();
             return 0;
           }
           return prev + 1;
@@ -104,7 +187,13 @@ export function TelemetryProvider({ children }: { children: React.ReactNode }) {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isPlaying, playbackRate, activeEpisode.durationSeconds, stopSpeech]);
+  }, [
+    isPlaying,
+    playbackRate,
+    activeEpisode.durationSeconds,
+    stopSpeech,
+    pauseAudioElement,
+  ]);
 
   const playEpisode = useCallback(
     (episode: PodcastEpisode, startSeconds = 0) => {
@@ -112,9 +201,10 @@ export function TelemetryProvider({ children }: { children: React.ReactNode }) {
       setCurrentTime(startSeconds);
       setIsDockVisible(true);
       setIsPlaying(true);
+      playAudioElement(episode, startSeconds, playbackRate);
       startSpeechFromOffset(episode, startSeconds, playbackRate);
     },
-    [playbackRate, startSpeechFromOffset]
+    [playbackRate, playAudioElement, startSpeechFromOffset]
   );
 
   const togglePlayPause = useCallback(() => {
@@ -122,13 +212,23 @@ export function TelemetryProvider({ children }: { children: React.ReactNode }) {
     setIsPlaying((prev) => {
       const next = !prev;
       if (next) {
+        playAudioElement(activeEpisode, currentTime, playbackRate);
         startSpeechFromOffset(activeEpisode, currentTime, playbackRate);
       } else {
+        pauseAudioElement();
         stopSpeech();
       }
       return next;
     });
-  }, [activeEpisode, currentTime, playbackRate, startSpeechFromOffset, stopSpeech]);
+  }, [
+    activeEpisode,
+    currentTime,
+    playbackRate,
+    playAudioElement,
+    pauseAudioElement,
+    startSpeechFromOffset,
+    stopSpeech,
+  ]);
 
   const seekTo = useCallback(
     (seconds: number) => {
@@ -137,6 +237,15 @@ export function TelemetryProvider({ children }: { children: React.ReactNode }) {
         Math.min(activeEpisode.durationSeconds, seconds)
       );
       setCurrentTime(clamped);
+      if (audioRef.current) {
+        try {
+          const dur = audioRef.current.duration;
+          audioRef.current.currentTime =
+            Number.isFinite(dur) && dur > 0 ? clamped % dur : clamped;
+        } catch {
+          // ignore seek error on unloaded metadata
+        }
+      }
       if (isPlaying) {
         startSpeechFromOffset(activeEpisode, clamped, playbackRate);
       }
@@ -147,6 +256,9 @@ export function TelemetryProvider({ children }: { children: React.ReactNode }) {
   const cyclePlaybackRate = useCallback(() => {
     setPlaybackRate((prev) => {
       const next = prev === 1 ? 1.25 : prev === 1.25 ? 1.5 : 1;
+      if (audioRef.current) {
+        audioRef.current.playbackRate = next;
+      }
       if (isPlaying) {
         startSpeechFromOffset(activeEpisode, currentTime, next);
       }
@@ -156,9 +268,10 @@ export function TelemetryProvider({ children }: { children: React.ReactNode }) {
 
   const closeDock = useCallback(() => {
     setIsPlaying(false);
+    pauseAudioElement();
     stopSpeech();
     setIsDockVisible(false);
-  }, [stopSpeech]);
+  }, [pauseAudioElement, stopSpeech]);
 
   const openRubricInspector = useCallback(
     (opts: { tool?: WorkingToolId; failureMode?: SreFailureModeId }) => {
@@ -181,11 +294,13 @@ export function TelemetryProvider({ children }: { children: React.ReactNode }) {
         currentTime,
         playbackRate,
         isDockVisible,
+        audioRef,
         playEpisode,
         togglePlayPause,
         seekTo,
         cyclePlaybackRate,
         closeDock,
+        refreshTelemetry,
         inspectedTool,
         inspectedFailureMode,
         openRubricInspector,

@@ -1,4 +1,8 @@
 import {
+  getPipelineRuns as getD1PipelineRuns,
+  readLocalD1Snapshot,
+} from "./d1-bridge";
+import {
   INITIAL_EPISODES,
   INITIAL_INCIDENTS,
   INITIAL_PIPELINE_RUNS,
@@ -27,38 +31,84 @@ const state: {
 };
 
 export function getAllIncidents(): IncidentArticle[] {
-  return [...state.incidents].sort(
+  const d1 = readLocalD1Snapshot();
+  const seenHashes = new Set<string>();
+  const merged: IncidentArticle[] = [];
+
+  for (const inc of d1.incidents) {
+    if (!seenHashes.has(inc.urlHash)) {
+      seenHashes.add(inc.urlHash);
+      merged.push(inc);
+    }
+  }
+
+  for (const inc of state.incidents) {
+    if (!seenHashes.has(inc.urlHash)) {
+      seenHashes.add(inc.urlHash);
+      merged.push(inc);
+    }
+  }
+
+  // Keep live D1 synthesized/triaged incidents prioritized ahead of static seed archive,
+  // or sorted by publishedAt within each tier
+  if (d1.incidents.length > 0) {
+    return merged;
+  }
+
+  return merged.sort(
     (a, b) =>
       new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
   );
 }
 
 export function getIncidentBySlug(slug: string): IncidentArticle | undefined {
-  return state.incidents.find((inc) => inc.slug === slug);
+  return getAllIncidents().find((inc) => inc.slug === slug);
 }
 
 export function getIncidentById(id: string): IncidentArticle | undefined {
-  return state.incidents.find((inc) => inc.id === id);
+  return getAllIncidents().find((inc) => inc.id === id);
 }
 
 export function hasUrlHash(urlHash: string): boolean {
-  return state.incidents.some((inc) => inc.urlHash === urlHash);
+  return getAllIncidents().some((inc) => inc.urlHash === urlHash);
 }
 
 export function insertIncident(incident: IncidentArticle): void {
-  if (!hasUrlHash(incident.urlHash)) {
+  if (!state.incidents.some((inc) => inc.urlHash === incident.urlHash)) {
     state.incidents.unshift(incident);
   }
 }
 
 export function getAllEpisodes(): PodcastEpisode[] {
-  return [...state.episodes].sort(
+  const d1 = readLocalD1Snapshot();
+  const seenSlugs = new Set<string>();
+  const merged: PodcastEpisode[] = [];
+
+  for (const ep of d1.episodes) {
+    if (!seenSlugs.has(ep.slug)) {
+      seenSlugs.add(ep.slug);
+      merged.push(ep);
+    }
+  }
+
+  for (const ep of state.episodes) {
+    if (!seenSlugs.has(ep.slug)) {
+      seenSlugs.add(ep.slug);
+      merged.push(ep);
+    }
+  }
+
+  return merged.sort(
     (a, b) =>
       new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
   );
 }
 
 export function getLatestWeeklyRollup(): PodcastEpisode {
+  const d1 = readLocalD1Snapshot();
+  if (d1.episodes.length > 0) {
+    return d1.episodes[0];
+  }
   const rollups = getAllEpisodes().filter((e) => e.series === "weekly_rollup");
   return rollups[0] || state.episodes[0];
 }
@@ -73,7 +123,25 @@ export function insertEpisode(episode: PodcastEpisode): void {
 }
 
 export function getPipelineRuns(): PipelineRunRecord[] {
-  return [...state.pipelineRuns].sort(
+  const d1Runs = getD1PipelineRuns();
+  const seenIds = new Set<string>();
+  const merged: PipelineRunRecord[] = [];
+
+  for (const r of d1Runs) {
+    if (!seenIds.has(r.id)) {
+      seenIds.add(r.id);
+      merged.push(r);
+    }
+  }
+
+  for (const r of state.pipelineRuns) {
+    if (!seenIds.has(r.id)) {
+      seenIds.add(r.id);
+      merged.push(r);
+    }
+  }
+
+  return merged.sort(
     (a, b) =>
       new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime()
   );
@@ -84,14 +152,20 @@ export function recordPipelineRun(run: PipelineRunRecord): void {
 }
 
 export function getSystemPostureSummary(): SystemPostureSummary {
-  const incidents = getAllIncidents();
+  const d1 = readLocalD1Snapshot();
+  const activeIncidents =
+    d1.incidents.length > 0 ? d1.incidents : getAllIncidents();
   const runs = getPipelineRuns().filter((r) => r.runType === "rss_ingest");
 
-  const totalEvaluatedWindow = runs.reduce((acc, r) => acc + r.itemsEvaluated, 0);
-  const totalRejectedWindow = runs.reduce(
-    (acc, r) => acc + r.itemsRejectedNoise,
-    0
-  );
+  const totalEvaluatedWindow =
+    d1.totalEvaluated > 0
+      ? d1.totalEvaluated
+      : runs.reduce((acc, r) => acc + r.itemsEvaluated, 0);
+  const totalRejectedWindow =
+    d1.totalEvaluated > 0
+      ? d1.droppedCount
+      : runs.reduce((acc, r) => acc + r.itemsRejectedNoise, 0);
+
   const noiseRejectionRate =
     totalEvaluatedWindow > 0
       ? Math.round((totalRejectedWindow / totalEvaluatedWindow) * 1000) / 10
@@ -110,7 +184,7 @@ export function getSystemPostureSummary(): SystemPostureSummary {
   let totalLatency = 0;
   let totalConfidence = 0;
 
-  for (const inc of incidents) {
+  for (const inc of activeIncidents) {
     toolCounts[inc.primaryTool] = (toolCounts[inc.primaryTool] || 0) + 1;
     failureCounts[inc.sreFailureMode] =
       (failureCounts[inc.sreFailureMode] || 0) + 1;
@@ -118,7 +192,7 @@ export function getSystemPostureSummary(): SystemPostureSummary {
     totalConfidence += inc.jevConfidence;
   }
 
-  const totalIncidents = incidents.length || 1;
+  const totalIncidents = activeIncidents.length || 1;
   const toolDistribution = WORKING_TOOLS.map((t) => ({
     tool: t.id,
     count: toolCounts[t.id] || 0,
@@ -137,8 +211,8 @@ export function getSystemPostureSummary(): SystemPostureSummary {
 
   return {
     windowDays: 7,
-    totalIncidentsWindow: incidents.length,
-    totalEvaluatedWindow: Math.max(totalEvaluatedWindow, incidents.length * 6),
+    totalIncidentsWindow: activeIncidents.length,
+    totalEvaluatedWindow: Math.max(totalEvaluatedWindow, activeIncidents.length),
     noiseRejectionRate,
     dominantTool,
     dominantToolPercentage,

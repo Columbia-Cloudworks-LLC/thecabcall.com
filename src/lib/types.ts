@@ -73,7 +73,7 @@ export interface PodcastEpisode {
 
 export interface PipelineRunRecord {
   id: string;
-  runType: "rss_ingest" | "weekly_rollup";
+  runType: "rss_ingest" | "system2_synthesize" | "weekly_rollup";
   startedAt: string;
   completedAt: string;
   itemsEvaluated: number;
