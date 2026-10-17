@@ -283,8 +283,8 @@ export async function callGeminiStructuredSynthesis(
   const { systemInstruction, userPrompt } = buildSystem2Prompt(row);
 
   const candidateModels = [
-    "gemini-2.5-flash",
     "gemini-3.8-flash",
+    "gemini-2.5-flash",
     "gemini-flash-latest",
   ];
 

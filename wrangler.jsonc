@@ -7,7 +7,7 @@
     {
       "binding": "DB",
       "database_name": "cabcall-db",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "094cf69c-0fe3-409b-a871-06f3610a28a6",
       "migrations_dir": "migrations"
     }
   ],

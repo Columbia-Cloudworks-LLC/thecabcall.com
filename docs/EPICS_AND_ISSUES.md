@@ -14,11 +14,11 @@
 | Component | Current Status | Location |
 | :--- | :--- | :--- |
 | **Next.js 15 Frontend (6 Core Pages)** | Built & working locally | `src/app/`, `src/components/` |
-| **System-1 Classifier (TypeSafe Jev `jev-1.14.0`)** | Built & working locally | `src/pipeline/jev.ts`, `src/pipeline/ingest.ts` |
-| **System-2 Synthesis (Gemini 2.5 Flash)** | Built & working locally | `src/pipeline/synthesize.ts` |
-| **Friday 5-Min Podcast Rollup + TTS Audio** | Built & working locally | `src/pipeline/rollup.ts` |
-| **Cloudflare Worker Entrypoint & Crons** | Built locally, not yet deployed | `src/worker.ts`, `wrangler.jsonc` |
-| **D1 SQLite Schema & Migrations** | Applied to local `.wrangler` only | `migrations/0001_init.sql`, `migrations/0002_pipeline_runs.sql` |
+| **System-1 Classifier (TypeSafe Jev `jev-1.14.0`)** | Live on Cloudflare Edge & working locally | `src/pipeline/jev.ts`, `src/pipeline/ingest.ts` |
+| **System-2 Synthesis (Gemini 2.5 Flash)** | Live on Cloudflare Edge & working locally | `src/pipeline/synthesize.ts` |
+| **Friday 5-Min Podcast Rollup + TTS Audio** | Live on Cloudflare Edge & R2 (`cabcall-audio`) | `src/pipeline/rollup.ts` |
+| **Cloudflare Worker Entrypoint & Crons** | Deployed (`https://thecabcall.thecabcall.workers.dev`) | `src/worker.ts`, `wrangler.jsonc` |
+| **D1 SQLite Schema & Migrations** | Applied to remote `cabcall-db` (`094cf69c-0fe3-409b-a871-06f3610a28a6`) & local `.wrangler` | `migrations/0001_init.sql`, `migrations/0002_pipeline_runs.sql` |
 | **Database & Audio Bridge** | Reads local `.wrangler` SQLite/R2 only | `src/lib/d1-bridge.ts`, `src/lib/store.ts` |
 
 ---
@@ -26,7 +26,7 @@
 ## Epic Overview (Synced with GitHub Issues)
 
 - [x] **Epic #1 ([GitHub Issue #1](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/1)): Repository Baseline, Clean Build & Git Synchronization**
-- [ ] **Epic #2 ([GitHub Issue #2](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/2)): Cloudflare Cloud Provisioning (Live D1 Database, R2 Audio Bucket & Worker Deployment)**
+- [x] **Epic #2 ([GitHub Issue #2](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/2)): Cloudflare Cloud Provisioning (Live D1 Database, R2 Audio Bucket & Worker Deployment)**
 - [ ] **Epic #3 ([GitHub Issue #3](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/3)): Cloud Bridge — Connecting the Live Next.js Website to Production Cloudflare D1 & R2**
 - [ ] **Epic #4 ([GitHub Issue #4](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/4)): Production Frontend Deployment (Vercel) & Custom Domain Cutover (`thecabcall.com`)**
 - [ ] **Epic #5 ([GitHub Issue #5](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/5)): Legacy Podcast Archive Migration & Voice Cloning / TTS Enhancement**
@@ -72,7 +72,7 @@
 **Objective:** Create the real production Cloudflare D1 database (`cabcall-db`) and R2 bucket (`cabcall-audio`), update `wrangler.jsonc` with the real database UUID, run the SQL migrations against the cloud D1 database, upload the API keys as Cloudflare Worker secrets, deploy `src/worker.ts` to Cloudflare, and trigger an initial live ingestion + synthesis + podcast rollup run in the cloud.
 
 ### Issue 2.1: Verify Cloudflare Wrangler Authentication
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Automated Steps for Antigravity:**
   1. Run `npx wrangler whoami` to check if Wrangler has an active Cloudflare session.
   2. If authenticated, proceed immediately to Issue 2.2.
@@ -90,7 +90,7 @@
   > 4. Come back here and reply: **`"Done, continue"`**
 
 ### Issue 2.2: Provision Production Cloudflare D1 Database & R2 Bucket
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Automated Steps for Antigravity:**
   1. Check existing D1 databases via `npx wrangler d1 list`. If `cabcall-db` does not exist, create it via:
      ```powershell
@@ -105,7 +105,7 @@
 - **Human Action Gate:** Only if Cloudflare R2 is not yet enabled on the user's Cloudflare account (if Wrangler reports R2 needs activation, instruct the user to click **R2 Object Storage -> Activate** in the Cloudflare Dashboard at `https://dash.cloudflare.com`).
 
 ### Issue 2.3: Apply D1 Migrations to Remote Production Database
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Automated Steps for Antigravity:**
   1. Execute remote D1 migrations against Cloudflare:
      ```powershell
@@ -119,7 +119,7 @@
 - **Human Action Gate:** None.
 
 ### Issue 2.4: Configure Production Secrets & Deploy Cloudflare Worker
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Automated Steps for Antigravity:**
   1. Read `TYPESAFE_API_KEY`, `GEMINI_API_KEY`, and `ADMIN_SECRET` from local `.dev.vars` (if `.dev.vars` is missing any key, trigger a Human Action Gate asking the user to add it to `.dev.vars`).
   2. Deploy the Cloudflare Worker:
@@ -127,17 +127,17 @@
      npx wrangler deploy
      ```
   3. Push each secret to the deployed Cloudflare Worker (`TYPESAFE_API_KEY`, `GEMINI_API_KEY`, `ADMIN_SECRET`) using `npx wrangler secret put <KEY_NAME>` via stdin pipe.
-  4. Record the live Worker URL (`https://thecabcall.<subdomain>.workers.dev`).
-- **Verification:** `GET https://thecabcall.<subdomain>.workers.dev/` returns `200 OK` JSON with service health metadata.
+  4. Record the live Worker URL (`https://thecabcall.thecabcall.workers.dev`).
+- **Verification:** `GET https://thecabcall.thecabcall.workers.dev/` returns `200 OK` JSON with service health metadata.
 - **Human Action Gate:** Only if `.dev.vars` is missing `TYPESAFE_API_KEY` or `GEMINI_API_KEY`.
 
 ### Issue 2.5: Seed Live Cloud Telemetry (Run Ingest, Synthesis & Rollup on Production Worker)
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Automated Steps for Antigravity:**
-  1. Call `POST https://thecabcall.<subdomain>.workers.dev/api/test-jev` with `x-admin-secret` to verify live TypeSafe Jev classification on the edge.
-  2. Call `POST https://thecabcall.<subdomain>.workers.dev/api/run-ingest?synthesize=true` with `x-admin-secret` to ingest live RSS feeds into remote D1 and synthesize Socratic briefs via Gemini.
-  3. Call `POST https://thecabcall.<subdomain>.workers.dev/api/run-rollup` with `x-admin-secret` to generate the Friday 5-Minute CAB Weekly Brief and store its MP3 in remote R2 (`cabcall-audio`).
-  4. Verify `GET https://thecabcall.<subdomain>.workers.dev/audio/<filename>.mp3` returns `200 OK` (`audio/mpeg`).
+  1. Call `POST https://thecabcall.thecabcall.workers.dev/api/test-jev` with `x-admin-secret` to verify live TypeSafe Jev classification on the edge.
+  2. Call `POST https://thecabcall.thecabcall.workers.dev/api/run-ingest?synthesize=true` with `x-admin-secret` to ingest live RSS feeds into remote D1 and synthesize Socratic briefs via Gemini.
+  3. Call `POST https://thecabcall.thecabcall.workers.dev/api/run-rollup` with `x-admin-secret` to generate the Friday 5-Minute CAB Weekly Brief and store its MP3 in remote R2 (`cabcall-audio`).
+  4. Verify `GET https://thecabcall.thecabcall.workers.dev/audio/cab-weekly-brief-43-2026-10-17.mp3` returns `200 OK` (`audio/mpeg`).
 - **Verification:** Remote D1 contains synthesized articles and a live episode, and remote R2 streams the episode MP3.
 - **Human Action Gate:** None.
 

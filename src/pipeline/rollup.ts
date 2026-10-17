@@ -331,8 +331,8 @@ ${incidentSummaries}
 Return valid JSON matching the required schema with "title", "summary", "weekly_telemetry" (~180 words), "separating_signal_from_panic" (~350 words), and "forward_posture" (~220 words). Do not include section header brackets inside the individual string fields; we will prepend the timestamp headers automatically.`;
 
   const candidateModels = [
-    "gemini-2.5-flash",
     "gemini-3.8-flash",
+    "gemini-2.5-flash",
     "gemini-flash-latest",
   ];
 
