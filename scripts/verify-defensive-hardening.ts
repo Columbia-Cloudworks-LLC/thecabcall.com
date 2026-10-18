@@ -1931,8 +1931,102 @@ async function runVerificationSuite() {
   console.log(
     `  ✓ Issue #19 Test-PublicLexiconAndUsability verified across ${publicFilesToAudit.length} public source files and ${allIncidentsToVerify.length} rendered case briefs.`
   );
+
+  // -------------------------------------------------------------------------
+  // 12. OBJECTIVE 12 (EPIC #27 / ISSUES #28–#32): TWO-TIER MASTHEAD, SEAL & DROPDOWN LEDGER
+  // -------------------------------------------------------------------------
   console.log(
-    "\n=== ALL 11 DEFENSIVE HARDENING, CRAFT PROSE & KRUG USABILITY OBJECTIVES PASSED (100%) ==="
+    "\n[12/12] Verifying Objective 12 (Epic #27 / Issues #28–#32): Two-Tier Masthead, Seal Backing & Architectural Dropdown Ledger..."
+  );
+
+  const navConfigSource = fs.readFileSync(
+    path.join(process.cwd(), "src/lib/navigation.ts"),
+    "utf8"
+  );
+  const engravingsSource = fs.readFileSync(
+    path.join(process.cwd(), "src/components/MasonicEngravings.tsx"),
+    "utf8"
+  );
+  const globalsCssSource = fs.readFileSync(
+    path.join(process.cwd(), "src/app/globals.css"),
+    "utf8"
+  );
+
+  // Issue #28: Two-Tier Editorial Masthead & Container Alignment
+  assert.ok(
+    siteHeaderSource.includes("TIER 1: THE EDITORIAL MASTHEAD") &&
+      siteHeaderSource.includes("TIER 2: THE NAVIGATION LEDGER BAR") &&
+      siteHeaderSource.includes("max-w-7xl mx-auto px-4 sm:px-6") &&
+      siteHeaderSource.includes("sm:whitespace-nowrap"),
+    "Issue #28: SiteHeader.tsx must separate Tier 1 (Masthead) and Tier 2 (Navigation Ledger), align max-w-7xl mx-auto px-4 sm:px-6, and enforce single-line title (sm:whitespace-nowrap)"
+  );
+
+  // Issue #29: Seal Backing, Scaling, Glow, 15deg Rotation & Plumb-Line Divider
+  assert.ok(
+    engravingsSource.includes('fill="#070A10"') &&
+      engravingsSource.includes('id="cabSealBacking"') &&
+      engravingsSource.includes("drop-shadow(0 0 10px rgba(212, 175, 55, 0.18))") &&
+      engravingsSource.includes("group-hover:rotate-[15deg]") &&
+      engravingsSource.includes("duration-[600ms]") &&
+      siteHeaderSource.includes("via-[#C5A059]/65"),
+    "Issue #29: SquareAndCompassesCrest must include solid #070A10 seal backing, ambient gold drop-shadow, 15deg/600ms hover rotation, and vertical gold plumb-line divider"
+  );
+
+  // Issue #30: Central Navigation Schema
+  for (const expectedNavSnippet of [
+    "NAVIGATION_SCHEMA",
+    "/#weekly-brief",
+    "/#active-dispatches",
+    "/incidents",
+    "/#systemic-trends",
+    "/knowledge-graph?view=week",
+    "/knowledge-graph?view=source",
+    "/knowledge-graph?view=search",
+    "/knowledge-graph?view=post-mortems",
+    "/archive#latest",
+    "/archive#transcripts",
+    "/rubric#24-inch-gauge",
+    "/rubric#common-gavel",
+    "/rubric#the-square",
+    "/rubric#the-level",
+    "/rubric#the-plumb",
+    "/rubric#the-trowel",
+    "/rubric#spof",
+    "/rubric#cascading-failure",
+    "/rubric#configuration-drift",
+    "/rubric#silent-data-corruption",
+    "/rubric#untested-failover",
+    "/status#mission",
+    "/status#editorial-standards",
+    "/status#feeds",
+  ]) {
+    assert.ok(
+      navConfigSource.includes(expectedNavSnippet),
+      `Issue #30: src/lib/navigation.ts must contain ${expectedNavSnippet}`
+    );
+  }
+
+  // Issue #31 & #32: Architectural Popover Panels, Corner Ticks, 150ms Hover-Intent, 10px CSS Bridge, Sticky Nav & Accessibility
+  assert.ok(
+    siteHeaderSource.includes("HOVER_CLOSE_DELAY_MS = 150") &&
+      siteHeaderSource.includes("nav-dropdown-panel") &&
+      siteHeaderSource.includes("bg-[#0B101B]") &&
+      siteHeaderSource.includes("border-t-2 border-l-2 border-[#C5A059]") &&
+      siteHeaderSource.includes("border-b-2 border-r-2 border-[#C5A059]") &&
+      siteHeaderSource.includes("aria-expanded") &&
+      siteHeaderSource.includes("aria-haspopup") &&
+      siteHeaderSource.includes("mobile-navigation-ledger") &&
+      globalsCssSource.includes(".nav-ledger-bar") &&
+      globalsCssSource.includes(".nav-dropdown-panel::before") &&
+      globalsCssSource.includes("height: 10px"),
+    "Issues #31 & #32: SiteHeader.tsx and globals.css must implement architectural dropdown panels, four gold corner-tick brackets, 150ms hover-intent delay, 10px CSS bridge, sticky Tier-2 bar, and keyboard/touch/mobile accessibility"
+  );
+
+  console.log(
+    "  ✓ Epic #27 (Issues #28–#32) Two-Tier Masthead, Seal Backing, Navigation Schema, Architectural Dropdowns & Accessibility verified."
+  );
+  console.log(
+    "\n=== ALL 12 DEFENSIVE HARDENING, CRAFT PROSE, KRUG USABILITY & MASTHEAD ARCHITECTURE OBJECTIVES PASSED (100%) ==="
   );
 }
 

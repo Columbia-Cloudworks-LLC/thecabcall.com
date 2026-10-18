@@ -134,7 +134,7 @@ export function SystemStatusClient({
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
       {/* 1. Masthead & Philosophy Hero */}
-      <div className="tracing-board-frame p-6 sm:p-10 mb-10">
+      <div id="mission" className="tracing-board-frame p-6 sm:p-10 mb-10 scroll-mt-20">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           <div className="lg:col-span-8 space-y-4">
             <div className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-[0.2em] text-[#C5A059]">
@@ -320,8 +320,10 @@ export function SystemStatusClient({
       </div>
 
       {/* 3. All Currently Published Feeds (Outbound Syndication Ledger) */}
-      <div id="published-feeds" className="scroll-mt-8">
-        <BrassSectionDivider label="PUBLISHED SYNDICATION FEEDS // SUBSCRIBE & FOLLOW" />
+      <div id="feeds" className="scroll-mt-20">
+        <div id="published-feeds" className="scroll-mt-20">
+          <BrassSectionDivider label="PUBLISHED SYNDICATION FEEDS // SUBSCRIBE & FOLLOW" />
+        </div>
       </div>
 
       <div className="tracing-board-frame p-6 sm:p-8 mb-12 space-y-6">
@@ -477,7 +479,9 @@ export function SystemStatusClient({
       </div>
 
       {/* 4. How the Application Works & Anatomy of a Craftsman's Brief */}
-      <BrassSectionDivider label="HOW THIS APPLICATION WORKS // METHODOLOGY & BRIEF ANATOMY" />
+      <div id="editorial-standards" className="scroll-mt-20">
+        <BrassSectionDivider label="HOW THIS APPLICATION WORKS // METHODOLOGY & BRIEF ANATOMY" />
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
         {/* Left: Four-Stage Structural Inspection Discipline (7 cols, strictly read-only) */}

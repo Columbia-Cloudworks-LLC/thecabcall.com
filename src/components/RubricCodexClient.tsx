@@ -21,9 +21,49 @@ import {
   WorkingToolEngraving,
 } from "./MasonicEngravings";
 
+const TOOL_HASH_TO_ID: Record<string, WorkingToolId> = {
+  "24-inch-gauge": "24-Inch Gauge",
+  "common-gavel": "Common Gavel",
+  "the-plumb": "The Plumb",
+  "the-square": "The Square",
+  "the-level": "The Level",
+  "the-trowel": "The Trowel",
+};
+
+const TOOL_ID_TO_HASH: Record<WorkingToolId, string> = {
+  "24-Inch Gauge": "24-inch-gauge",
+  "Common Gavel": "common-gavel",
+  "The Plumb": "the-plumb",
+  "The Square": "the-square",
+  "The Level": "the-level",
+  "The Trowel": "the-trowel",
+};
+
+const FAILURE_MODE_TO_ANCHOR: Record<string, string> = {
+  "Configuration Drift": "configuration-drift",
+  "Cascading Failure": "cascading-failure",
+  "Alert Fatigue & Signal Loss": "silent-data-corruption",
+  "Single Point of Failure (SPOF) / Untested Failover": "spof",
+  "Blame Culture vs. Root-Cause Isolation": "blame-culture",
+  "Technical & Institutional Debt": "untested-failover",
+};
+
 export function RubricCodexClient() {
   const [activeToolId, setActiveToolId] =
     useState<WorkingToolId>("The Square");
+
+  React.useEffect(() => {
+    const syncFromHash = () => {
+      if (typeof window === "undefined") return;
+      const hash = window.location.hash.replace(/^#/, "").toLowerCase();
+      if (hash && TOOL_HASH_TO_ID[hash]) {
+        setActiveToolId(TOOL_HASH_TO_ID[hash]);
+      }
+    };
+    syncFromHash();
+    window.addEventListener("hashchange", syncFromHash);
+    return () => window.removeEventListener("hashchange", syncFromHash);
+  }, []);
 
   const activeTool =
     WORKING_TOOLS.find((t) => t.id === activeToolId) || WORKING_TOOLS[3];
@@ -56,9 +96,10 @@ export function RubricCodexClient() {
             return (
               <button
                 key={tool.id}
+                id={TOOL_ID_TO_HASH[tool.id]}
                 type="button"
                 onClick={() => setActiveToolId(tool.id)}
-                className={`w-full text-left p-4 border transition-all cursor-pointer flex items-center justify-between ${
+                className={`w-full text-left p-4 border transition-all cursor-pointer flex items-center justify-between scroll-mt-24 ${
                   isSelected
                     ? "bg-[#111726] border-[#C5A059] shadow-[inset_0_0_0_1px_rgba(197,160,89,0.5)]"
                     : "bg-[#0B0E14] border-[#8A6D3B]/40 hover:border-[#C5A059]/60"
@@ -224,7 +265,8 @@ export function RubricCodexClient() {
         {SRE_FAILURE_MODES.map((mode) => (
           <div
             key={mode.id}
-            className="p-5 bg-[#111726] border border-[#8A6D3B]/45 flex flex-col justify-between space-y-4"
+            id={FAILURE_MODE_TO_ANCHOR[mode.id] || undefined}
+            className="p-5 bg-[#111726] border border-[#8A6D3B]/45 flex flex-col justify-between space-y-4 scroll-mt-24"
           >
             <div className="space-y-2.5">
               <div className="flex items-center justify-between font-mono text-xs">

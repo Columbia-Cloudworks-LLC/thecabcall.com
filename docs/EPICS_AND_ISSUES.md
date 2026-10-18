@@ -60,6 +60,13 @@
 - [ ] **Issue #25 ([GitHub Issue #25](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/25)): [Admin UI 4/5] Unified "Editorial & Feeds" Workspace (`AdminIncidentsClient.tsx`, `AdminFeedsClient.tsx`, `AdminFiltersClient.tsx`)**
 - [ ] **Issue #26 ([GitHub Issue #26](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/26)): [Admin UI 5/5] Aesthetic Polish & Micro-Interactions ("Delight" Pass across `globals.css` & `Admin*.tsx`)**
 
+### Header & Navigation Architecture — Two-Tier Editorial Masthead & Extensible Dropdown System Epic ([GitHub Issue #27](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/27) — Issues #28 to #32)
+- [x] **Issue #28 ([GitHub Issue #28](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/28)): Refactor header into a two-tier editorial masthead and align max-width container (`SiteHeader.tsx`, `TrestleboardClient.tsx`)**
+- [x] **Issue #29 ([GitHub Issue #29](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/29)): Enhance Square & Compasses logo emblem with solid seal backing, scaling, and plumb-line divider (`MasonicEngravings.tsx`, `SiteHeader.tsx`)**
+- [x] **Issue #30 ([GitHub Issue #30](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/30)): Create a data-driven navigation configuration schema for multi-level dropdowns (`src/lib/navigation.ts`, `SiteHeader.tsx`)**
+- [x] **Issue #31 ([GitHub Issue #31](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/31)): Build architectural dropdown menu panels and ledger navigation bar styling (`SiteHeader.tsx`, `globals.css`)**
+- [x] **Issue #32 ([GitHub Issue #32](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/32)): Implement dropdown hover-intent protection, sticky nav bar, and keyboard/touch accessibility (`SiteHeader.tsx`, `globals.css`)**
+
 ---
 
 # Epic #1: Repository Baseline, Clean Build & Git Synchronization
@@ -579,4 +586,37 @@
   1. Align `/admin` CSS tokens with the public Trestleboard palette (`#0B0E14` obsidian surfaces, `#111726` lodge room cards, `#C5A059` / `#8A6D3B` burnished brass highlights, `#F3EFE6` parchment text, subtle corner brackets on primary containers).
   2. Reserve `font-mono` strictly for actual code/IDs/hashes inside tooltips or the advanced audit view—use clean `font-display` (`Cinzel`), `font-serif` (`Newsreader`), and `font-sans` (`Inter`) pairings for all primary labels and tables.
   3. Add smooth transitions for tab switching, drawer opening, and pipeline trigger buttons.
+
+---
+
+# Epic #27: Header & Navigation Architecture — Two-Tier Editorial Masthead & Extensible Dropdown System (Issues #28 – #32)
+
+- **GitHub Epic:** [#27](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/27)
+- **Status:** `[x] Completed`
+- **Objective:** Restructure the site header into an authoritative **Two-Tier Editorial Masthead** (Tier 1: The Masthead, Tier 2: The Sticky Navigation Ledger) aligned horizontally with the `CAB Weekly Brief` hero container (`max-w-7xl mx-auto px-4 sm:px-6`), enhance `SquareAndCompassesCrest` with a solid `#070A10` seal backing, ambient gold glow, `15deg` / `600ms` degree-ring hover rotation, and a `1px` vertical gold plumb-line divider, and replace the individual boxed nav buttons with a data-driven horizontal ledger bar featuring architectural hover dropdown panels (1-column & 2-column mega-menus, gold corner-tick brackets, `150ms` hover-intent delay + `10px` CSS bridge, sticky Tier-2 scrolling, and full touch/keyboard accessibility).
+
+### Issue #28 (Sub-Issue 1): Refactor header into a two-tier editorial masthead and align max-width container
+- **GitHub Issue:** [#28](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/28)
+- **Status:** `[x] Completed`
+- **Target Files:** `src/components/SiteHeader.tsx`, `src/components/TrestleboardClient.tsx`
+
+### Issue #29 (Sub-Issue 2): Enhance Square & Compasses logo emblem with solid seal backing, scaling, and plumb-line divider
+- **GitHub Issue:** [#29](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/29)
+- **Status:** `[x] Completed`
+- **Target Files:** `src/components/MasonicEngravings.tsx`, `src/components/SiteHeader.tsx`
+
+### Issue #30 (Sub-Issue 3): Create a data-driven navigation configuration schema for multi-level dropdowns
+- **GitHub Issue:** [#30](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/30)
+- **Status:** `[x] Completed`
+- **Target Files:** `src/lib/navigation.ts`, `src/components/SiteHeader.tsx`, `src/app/incidents/page.tsx`
+
+### Issue #31 (Sub-Issue 4): Build architectural dropdown menu panels and ledger navigation bar styling
+- **GitHub Issue:** [#31](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/31)
+- **Status:** `[x] Completed`
+- **Target Files:** `src/components/SiteHeader.tsx`, `src/app/globals.css`
+
+### Issue #32 (Sub-Issue 5): Implement dropdown hover-intent protection, sticky nav bar, and keyboard/touch accessibility
+- **GitHub Issue:** [#32](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/32)
+- **Status:** `[x] Completed`
+- **Target Files:** `src/components/SiteHeader.tsx`, `src/app/globals.css`
 

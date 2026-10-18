@@ -152,7 +152,10 @@ export function PodcastArchiveClient({
       </div>
 
       {/* Series Toggle Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+      <div
+        id="latest"
+        className="flex flex-wrap items-center justify-between gap-4 mb-6 scroll-mt-20"
+      >
         <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
           <button
             type="button"
@@ -196,7 +199,9 @@ export function PodcastArchiveClient({
         </span>
       </div>
 
-      <BrassSectionDivider label="EPISODE DIRECTORY & VERIFIED TRANSCRIPTS" />
+      <div id="transcripts" className="scroll-mt-20">
+        <BrassSectionDivider label="EPISODE DIRECTORY & VERIFIED TRANSCRIPTS" />
+      </div>
 
       {/* Episode Directory */}
       <div className="space-y-6">

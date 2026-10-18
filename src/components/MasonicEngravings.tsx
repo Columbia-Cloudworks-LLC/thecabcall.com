@@ -12,58 +12,88 @@ export function SquareAndCompassesCrest({
       viewBox="0 0 120 120"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      className={className}
+      className={`cab-seal-emblem ${className}`}
+      style={{ filter: "drop-shadow(0 0 10px rgba(212, 175, 55, 0.18))" }}
       aria-label="Square and Compasses Telemetry Seal"
     >
-      {/* Outer copperplate double ring with degree ticks */}
-      <circle
-        cx="60"
-        cy="60"
-        r="56"
-        stroke="#C5A059"
-        strokeWidth="1"
-        strokeOpacity="0.65"
-      />
-      <circle
-        cx="60"
-        cy="60"
-        r="51"
-        stroke="#8A6D3B"
-        strokeWidth="0.75"
-        strokeDasharray="2 3"
-      />
-      {/* Cardinal telemetry crosshair ticks */}
-      <line x1="60" y1="2" x2="60" y2="10" stroke="#C5A059" strokeWidth="1.2" />
-      <line x1="60" y1="110" x2="60" y2="118" stroke="#C5A059" strokeWidth="1.2" />
-      <line x1="2" y1="60" x2="10" y2="60" stroke="#C5A059" strokeWidth="1.2" />
-      <line x1="110" y1="60" x2="118" y2="60" stroke="#C5A059" strokeWidth="1.2" />
+      <defs>
+        <radialGradient id="cabSealBacking" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#111726" />
+          <stop offset="68%" stopColor="#070A10" />
+          <stop offset="100%" stopColor="#05070C" />
+        </radialGradient>
+      </defs>
 
-      {/* Engraved radiating sun-lines in background */}
+      {/* Solid Interior Backing ("The Seal") preventing checkerboard bleed-through */}
+      <circle cx="60" cy="60" r="56.5" fill="#070A10" />
+      <circle cx="60" cy="60" r="55.5" fill="url(#cabSealBacking)" />
+
+      {/* Outer copperplate double ring with degree ticks (rotates 15deg over 600ms on brand hover) */}
+      <g
+        className="cab-seal-degree-ring transition-transform duration-[600ms] ease-out group-hover:rotate-[15deg]"
+        style={{ transformOrigin: "60px 60px" }}
+      >
+        <circle
+          cx="60"
+          cy="60"
+          r="56"
+          stroke="#C5A059"
+          strokeWidth="1.2"
+          strokeOpacity="0.8"
+        />
+        <circle
+          cx="60"
+          cy="60"
+          r="51"
+          stroke="#8A6D3B"
+          strokeWidth="0.85"
+          strokeDasharray="2 3"
+        />
+        {/* Cardinal & intercardinal degree crosshair ticks */}
+        <line x1="60" y1="2" x2="60" y2="10" stroke="#C5A059" strokeWidth="1.3" />
+        <line x1="60" y1="110" x2="60" y2="118" stroke="#C5A059" strokeWidth="1.3" />
+        <line x1="2" y1="60" x2="10" y2="60" stroke="#C5A059" strokeWidth="1.3" />
+        <line x1="110" y1="60" x2="118" y2="60" stroke="#C5A059" strokeWidth="1.3" />
+        <line x1="19" y1="19" x2="24" y2="24" stroke="#8A6D3B" strokeWidth="0.9" />
+        <line x1="101" y1="19" x2="96" y2="24" stroke="#8A6D3B" strokeWidth="0.9" />
+        <line x1="19" y1="101" x2="24" y2="96" stroke="#8A6D3B" strokeWidth="0.9" />
+        <line x1="101" y1="101" x2="96" y2="96" stroke="#8A6D3B" strokeWidth="0.9" />
+      </g>
+
+      {/* Engraved inner sanctuary ring & radiating sun-lines in background */}
+      <circle
+        cx="60"
+        cy="60"
+        r="45"
+        stroke="#C5A059"
+        strokeWidth="0.45"
+        strokeOpacity="0.28"
+      />
       <circle
         cx="60"
         cy="58"
         r="24"
         stroke="#C5A059"
-        strokeWidth="0.5"
-        strokeOpacity="0.3"
+        strokeWidth="0.55"
+        strokeOpacity="0.35"
       />
 
       {/* The Square (Right-angled ashlar try-square) */}
       <path
         d="M24 54 L60 90 L96 54 L89 47 L60 76 L31 47 Z"
         stroke="#C5A059"
-        strokeWidth="1.4"
+        strokeWidth="1.45"
         fill="#0B0E14"
       />
       {/* Fine copperplate hatching inside The Square */}
-      <line x1="35" y1="58" x2="60" y2="83" stroke="#8A6D3B" strokeWidth="0.7" />
-      <line x1="85" y1="58" x2="60" y2="83" stroke="#8A6D3B" strokeWidth="0.7" />
+      <line x1="35" y1="58" x2="60" y2="83" stroke="#8A6D3B" strokeWidth="0.75" />
+      <line x1="85" y1="58" x2="60" y2="83" stroke="#8A6D3B" strokeWidth="0.75" />
 
       {/* The Compasses (Elevated above the Square) */}
       <path
         d="M60 22 L33 88 L40 85 L60 35 L80 85 L87 88 Z"
         stroke="#F3EFE6"
-        strokeWidth="1.3"
+        strokeWidth="1.35"
         fill="#111726"
       />
       {/* Compass Hinge & Boss */}
@@ -81,7 +111,7 @@ export function SquareAndCompassesCrest({
       <polygon
         points="60,48 67,58 60,68 53,58"
         stroke="#C5A059"
-        strokeWidth="1"
+        strokeWidth="1.1"
         fill="#0B0E14"
       />
       <circle cx="60" cy="58" r="2.2" fill="#C5A059" />

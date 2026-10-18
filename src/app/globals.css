@@ -17,7 +17,7 @@
     background-color: #0B0E14;
     color: #F3EFE6;
     font-family: var(--font-inter), sans-serif;
-    overflow-x: hidden;
+    overflow-x: clip;
   }
 }
 
@@ -52,3 +52,24 @@
   border: 1px solid rgba(197, 160, 89, 0.45);
   pointer-events: none;
 }
+
+/* Sticky Tier-2 Navigation Ledger Bar */
+.nav-ledger-bar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Invisible 10px transparent CSS hover bridge preventing diagonal hover traps */
+.nav-dropdown-panel::before {
+  content: "";
+  position: absolute;
+  top: -10px;
+  left: 0;
+  right: 0;
+  height: 10px;
+  background: transparent;
+}
+

@@ -156,8 +156,9 @@ export function TrestleboardClient({
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
       {/* B. THE WEEKLY TRESTLEBOARD & PODCAST FEATURE (SPLIT ASYMMETRIC HERO) */}
       <section
+        id="weekly-brief"
         aria-label="The Weekly Trestleboard & Podcast Feature"
-        className="relative bg-[#111726] border border-[#C5A059]/65 shadow-[0_16px_48px_rgba(0,0,0,0.65)]"
+        className="relative bg-[#111726] border border-[#C5A059]/65 shadow-[0_16px_48px_rgba(0,0,0,0.65)] scroll-mt-20"
       >
         {/* Double-line brass hairline inner border */}
         <div className="pointer-events-none absolute inset-1.5 border border-[#8A6D3B]/55" />
@@ -316,8 +317,9 @@ export function TrestleboardClient({
       <BrassSectionDivider />
 
       <section
+        id="active-dispatches"
         aria-label="Editorial Filter Ribbon"
-        className="mb-9 pb-6 border-b border-[#8A6D3B]/40"
+        className="mb-9 pb-6 border-b border-[#8A6D3B]/40 scroll-mt-20"
       >
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-center gap-3.5 sm:gap-5">
           {/* 1. Working Tool Selector */}
@@ -518,7 +520,11 @@ export function TrestleboardClient({
           )}
 
           {/* 2-Column Incident Grid */}
-          <section aria-label="Trestleboard Incident Grid">
+          <section
+            id="systemic-trends"
+            aria-label="Trestleboard Incident Grid"
+            className="scroll-mt-20"
+          >
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-7">
               {gridIncidents.map((incident) => (
                 <IncidentCard key={incident.id} incident={incident} />
