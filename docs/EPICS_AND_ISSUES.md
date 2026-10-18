@@ -48,7 +48,7 @@
 - [x] **Issue #13 ([GitHub Issue #13](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/13)): [Lexicon] Replace 'Tech Bro / NASA Terminal' UI Labels with Plain-Spoken Craft Terminology (`mapDtoToCraftLexicon`)**
 - [x] **Issue #14 ([GitHub Issue #14](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/14)): [Lexicon] Translate SRE Failure Modes into Accessible Shop-Floor & Operative Craft Concepts**
 - [x] **Issue #15 ([GitHub Issue #15](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/15)): [Prose & Templates] Eliminate Broken Headline Interpolation & Corporate Compliance Jargon**
-- [ ] **Issue #16 ([GitHub Issue #16](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/16)): [Defensive Rendering] Prevent Verbatim Sentence Duplication Across Sections I & II**
+- [x] **Issue #16 ([GitHub Issue #16](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/16)): [Defensive Rendering] Prevent Verbatim Sentence Duplication Across Sections I & II**
 - [ ] **Issue #17 ([GitHub Issue #17](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/17)): [Usability / Krug] Remove Mystery-Meat `[?]` Badges and Clarify Action Button Labels**
 - [ ] **Issue #18 ([GitHub Issue #18](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/18)): [Navigation / Krug] Implement 'You Are Here' Street Signs & Sidebar Visual Hierarchy**
 - [ ] **Issue #19 ([GitHub Issue #19](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/19)): [Verification] Add a 'Banned Jargon & Krug Usability Gate' to the PowerShell Test Harness**

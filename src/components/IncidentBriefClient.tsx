@@ -21,6 +21,7 @@ import {
   getWorkingToolSpec,
 } from "@/lib/taxonomy";
 import {
+  deduplicateSignalAgainstFacts,
   normalizeQuestionSentenceCase,
   sanitizeStringConcatenation,
 } from "@/lib/sanitize";
@@ -62,6 +63,15 @@ export function IncidentBriefClient({
       .split(/\n\s*\n/)
       .map((p) => p.trim())
       .filter(Boolean)[0] || incident.executiveSummary
+  );
+
+  // Section II: View-boundary deduplication gate ensuring Signal never repeats a sentence from Section I
+  const deduplicatedStructuralSignal = deduplicateSignalAgainstFacts(
+    [singleFactualParagraph, incident.socraticBrief, incident.executiveSummary],
+    incident.proportionalityCheck.structuralSignal,
+    incident.primaryTool,
+    incident.sreFailureMode,
+    incident.secondaryTool
   );
 
   // Section III: Strictly 2 highest-impact Socratic questions in standard sentence case
@@ -380,7 +390,7 @@ export function IncidentBriefClient({
                   <span>THE ACTUAL FOUNDATION (THE SIGNAL)</span>
                 </div>
                 <p className="font-serif text-sm sm:text-[15px] text-[#F3EFE6]/90 leading-relaxed">
-                  {incident.proportionalityCheck.structuralSignal}
+                  {deduplicatedStructuralSignal}
                 </p>
               </div>
             </div>

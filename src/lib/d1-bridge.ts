@@ -207,7 +207,7 @@ export function mapD1RowToIncidentArticle(
   const diagnostics = buildOrSanitizeArticleDiagnostics({
     title: row.title,
     sourceFeed: row.source_feed,
-    factualSummary: socraticBrief,
+    factualSummary: `${socraticBrief}\n\n${executiveSummary}`,
     primaryTool,
     secondaryTool,
     sreFailureMode,

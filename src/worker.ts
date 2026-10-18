@@ -210,7 +210,7 @@ function mapWorkerRowToPublicIncidentDto(
   const diagnostics = buildOrSanitizeArticleDiagnostics({
     title: row.title,
     sourceFeed: row.source_feed,
-    factualSummary: validation.factualBriefParagraph,
+    factualSummary: `${validation.factualBriefParagraph}\n\n${validation.executiveSummary}`,
     primaryTool,
     secondaryTool,
     sreFailureMode,

@@ -1,5 +1,7 @@
 import {
   containsInterpolatedHeadline,
+  deduplicateSignalAgainstFacts,
+  hasDuplicateSentenceBetweenFactsAndSignal,
   isTemplatedOrMalformedCopy,
 } from "./sanitize";
 import {
@@ -203,10 +205,37 @@ export function mapDtoToCraftLexicon<
       noiseOverblown?: string;
       structuralSignal?: string;
     };
+    const sanitizedSignal = sanitizeEditorialText(pc.structuralSignal);
+    const hasFactsOnRecord =
+      typeof record.socraticBrief === "string" ||
+      typeof record.executiveSummary === "string";
     record.proportionalityCheck = {
       ...pc,
       noiseOverblown: sanitizeEditorialText(pc.noiseOverblown),
-      structuralSignal: sanitizeEditorialText(pc.structuralSignal),
+      structuralSignal: hasFactsOnRecord
+        ? sanitizeEditorialText(
+            deduplicateSignalAgainstFacts(
+              [
+                typeof record.socraticBrief === "string"
+                  ? record.socraticBrief
+                  : null,
+                typeof record.executiveSummary === "string"
+                  ? record.executiveSummary
+                  : null,
+              ],
+              sanitizedSignal,
+              typeof record.primaryTool === "string"
+                ? record.primaryTool
+                : DEFAULT_CRAFT_WORKING_TOOL,
+              typeof record.sreFailureMode === "string"
+                ? record.sreFailureMode
+                : DEFAULT_CRAFT_FAILURE_MODE,
+              typeof record.secondaryTool === "string"
+                ? record.secondaryTool
+                : undefined
+            )
+          )
+        : sanitizedSignal,
     };
   }
 
@@ -344,6 +373,21 @@ export function projectPublicIncidentDto(
   const q1 = sanitizeEditorialText(mapped.questions[0]);
   const q2 = sanitizeEditorialText(mapped.questions[1]);
 
+  const primaryTool = mapWorkingToolToCraftLexicon(mapped.primaryTool);
+  const secondaryTool = mapWorkingToolToCraftLexicon(mapped.secondaryTool);
+  const sreFailureMode = mapFailureModeToCraftLexicon(mapped.sreFailureMode);
+  const executiveSummary = sanitizeEditorialText(mapped.executiveSummary);
+  const socraticBrief = sanitizeEditorialText(mapped.socraticBrief);
+  const deduplicatedSignal = sanitizeEditorialText(
+    deduplicateSignalAgainstFacts(
+      [socraticBrief, executiveSummary],
+      mapped.proportionalityCheck.structuralSignal,
+      primaryTool,
+      sreFailureMode,
+      secondaryTool
+    )
+  );
+
   const dto: PublicIncidentDto = {
     id: mapped.id.trim(),
     incidentCode: mapped.incidentCode.trim(),
@@ -353,18 +397,16 @@ export function projectPublicIncidentDto(
     sourceUrl: mapped.sourceUrl.trim(),
     publishedAt: mapped.publishedAt.trim(),
     domainSector: mapped.domainSector,
-    primaryTool: mapWorkingToolToCraftLexicon(mapped.primaryTool),
-    secondaryTool: mapWorkingToolToCraftLexicon(mapped.secondaryTool),
-    sreFailureMode: mapFailureModeToCraftLexicon(mapped.sreFailureMode),
-    executiveSummary: sanitizeEditorialText(mapped.executiveSummary),
-    socraticBrief: sanitizeEditorialText(mapped.socraticBrief),
+    primaryTool,
+    secondaryTool,
+    sreFailureMode,
+    executiveSummary,
+    socraticBrief,
     proportionalityCheck: {
       noiseOverblown: sanitizeEditorialText(
         mapped.proportionalityCheck.noiseOverblown
       ),
-      structuralSignal: sanitizeEditorialText(
-        mapped.proportionalityCheck.structuralSignal
-      ),
+      structuralSignal: deduplicatedSignal,
     },
     questions: [q1, q2],
   };
@@ -630,6 +672,22 @@ export function assertZeroTelemetryBleed(payload: unknown): {
         ) {
           violations.push(
             `${pathPrefix}.proportionalityCheck.structuralSignal: contains interpolated headline`
+          );
+        }
+        if (
+          typeof pc.structuralSignal === "string" &&
+          hasDuplicateSentenceBetweenFactsAndSignal(
+            [
+              typeof obj.socraticBrief === "string" ? obj.socraticBrief : null,
+              typeof obj.executiveSummary === "string"
+                ? obj.executiveSummary
+                : null,
+            ],
+            pc.structuralSignal
+          )
+        ) {
+          violations.push(
+            `${pathPrefix}.proportionalityCheck.structuralSignal: duplicates sentence from Section I facts`
           );
         }
         if (Array.isArray(obj.questions)) {

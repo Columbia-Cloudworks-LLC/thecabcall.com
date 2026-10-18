@@ -1,6 +1,8 @@
 import {
   getSreFailureModeSpec,
   getWorkingToolSpec,
+  mapFailureModeToCraftLexicon,
+  mapWorkingToolToCraftLexicon,
   SreFailureModeId,
   WorkingToolId,
 } from "./taxonomy";
@@ -1098,9 +1100,245 @@ export type DiagnosticsValidationResult =
     };
 
 /**
+ * Computes word n-gram overlap ratio (0..1) between two strings.
+ * Uses normalized lowercase alphanumeric tokens and returns `intersection / Math.min(sizeA, sizeB)`
+ * so that both near-duplicate sentences of comparable length and sentences wrapped inside a longer
+ * template clause are accurately detected.
+ */
+export function computeNgramOverlap(
+  textA: string | null | undefined,
+  textB: string | null | undefined,
+  n = 4
+): number {
+  if (!textA || typeof textA !== "string" || !textB || typeof textB !== "string") {
+    return 0;
+  }
+
+  const wordsA = tokenizeNormalizedWords(textA);
+  const wordsB = tokenizeNormalizedWords(textB);
+  if (wordsA.length === 0 || wordsB.length === 0) {
+    return 0;
+  }
+
+  const targetN = Number.isFinite(n) && n >= 1 ? Math.floor(n) : 4;
+  const effN = Math.max(1, Math.min(targetN, wordsA.length, wordsB.length));
+
+  const buildNgrams = (words: string[], size: number): Set<string> => {
+    const set = new Set<string>();
+    for (let i = 0; i <= words.length - size; i += 1) {
+      set.add(words.slice(i, i + size).join(" "));
+    }
+    return set;
+  };
+
+  const ngramsA = buildNgrams(wordsA, effN);
+  const ngramsB = buildNgrams(wordsB, effN);
+  if (ngramsA.size === 0 || ngramsB.size === 0) {
+    return 0;
+  }
+
+  let intersection = 0;
+  for (const gram of ngramsA) {
+    if (ngramsB.has(gram)) {
+      intersection += 1;
+    }
+  }
+
+  const minSize = Math.min(ngramsA.size, ngramsB.size);
+  return minSize > 0 ? intersection / minSize : 0;
+}
+
+function splitSentencesForDeduplication(text: string): string[] {
+  const cleaned = cleanRssText(text);
+  if (!cleaned) return [];
+
+  const protectedText = cleaned
+    .replace(/\b(U\.S|U\.K|E\.U|U\.N)\./g, `$1${ABBREVIATION_PLACEHOLDER}`)
+    .replace(
+      /\b(Rep|Sen|Gov|Pres|Mr|Mrs|Ms|Dr|Prof|Gen|Col|Lt|Sgt|St|Ave|Inc|Corp|Co|Ltd|Jr|Sr|vs|v|No|Fig|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\./gi,
+      `$1${ABBREVIATION_PLACEHOLDER}`
+    )
+    .replace(/(\b[A-Z])\./g, `$1${ABBREVIATION_PLACEHOLDER}`);
+
+  const candidates = protectedText
+    .split(/(?:(?<=[.!?]["”']?)\s+(?=[A-Z"“'‘(0-9])|\n+)/)
+    .map((s) =>
+      s
+        .replace(new RegExp(ABBREVIATION_PLACEHOLDER, "g"), ".")
+        .replace(/\s+/g, " ")
+        .trim()
+    )
+    .filter((s) => tokenizeNormalizedWords(s).length >= 3);
+
+  if (candidates.length > 0) {
+    return candidates;
+  }
+
+  return tokenizeNormalizedWords(cleaned).length > 0 ? [cleaned] : [];
+}
+
+function extractFactSentencesList(
+  factsText: string | Array<string | null | undefined> | null | undefined
+): string[] {
+  const blocks = Array.isArray(factsText)
+    ? factsText.filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    : typeof factsText === "string" && factsText.trim().length > 0
+      ? [factsText]
+      : [];
+
+  const seen = new Set<string>();
+  const sentences: string[] = [];
+  for (const block of blocks) {
+    for (const sent of splitSentencesForDeduplication(block)) {
+      const norm = normalizeForComparison(sent);
+      if (norm && !seen.has(norm)) {
+        seen.add(norm);
+        sentences.push(sent);
+      }
+    }
+  }
+  return sentences;
+}
+
+function isSignalSentenceDuplicateOfFacts(
+  signalSentence: string,
+  factSentences: string[],
+  n = 4
+): boolean {
+  const normSig = normalizeForComparison(signalSentence);
+  if (!normSig || factSentences.length === 0) {
+    return false;
+  }
+
+  const sigClauses = signalSentence
+    .split(/[:;—–]+/)
+    .map((c) => c.trim())
+    .filter((c) => tokenizeNormalizedWords(c).length >= 5);
+
+  for (const factSent of factSentences) {
+    const normFact = normalizeForComparison(factSent);
+    if (!normFact) continue;
+
+    // 1. Exact or substring sentence match
+    if (normSig === normFact) {
+      return true;
+    }
+    if (normFact.length >= 20 && normSig.includes(normFact)) {
+      return true;
+    }
+    if (normSig.length >= 20 && normFact.includes(normSig)) {
+      return true;
+    }
+
+    // 2. >50% word n-gram overlap on full sentence
+    if (computeNgramOverlap(signalSentence, factSent, n) > 0.5) {
+      return true;
+    }
+
+    // 3. Check embedded sub-clauses (e.g. template prefix followed by colon and verbatim Section I sentence)
+    for (const clause of sigClauses) {
+      const normClause = normalizeForComparison(clause);
+      if (
+        normClause.length >= 25 &&
+        (normFact.includes(normClause) || normClause.includes(normFact))
+      ) {
+        return true;
+      }
+      if (computeNgramOverlap(clause, factSent, n) > 0.5) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Returns true if any sentence in `signalText` shares an exact/substring match
+ * or >50% word 4-gram overlap with any sentence in `factsText`.
+ */
+export function hasDuplicateSentenceBetweenFactsAndSignal(
+  factsText: string | Array<string | null | undefined> | null | undefined,
+  signalText: string | null | undefined,
+  n = 4
+): boolean {
+  if (!signalText || typeof signalText !== "string") {
+    return false;
+  }
+  const factSentences = extractFactSentencesList(factsText);
+  if (factSentences.length === 0) {
+    return false;
+  }
+  const signalSentences = splitSentencesForDeduplication(signalText);
+  return signalSentences.some((sigSent) =>
+    isSignalSentenceDuplicateOfFacts(sigSent, factSentences, n)
+  );
+}
+
+/**
+ * Defensive string-similarity and substring deduplication gate ensuring Section II (`structuralSignal`)
+ * never repeats a sentence from Section I (`factsText` / `singleFactualParagraph` / `socraticBrief` / `executiveSummary`).
+ *
+ * - Splits `factsText` into normalized sentences and word 4-grams.
+ * - Strips any sentence in `signalText` that shares >50% 4-gram overlap or an exact/substring match with Section I.
+ * - If stripping leaves `structuralSignal` empty or shorter than 30 characters, falls back to a concise,
+ *   distinct structural summary anchored to the case's Working Tool and Failure Mode craft lens.
+ */
+export function deduplicateSignalAgainstFacts(
+  factsText: string | Array<string | null | undefined> | null | undefined,
+  signalText: string | null | undefined,
+  primaryTool?: WorkingToolId | string | null,
+  failureMode?: SreFailureModeId | string | null,
+  secondaryTool?: WorkingToolId | string | null
+): string {
+  const resolvedPrimary = mapWorkingToolToCraftLexicon(primaryTool);
+  const resolvedFailure = mapFailureModeToCraftLexicon(failureMode);
+  const resolvedSecondary = secondaryTool
+    ? mapWorkingToolToCraftLexicon(secondaryTool)
+    : resolvedPrimary === "24-Inch Gauge"
+      ? "The Square"
+      : "24-Inch Gauge";
+
+  const cleanedSignal = cleanRssText(signalText || "");
+  if (!cleanedSignal) {
+    return buildWorkshopSignalDiagnostic(
+      resolvedFailure,
+      resolvedPrimary,
+      resolvedSecondary
+    );
+  }
+
+  const factSentences = extractFactSentencesList(factsText);
+  const signalSentences = splitSentencesForDeduplication(cleanedSignal);
+
+  const retainedSentences =
+    factSentences.length > 0
+      ? signalSentences.filter(
+          (sigSent) => !isSignalSentenceDuplicateOfFacts(sigSent, factSentences, 4)
+        )
+      : signalSentences;
+
+  const rejoined = sanitizeStringConcatenation(retainedSentences.join(" "));
+  if (
+    retainedSentences.length === 0 ||
+    rejoined.length < 30 ||
+    isTemplatedOrMalformedCopy(rejoined)
+  ) {
+    return buildWorkshopSignalDiagnostic(
+      resolvedFailure,
+      resolvedPrimary,
+      resolvedSecondary
+    );
+  }
+
+  return /[.!?]["”']?$/.test(rejoined) ? rejoined : `${rejoined}.`;
+}
+
+/**
  * Validates and sanitizes the editorial diagnostics (`noiseOverblown`, `structuralSignal`, `questions`)
  * for an article. When a stored D1 record has legacy headline-interpolated or compliance-jargon
  * `Noise`, `Signal`, or `Questions` (such as rows generated by `editorial-sanitization-v2`),
+ * or when `Signal` duplicates a sentence from Section I (`factualSummary`),
  * cleanly repairs/replaces those fields with plain-spoken, non-headline-interpolated craft diagnostics
  * referring naturally to "this case", "this decision", "this action", or "this breakdown".
  */
@@ -1137,12 +1375,34 @@ export function buildOrSanitizeArticleDiagnostics(input: {
     !isTemplatedOrMalformedCopy(rawNoise, input.title) &&
     !containsInterpolatedHeadline(rawNoise, input.title);
 
+  const signalHadDuplicateSentence = rawSignal
+    ? hasDuplicateSentenceBetweenFactsAndSignal(cleanedSummary, rawSignal)
+    : false;
+
+  const deduplicatedCandidateSignal = rawSignal
+    ? deduplicateSignalAgainstFacts(
+        cleanedSummary,
+        rawSignal,
+        input.primaryTool,
+        input.sreFailureMode,
+        input.secondaryTool
+      )
+    : "";
+
   const hasValidExistingSignal =
     rawSignal.length >= 30 &&
+    !signalHadDuplicateSentence &&
     !isTemplatedOrMalformedCopy(rawSignal, input.title) &&
     !containsInterpolatedHeadline(rawSignal, input.title) &&
     rawSignal !== failureSpec.systemsDefinition &&
     rawSignal !== failureSpec.summary;
+
+  const hasValidDeduplicatedSignal =
+    deduplicatedCandidateSignal.length >= 30 &&
+    !isTemplatedOrMalformedCopy(deduplicatedCandidateSignal, input.title) &&
+    !containsInterpolatedHeadline(deduplicatedCandidateSignal, input.title) &&
+    deduplicatedCandidateSignal !== failureSpec.systemsDefinition &&
+    deduplicatedCandidateSignal !== failureSpec.summary;
 
   const validExistingQuestions = (input.existingQuestions || [])
     .map((q) =>
@@ -1163,11 +1423,13 @@ export function buildOrSanitizeArticleDiagnostics(input: {
 
   const structuralSignal = hasValidExistingSignal
     ? sanitizeStringConcatenation(rawSignal)
-    : buildWorkshopSignalDiagnostic(
-        input.sreFailureMode,
-        input.primaryTool,
-        input.secondaryTool
-      );
+    : hasValidDeduplicatedSignal
+      ? sanitizeStringConcatenation(deduplicatedCandidateSignal)
+      : buildWorkshopSignalDiagnostic(
+          input.sreFailureMode,
+          input.primaryTool,
+          input.secondaryTool
+        );
 
   const workshopQuestions = buildWorkshopSocraticQuestions(
     input.primaryTool,
@@ -1187,6 +1449,7 @@ export function buildOrSanitizeArticleDiagnostics(input: {
   const repaired =
     !hasValidExistingNoise ||
     !hasValidExistingSignal ||
+    signalHadDuplicateSentence ||
     validExistingQuestions.length < 2;
 
   return {
@@ -1210,7 +1473,7 @@ export interface NormalizedQuestionsPayload {
 /**
  * Normalizes stored `questions_json` from D1 across both `proportionality_check`
  * (`noise_overblown`, `structural_signal`) and legacy `proportionality` (`noise`, `signal`)
- * JSON shapes, repairing any headline-interpolated or compliance-jargon fields via
+ * JSON shapes, repairing any headline-interpolated, compliance-jargon, or duplicate-sentence fields via
  * `buildOrSanitizeArticleDiagnostics`.
  */
 export function normalizeStoredQuestionsPayload(
@@ -1339,12 +1602,15 @@ export function normalizeStoredQuestionsPayload(
         rawQuestionsArray.length > 0;
 
       if (hasAnyDiagnostics) {
+        const combinedFactualSummary = [opts.factualSummary, executiveSummary]
+          .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+          .join("\n\n");
+
         const sanitized = buildOrSanitizeArticleDiagnostics({
           title: title || "Incident Dispatch",
           sourceFeed: opts.sourceFeed || "WIRE",
           factualSummary:
-            opts.factualSummary ||
-            executiveSummary ||
+            combinedFactualSummary ||
             "Operational review of the reported incident and the surrounding institutional safeguards across the field.",
           primaryTool,
           secondaryTool,

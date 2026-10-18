@@ -6,13 +6,20 @@ import { DatabaseSync } from "node:sqlite";
 import {
   buildOrSanitizeArticleDiagnostics,
   cleanRssText,
+  computeNgramOverlap,
   containsInterpolatedHeadline,
+  deduplicateSignalAgainstFacts,
+  hasDuplicateSentenceBetweenFactsAndSignal,
   isTemplatedOrMalformedCopy,
   normalizeCanonicalUrl,
   normalizeStoredQuestionsPayload,
   stripUnsafeHtmlAndCdata,
 } from "../src/lib/sanitize.ts";
-import { extractStoredQuestionsPayload } from "../src/lib/d1-bridge.ts";
+import {
+  ensureD1Snapshot,
+  extractStoredQuestionsPayload,
+  readLocalD1Snapshot,
+} from "../src/lib/d1-bridge.ts";
 import { INITIAL_INCIDENTS } from "../src/lib/seed-data.ts";
 import {
   validateJevEvaluationOutput,
@@ -42,6 +49,7 @@ import {
   assertZeroTelemetryBleed,
   formatCraftLedgerEntry,
   mapDtoToCraftLexicon,
+  projectPublicIncidentDto,
 } from "../src/lib/dto.ts";
 import {
   getSreFailureModeSpec,
@@ -1239,6 +1247,7 @@ async function runVerificationSuite() {
     ok: boolean;
     incidents: Array<{
       title: string;
+      executiveSummary: string;
       socraticBrief: string;
       proportionalityCheck: { noiseOverblown: string; structuralSignal: string };
       questions: [string, string];
@@ -1319,8 +1328,185 @@ async function runVerificationSuite() {
   console.log(
     "  ✓ Issue #15 headline-interpolation detector, legacy proportionality normalization, and plain workshop prose verified across all incidents."
   );
+
+  // -------------------------------------------------------------------------
+  // 8. OBJECTIVE 8 (ISSUE #16): PREVENT VERBATIM SENTENCE DUPLICATION ACROSS SECTIONS I & II
+  // -------------------------------------------------------------------------
   console.log(
-    "\n=== ALL 7 DEFENSIVE HARDENING & CRAFT PROSE OBJECTIVES PASSED (100%) ==="
+    "\n[8/8] Verifying Objective 8 (Issue #16): Section I vs. Section II Sentence Deduplication (computeNgramOverlap & deduplicateSignalAgainstFacts)..."
+  );
+
+  const sampleSectionIFacts =
+    "On October 16, federal auditors released an inspection report examining operational technology networks across regional water utilities. Packet-capture telemetry gathered during the physical audit showed active, unmonitored VPN tunnels maintained for third-party maintenance contractors.";
+
+  const verbatimSecondSentence =
+    "Packet-capture telemetry gathered during the physical audit showed active, unmonitored VPN tunnels maintained for third-party maintenance contractors.";
+
+  const nearDuplicateSecondSentence =
+    "Evaluated under The Square: packet-capture telemetry gathered during the physical audit showed active, unmonitored VPN tunnels maintained for outside maintenance contractors.";
+
+  const distinctCraftSentence =
+    "Annual paper sign-offs cannot catch unmonitored remote bridges when plant maintenance budgets force operators to rely on vendor backdoors.";
+
+  // Unit check 1: computeNgramOverlap
+  assert.equal(
+    computeNgramOverlap(verbatimSecondSentence, verbatimSecondSentence, 4),
+    1,
+    "computeNgramOverlap must return 1.0 for identical sentences"
+  );
+  assert.ok(
+    computeNgramOverlap(verbatimSecondSentence, nearDuplicateSecondSentence, 4) >
+      0.5,
+    "computeNgramOverlap must exceed 0.50 when >50% of 4-grams overlap"
+  );
+  assert.ok(
+    computeNgramOverlap(verbatimSecondSentence, distinctCraftSentence, 4) < 0.2,
+    "computeNgramOverlap must remain low (<0.20) for genuinely distinct sentences"
+  );
+
+  // Unit check 2: Single duplicate sentence in structuralSignal is stripped and replaced with workshop craft fallback
+  const dedupedSingle = deduplicateSignalAgainstFacts(
+    sampleSectionIFacts,
+    verbatimSecondSentence,
+    "The Square",
+    "Configuration Drift",
+    "The Level"
+  );
+  assert.notEqual(
+    dedupedSingle,
+    verbatimSecondSentence,
+    "deduplicateSignalAgainstFacts must strip a verbatim Section I sentence"
+  );
+  assert.ok(
+    dedupedSingle.length >= 40 && dedupedSingle.includes("The Square"),
+    "When stripping leaves structuralSignal empty, deduplicateSignalAgainstFacts must fall back to a distinct craft summary anchored to primaryTool"
+  );
+  assert.equal(
+    hasDuplicateSentenceBetweenFactsAndSignal(sampleSectionIFacts, dedupedSingle),
+    false,
+    "Fallback structuralSignal must have zero duplicate sentences against Section I"
+  );
+
+  // Unit check 3: >50% 4-gram overlapping sentence in structuralSignal is stripped and replaced
+  const dedupedNear = deduplicateSignalAgainstFacts(
+    sampleSectionIFacts,
+    nearDuplicateSecondSentence,
+    "The Plumb",
+    "Single Point of Failure (SPOF) / Untested Failover",
+    "24-Inch Gauge"
+  );
+  assert.equal(
+    hasDuplicateSentenceBetweenFactsAndSignal(sampleSectionIFacts, dedupedNear),
+    false,
+    "deduplicateSignalAgainstFacts must strip a >50% 4-gram overlapping sentence and replace with distinct craft summary"
+  );
+  assert.ok(
+    dedupedNear.includes("The Plumb"),
+    "Fallback structuralSignal must be anchored to The Plumb craft lens"
+  );
+
+  // Unit check 4: Multi-sentence structuralSignal where sentence 1 duplicates Section I and sentence 2 is distinct -> retains sentence 2
+  const mixedTwoSentenceSignal = `${verbatimSecondSentence} ${distinctCraftSentence}`;
+  const dedupedMixed = deduplicateSignalAgainstFacts(
+    sampleSectionIFacts,
+    mixedTwoSentenceSignal,
+    "The Square",
+    "Configuration Drift",
+    "The Level"
+  );
+  assert.equal(
+    dedupedMixed,
+    distinctCraftSentence,
+    "When structuralSignal has 1 duplicate sentence and 1 distinct sentence (>=30 chars), only the duplicate sentence is stripped"
+  );
+
+  // Integration check 5: buildOrSanitizeArticleDiagnostics repairs a duplicate-sentence signal
+  const diagDedupCheck = buildOrSanitizeArticleDiagnostics({
+    title: "Regional Water Utility Audit",
+    sourceFeed: "REUTERS",
+    factualSummary: sampleSectionIFacts,
+    primaryTool: "The Square",
+    secondaryTool: "The Level",
+    sreFailureMode: "Configuration Drift",
+    existingNoise:
+      "Cable commentary framing the audit as an active foreign cyberattack on municipal reservoirs despite zero evidence of unauthorized command execution.",
+    existingSignal: verbatimSecondSentence,
+    existingQuestions: [
+      "When compliance is measured by signed paper attestations rather than production verification, who bears accountability when an informal exception becomes the permanent architecture?",
+      "Are the officials who approved deferred maintenance budgets exposed to the same operational consequences as frontline plant operators when an unsegmented control plane fails an audit?",
+    ],
+  });
+  assert.equal(diagDedupCheck.valid, true);
+  assert.equal(
+    diagDedupCheck.repaired,
+    true,
+    "buildOrSanitizeArticleDiagnostics must mark repaired=true when existingSignal duplicates a Section I sentence"
+  );
+  assert.equal(
+    hasDuplicateSentenceBetweenFactsAndSignal(
+      sampleSectionIFacts,
+      diagDedupCheck.structuralSignal
+    ),
+    false,
+    "buildOrSanitizeArticleDiagnostics output must never duplicate a sentence from factualSummary"
+  );
+
+  // Integration check 6: projectPublicIncidentDto repairs a duplicate-sentence signal on any IncidentArticle / DTO
+  const sampleSeedWithDupSignal = {
+    ...INITIAL_INCIDENTS[0],
+    proportionalityCheck: {
+      ...INITIAL_INCIDENTS[0].proportionalityCheck,
+      structuralSignal: verbatimSecondSentence,
+    },
+  };
+  const projectedDedupDto = projectPublicIncidentDto(sampleSeedWithDupSignal);
+  assert.ok(projectedDedupDto, "projectPublicIncidentDto must return a valid DTO");
+  assert.equal(
+    hasDuplicateSentenceBetweenFactsAndSignal(
+      [projectedDedupDto.socraticBrief, projectedDedupDto.executiveSummary],
+      projectedDedupDto.proportionalityCheck.structuralSignal
+    ),
+    false,
+    "projectPublicIncidentDto must deduplicate structuralSignal against socraticBrief and executiveSummary"
+  );
+
+  // Integration check 7: Verify IncidentBriefClient.tsx enforces deduplicateSignalAgainstFacts at the view boundary
+  const incidentBriefSource = fs.readFileSync(
+    path.join(process.cwd(), "src/components/IncidentBriefClient.tsx"),
+    "utf8"
+  );
+  assert.ok(
+    incidentBriefSource.includes("deduplicateSignalAgainstFacts(") &&
+      incidentBriefSource.includes("{deduplicatedStructuralSignal}"),
+    "IncidentBriefClient.tsx must enforce deduplicateSignalAgainstFacts at the Section II view boundary"
+  );
+
+  // Integration check 8: Verify zero exact or near-duplicate sentences across all seed, snapshot, and live/local incidents
+  const localSnap = readLocalD1Snapshot();
+  const remoteOrLocalSnap = await ensureD1Snapshot().catch(() => localSnap);
+  const allIncidentsToVerify = [
+    ...INITIAL_INCIDENTS,
+    ...snapshotAfterLegacy.incidents,
+    ...localSnap.incidents,
+    ...remoteOrLocalSnap.incidents,
+  ];
+  for (const inc of allIncidentsToVerify) {
+    const hasDup = hasDuplicateSentenceBetweenFactsAndSignal(
+      [inc.socraticBrief, inc.executiveSummary],
+      inc.proportionalityCheck.structuralSignal
+    );
+    assert.equal(
+      hasDup,
+      false,
+      `Incident "${inc.title}" has a duplicate or >50% overlapping sentence between Section I and Section II Signal`
+    );
+  }
+
+  console.log(
+    `  ✓ Issue #16 computeNgramOverlap & deduplicateSignalAgainstFacts verified across all ${allIncidentsToVerify.length} seed, snapshot, and live/local incidents.`
+  );
+  console.log(
+    "\n=== ALL 8 DEFENSIVE HARDENING & CRAFT PROSE OBJECTIVES PASSED (100%) ==="
   );
 }
 

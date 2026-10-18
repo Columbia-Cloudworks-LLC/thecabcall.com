@@ -401,7 +401,7 @@ export function validateSynthesizedBriefOutput(
   const diagnostics = buildOrSanitizeArticleDiagnostics({
     title: row.title,
     sourceFeed: row.source_feed,
-    factualSummary: cleanBrief,
+    factualSummary: `${cleanBrief}\n\n${cleanExec}`,
     primaryTool,
     secondaryTool,
     sreFailureMode,
