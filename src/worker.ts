@@ -44,8 +44,20 @@ import {
   US_HIGH_IMPACT_FEEDS,
 } from "./pipeline/ingest";
 import { evaluateArticleWithJev } from "./pipeline/jev";
-import { R2BucketLike, runWeeklyRollupPipeline } from "./pipeline/rollup";
-import { runSynthesizePipeline } from "./pipeline/synthesize";
+import {
+  buildValidMp3AudioBytes,
+  deleteAdminEpisode,
+  ensureBaselineEpisodesSeeded,
+  extractR2KeyFromAudioUrl,
+  generateAdminEpisode,
+  GenerateEpisodeOverrides,
+  getAdminEpisodeByIdOrSlug,
+  listAdminEpisodes,
+  R2BucketLike,
+  runWeeklyRollupPipeline,
+  updateAdminEpisode,
+} from "./pipeline/rollup";
+import { runSynthesizePipeline, TelemetryArticleRow } from "./pipeline/synthesize";
 
 export interface WorkerEnv {
   DB: D1DatabaseLike;
@@ -260,8 +272,9 @@ const worker = {
 
         let episodes: Record<string, unknown>[] = [];
         try {
+          await ensureBaselineEpisodesSeeded(env.DB);
           const episodesRes = await env.DB.prepare(
-            "SELECT * FROM episodes ORDER BY published_at DESC, id DESC"
+            "SELECT * FROM episodes ORDER BY published_at DESC, episode_number DESC, id DESC"
           ).all<Record<string, unknown>>();
           episodes = episodesRes.results || [];
         } catch {
@@ -310,9 +323,7 @@ const worker = {
           },
           200,
           {
-            "Cache-Control": forceFresh
-              ? "no-store"
-              : "public, s-maxage=30, stale-while-revalidate=120",
+            "Cache-Control": "no-store, max-age=0",
           }
         );
       } catch (err) {
@@ -863,6 +874,40 @@ const worker = {
             reason: body.reason,
           }
         );
+
+        // If an episode was restored (insert/update), ensure its R2 MP3 audio object exists
+        if (
+          replayResult.targetType === "episode" &&
+          replayResult.restoredState &&
+          env.AUDIO_BUCKET
+        ) {
+          try {
+            const restored = replayResult.restoredState;
+            const audioUrl = String(restored.audio_url || "");
+            const slug = String(restored.slug || "restored-episode");
+            const r2Key = extractR2KeyFromAudioUrl(audioUrl, slug);
+            const existingObj = await env.AUDIO_BUCKET.get(r2Key);
+            if (!existingObj) {
+              const mp3Bytes = buildValidMp3AudioBytes(
+                String(restored.title || slug),
+                String(restored.transcript || restored.summary || ""),
+                600
+              );
+              await env.AUDIO_BUCKET.put(r2Key, mp3Bytes, {
+                httpMetadata: { contentType: "audio/mpeg" },
+                customMetadata: {
+                  slug,
+                  restoredFromAuditEvent: body.eventId,
+                },
+              });
+            }
+          } catch (r2Err) {
+            console.warn(
+              "[Audit Replay] Non-fatal error restoring R2 audio:",
+              r2Err
+            );
+          }
+        }
 
         return jsonResponse(replayResult, 200);
       } catch (err) {
@@ -2112,6 +2157,345 @@ const worker = {
           },
           500
         );
+      }
+    }
+
+    // Admin Episodes Studio Routes:
+    // - GET /api/admin/episodes
+    // - GET /api/admin/episodes/:id
+    // - POST /api/admin/episodes/generate (or POST /api/admin/episodes)
+    // - PUT /api/admin/episodes/:id (or PUT /api/admin/episodes)
+    // - DELETE /api/admin/episodes/:id (or POST /api/admin/episodes/delete or DELETE /api/admin/episodes)
+    if (
+      url.pathname === "/api/admin/episodes" ||
+      url.pathname.startsWith("/api/admin/episodes/")
+    ) {
+      const actor = await resolveAdminActor(request, env);
+      if (!actor) {
+        return jsonResponse(
+          { ok: false, error: "Unauthorized: Admin authentication required" },
+          401
+        );
+      }
+
+      const subPath = url.pathname
+        .slice("/api/admin/episodes".length)
+        .replace(/^\/+|\/+$/g, "");
+
+      // GET /api/admin/episodes or GET /api/admin/episodes/:id
+      if (request.method === "GET") {
+        try {
+          if (subPath && subPath !== "generate" && subPath !== "delete") {
+            const found = await getAdminEpisodeByIdOrSlug(
+              env.DB,
+              decodeURIComponent(subPath)
+            );
+            if (!found) {
+              return jsonResponse(
+                { ok: false, error: `Episode not found: ${subPath}` },
+                404
+              );
+            }
+            return jsonResponse(
+              {
+                ok: true,
+                episode: found.record,
+              },
+              200,
+              { "Cache-Control": "no-store" }
+            );
+          }
+
+          const [episodes, candidateArticlesRes] = await Promise.all([
+            listAdminEpisodes(env.DB),
+            env.DB.prepare(
+              `SELECT * FROM telemetry_articles
+               WHERE status IN ('synthesized', 'triaged')
+               ORDER BY
+                 CASE WHEN status = 'synthesized' THEN 0 ELSE 1 END,
+                 is_systemic_prob DESC,
+                 published_at DESC
+               LIMIT 40`
+            ).all<TelemetryArticleRow>(),
+          ]);
+
+          return jsonResponse(
+            {
+              ok: true,
+              episodes,
+              candidateIncidents: candidateArticlesRes.results || [],
+              totalCount: episodes.length,
+            },
+            200,
+            { "Cache-Control": "no-store" }
+          );
+        } catch (err) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            500
+          );
+        }
+      }
+
+      // Mutating methods require owner, admin, or editor role
+      if (actor.role === "auditor") {
+        return jsonResponse(
+          {
+            ok: false,
+            error: "Forbidden: Auditor role is read-only.",
+          },
+          403
+        );
+      }
+
+      const clientIp =
+        request.headers.get("cf-connecting-ip") ||
+        request.headers.get("x-forwarded-for");
+
+      // POST /api/admin/episodes/generate (or POST /api/admin/episodes when not /delete)
+      if (
+        request.method === "POST" &&
+        (subPath === "generate" || subPath === "")
+      ) {
+        try {
+          let body: {
+            episodeNumber?: number;
+            titleOverride?: string;
+            summaryOverride?: string;
+            editorialFocusNote?: string;
+            windowDays?: number;
+            incidentIds?: number[];
+            ttsVoice?: string;
+            ttsProvider?: "gemini-tts" | "mpeg-framed";
+            reason?: string;
+            actorEmail?: string;
+            actorRole?: string;
+            authMethod?: AuditAuthMethod;
+          } = {};
+          try {
+            const raw = await request.text();
+            if (raw.trim()) body = JSON.parse(raw);
+          } catch {
+            // default overrides
+          }
+
+          const overrides: GenerateEpisodeOverrides = {
+            episodeNumber: body.episodeNumber,
+            titleOverride: body.titleOverride,
+            summaryOverride: body.summaryOverride,
+            editorialFocusNote: body.editorialFocusNote,
+            windowDays: body.windowDays,
+            incidentIds: Array.isArray(body.incidentIds)
+              ? body.incidentIds
+              : undefined,
+            ttsVoice: body.ttsVoice,
+            ttsProvider: body.ttsProvider,
+          };
+
+          const result = await generateAdminEpisode({
+            db: env.DB,
+            audioBucket: env.AUDIO_BUCKET,
+            geminiApiKey: env.GEMINI_API_KEY,
+            overrides,
+            reason: body.reason,
+            actor: {
+              actorEmail: body.actorEmail || actor.email,
+              actorRole: body.actorRole || actor.role,
+              authMethod: body.authMethod || actor.authMethod,
+              actorIpHash: await hashActorIp(clientIp),
+            },
+          });
+
+          const episodes = await listAdminEpisodes(env.DB);
+          return jsonResponse(
+            {
+              ok: true,
+              ...result,
+              episodes,
+            },
+            201,
+            { "Cache-Control": "no-store" }
+          );
+        } catch (err) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            400
+          );
+        }
+      }
+
+      // PUT /api/admin/episodes/:id or PUT /api/admin/episodes
+      if (request.method === "PUT") {
+        try {
+          const body = (await request.json()) as {
+            id?: number | string;
+            slug?: string;
+            title?: string;
+            summary?: string;
+            transcript?: string;
+            transcriptSections?: {
+              weeklyTelemetry?: string;
+              separatingSignalFromPanic?: string;
+              forwardPosture?: string;
+            };
+            episodeNumber?: number;
+            publishedAt?: string;
+            regenerateAudio?: boolean;
+            ttsVoice?: string;
+            ttsProvider?: "gemini-tts" | "mpeg-framed";
+            reason?: string;
+            actorEmail?: string;
+            actorRole?: string;
+            authMethod?: AuditAuthMethod;
+          };
+
+          const targetIdOrSlug =
+            (subPath && subPath !== "generate" && subPath !== "delete"
+              ? decodeURIComponent(subPath)
+              : undefined) ||
+            body.id ||
+            body.slug ||
+            url.searchParams.get("id") ||
+            url.searchParams.get("slug");
+
+          if (!targetIdOrSlug) {
+            return jsonResponse(
+              { ok: false, error: "Missing required episode id or slug" },
+              400
+            );
+          }
+
+          const result = await updateAdminEpisode({
+            db: env.DB,
+            audioBucket: env.AUDIO_BUCKET,
+            geminiApiKey: env.GEMINI_API_KEY,
+            idOrSlug: targetIdOrSlug,
+            input: {
+              title: body.title,
+              summary: body.summary,
+              transcript: body.transcript,
+              transcriptSections: body.transcriptSections,
+              episodeNumber: body.episodeNumber,
+              publishedAt: body.publishedAt,
+              regenerateAudio: body.regenerateAudio,
+              ttsVoice: body.ttsVoice,
+              ttsProvider: body.ttsProvider,
+              reason: body.reason,
+            },
+            actor: {
+              actorEmail: body.actorEmail || actor.email,
+              actorRole: body.actorRole || actor.role,
+              authMethod: body.authMethod || actor.authMethod,
+              actorIpHash: await hashActorIp(clientIp),
+            },
+          });
+
+          const episodes = await listAdminEpisodes(env.DB);
+          return jsonResponse(
+            {
+              ok: true,
+              ...result,
+              episodes,
+            },
+            200,
+            { "Cache-Control": "no-store" }
+          );
+        } catch (err) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            400
+          );
+        }
+      }
+
+      // DELETE /api/admin/episodes/:id, DELETE /api/admin/episodes, or POST /api/admin/episodes/delete
+      if (
+        request.method === "DELETE" ||
+        (request.method === "POST" && subPath === "delete")
+      ) {
+        try {
+          let body: {
+            id?: number | string;
+            slug?: string;
+            purgeAudio?: boolean;
+            reason?: string;
+            actorEmail?: string;
+            actorRole?: string;
+            authMethod?: AuditAuthMethod;
+          } = {};
+          try {
+            const raw = await request.text();
+            if (raw.trim()) body = JSON.parse(raw);
+          } catch {
+            // ignore empty body
+          }
+
+          const targetIdOrSlug =
+            (subPath && subPath !== "delete" && subPath !== "generate"
+              ? decodeURIComponent(subPath)
+              : undefined) ||
+            body.id ||
+            body.slug ||
+            url.searchParams.get("id") ||
+            url.searchParams.get("slug");
+
+          if (!targetIdOrSlug) {
+            return jsonResponse(
+              { ok: false, error: "Missing required episode id or slug" },
+              400
+            );
+          }
+
+          const purgeParam = url.searchParams.get("purgeAudio");
+          const purgeAudio =
+            body.purgeAudio !== undefined
+              ? Boolean(body.purgeAudio)
+              : purgeParam !== null
+              ? purgeParam !== "false" && purgeParam !== "0"
+              : true;
+
+          const result = await deleteAdminEpisode({
+            db: env.DB,
+            audioBucket: env.AUDIO_BUCKET,
+            idOrSlug: targetIdOrSlug,
+            purgeAudio,
+            reason: body.reason || url.searchParams.get("reason") || "",
+            actor: {
+              actorEmail: body.actorEmail || actor.email,
+              actorRole: body.actorRole || actor.role,
+              authMethod: body.authMethod || actor.authMethod,
+              actorIpHash: await hashActorIp(clientIp),
+            },
+          });
+
+          const episodes = await listAdminEpisodes(env.DB);
+          return jsonResponse(
+            {
+              ok: true,
+              ...result,
+              episodes,
+            },
+            200,
+            { "Cache-Control": "no-store" }
+          );
+        } catch (err) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            400
+          );
+        }
       }
     }
 

@@ -13,7 +13,7 @@ function escapeXml(unsafe: string): string {
 }
 
 export async function GET() {
-  await ensureD1Snapshot();
+  await ensureD1Snapshot(true);
   const episodes = getAllEpisodes();
   const siteUrl = "https://thecabcall.com";
 
@@ -71,7 +71,7 @@ ${itemsXml}
     status: 200,
     headers: {
       "Content-Type": "application/rss+xml; charset=utf-8",
-      "Cache-Control": "s-maxage=300, stale-while-revalidate=600",
+      "Cache-Control": "no-store, max-age=0",
     },
   });
 }

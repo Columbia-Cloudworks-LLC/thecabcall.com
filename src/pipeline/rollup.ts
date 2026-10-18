@@ -1,3 +1,8 @@
+import {
+  appendAuditEntry,
+  AuditAuthMethod,
+  AuditLedgerEntry,
+} from "./audit";
 import { D1DatabaseLike } from "./ingest";
 import { JevSreFailureModeKey, JevWorkingToolKey } from "./jev";
 import {
@@ -34,6 +39,7 @@ export interface R2BucketLike {
       range?: { offset?: number; length?: number; suffix?: number };
     }
   ): Promise<R2ObjectLike | null>;
+  delete(key: string | string[]): Promise<void>;
 }
 
 export interface WeeklyTelemetryAggregates {
@@ -88,6 +94,58 @@ export interface RollupEpisodeRecord {
   };
 }
 
+export interface GenerateEpisodeOverrides {
+  episodeNumber?: number;
+  titleOverride?: string;
+  summaryOverride?: string;
+  editorialFocusNote?: string;
+  windowDays?: number;
+  incidentIds?: number[];
+  ttsVoice?: string;
+  ttsProvider?: "gemini-tts" | "mpeg-framed";
+}
+
+export interface EpisodeAdminActor {
+  actorEmail: string;
+  actorRole?: string;
+  authMethod: AuditAuthMethod;
+  actorIpHash?: string | null;
+}
+
+export interface AdminEpisodeRecord {
+  id: number;
+  episodeNumber: number;
+  slug: string;
+  series: "weekly_rollup" | "legacy_archive";
+  title: string;
+  summary: string;
+  transcript: string;
+  transcriptSections: {
+    weeklyTelemetry: string;
+    separatingSignalFromPanic: string;
+    forwardPosture: string;
+  };
+  audioUrl: string;
+  r2Key: string;
+  durationSeconds: number;
+  durationFormatted: string;
+  fileSizeBytes: number;
+  publishedAt: string;
+}
+
+export interface D1EpisodeTableRow {
+  id: number;
+  episode_number: number | null;
+  slug: string;
+  title: string;
+  summary: string;
+  transcript: string | null;
+  audio_url: string;
+  duration_seconds: number;
+  file_size_bytes: number;
+  published_at: string;
+}
+
 export const ROLLUP_RESPONSE_SCHEMA = {
   type: "OBJECT",
   properties: {
@@ -104,7 +162,7 @@ export const ROLLUP_RESPONSE_SCHEMA = {
     weekly_telemetry: {
       type: "STRING",
       description:
-        "Part 1 [00:00 — THE WEEKLY TELEMETRY] (~180 words). Spoken podcast script opening with the 7-day telemetry aggregates (total evaluated, noise rejection rate %, dominant Working Tool %, top SRE failure mode) and introducing the top synthesized incidents.",
+        "Part 1 [00:00 — THE WEEKLY TELEMETRY] (~180 words). Spoken podcast script opening with the telemetry aggregates (total evaluated, noise rejection rate %, dominant Working Tool %, top SRE failure mode) and introducing the top synthesized incidents.",
     },
     separating_signal_from_panic: {
       type: "STRING",
@@ -126,30 +184,350 @@ export const ROLLUP_RESPONSE_SCHEMA = {
   ],
 };
 
+const BASELINE_ARCHIVE_EPISODES: Array<{
+  episode_number: number;
+  slug: string;
+  title: string;
+  summary: string;
+  transcript: string;
+  audio_url: string;
+  duration_seconds: number;
+  file_size_bytes: number;
+  published_at: string;
+}> = [
+  {
+    episode_number: 42,
+    slug: "cab-weekly-brief-042-configuration-drift-and-the-square",
+    title:
+      "CAB Weekly Brief #42: Configuration Drift (44% Square), Unpinned Certs, and Separated Signal",
+    summary:
+      "Friday 5-minute systems retrospective covering October 10–16, 2026. Why 91.2% of wire traffic was discarded as noise, how unverified vendor exemptions in municipal utilities mirror unpinned TLS certificates in banking, and where to apply The Plumb and The Common Gavel over the next 7 days.",
+    published_at: "2026-10-16T12:00:00Z",
+    duration_seconds: 304,
+    file_size_bytes: 4864000,
+    audio_url: "/audio/cab-weekly-brief-042.mp3",
+    transcript: `[00:00 — THE WEEKLY TELEMETRY]
+If you watched the feeds this week, you saw three separate sectors—municipal water utilities, regional clearing banks, and federal aviation dispatch—hit the exact same structural wall. Across thirty-eight high-signal items evaluated by our classifier over the past seven days, the common thread wasn't malice or exotic external sabotage. It was silent configuration drift. In our telemetry this week, The Square led every other working tool at forty-four percent of primary classifications, followed by The Plumb at twenty-two percent. Whether it was fourteen water districts signing annual segmentation attestations while leaving vendor VPN bridges wide open (#CAB-2026-1042), or a SaaS platform whose auto-generated tests mocked out its own access controls (#CAB-2026-1036), institutions spent the week discovering that their live production environments had quietly drifted away from their written specifications.
+
+[01:15 — SEPARATING SIGNAL FROM PANIC]
+The outrage cycle wants you to treat every one of these disclosures as either an imminent collapse or a morality play with a convenient villain. Good systems architecture tells us otherwise: a noisy alert on an edge node isn't a core outage, and an audit finding is telemetry, not an attack. Look at Wednesday's four-hour settlement halt across sixty-two credit unions (#CAB-2026-1041). Social feeds immediately jumped to liquidity panic. In reality, not a single ledger was compromised; a warm-standby node rotated an intermediate TLS certificate that legacy middleware still had pinned, and synthetic health checks missed it because those probes bypassed the mutual-TLS proxy. The news cycle overblew the four-hour delay while missing the actual structural constraint: synthetic monitoring that bypasses the authentication boundary is worse than no monitoring at all, because it manufactures false confidence. We saw the exact same inversion in the transportation subcommittee hearing (#CAB-2026-1040), where three hours of cameras focused on a single night-shift technician who ran an unvalidated sync script, while burying Appendix C—which showed management had decommissioned the pre-production staging environment eight months ago to shave cloud hosting costs.
+
+[03:30 — THE FORWARD POSTURE / TOOLS ON THE TRESTLEBOARD]
+Here is how to set your posture on the trestleboard for the coming week. First, for the utility boards and regulatory staff walking into next week's remediation reviews on the SCADA audit, the work requires The Common Gavel before anything else—chipping away defensive PR language and vendor finger-pointing so teams can inspect why maintenance budgets forced reliance on undocumented remote tunnels. Second, as banks and clearing houses review their standby runbooks after Wednesday's TLS halt, apply The Plumb directly to the synthetic test suite: if a health check passes by skipping the hardest boundary in production, realign the check even if it drops your quarterly uptime graph below four nines. Finally, for all of us observing from the outside, keep The 24-Inch Gauge firmly on your own attention budget. Refuse to spend cognitive cycles on televised blame sessions that punish the last operator to touch the keyboard while the missing staging environment remains unfunded. Until the post-mortem addresses the system that permitted the error, treat the commentary as jitter.`,
+  },
+  {
+    episode_number: 41,
+    slug: "cab-weekly-brief-041-alert-fatigue-and-interface-mortar",
+    title:
+      "CAB Weekly Brief #41: Alert Fatigue in Clinical Workflows and Spreading the Trowel Across Port APIs",
+    summary:
+      "Friday 5-minute systems retrospective covering October 3–9, 2026. Examining cognitive error budgets under The 24-Inch Gauge and how unilateral API schema cutovers fracture institutional trust.",
+    published_at: "2026-10-09T12:00:00Z",
+    duration_seconds: 292,
+    file_size_bytes: 4672000,
+    audio_url: "/audio/cab-weekly-brief-041.mp3",
+    transcript: `[00:00 — THE WEEKLY TELEMETRY]
+Across our ingestion window this week, The 24-Inch Gauge and The Trowel accounted for nearly seventy percent of high-confidence classifications. Two systemic anti-patterns dominated the board: organizations treating operator attention as a free, inexhaustible buffer, and upstream authorities breaking shared interface contracts without backward-compatible mortar.
+
+[01:15 — SEPARATING SIGNAL FROM PANIC]
+When the clinical informatics study (#CAB-2026-1039) showed physicians overriding ninety-four percent of medication pop-ups within two seconds, pundits called for stricter clinician training. Systems engineering points to the opposite conclusion: when compliance committees add 114 modal interrupts per shift to transfer legal liability downward, they exhaust the cognitive error budget and train operators to auto-dismiss everything. Similarly, the fourteen-thousand-container port backup (#CAB-2026-1038) wasn't a macroeconomic trade freeze—it was an unversioned JSON validator rejecting dry-freight manifests over an optional hazmat field.
+
+[03:30 — THE FORWARD POSTURE / TOOLS ON THE TRESTLEBOARD]
+Going into next week, apply The 24-Inch Gauge to every interruptive rule in your governance and alerting queues: if an alert does not require immediate human action, delete or demote it so true Tier-1 warnings regain their weight. And where your systems meet external partners, use The Trowel—version your schemas, run dual-read windows, and never let a strict parser halt physical throughput when a dead-letter queue can preserve flow.`,
+  },
+  {
+    episode_number: 12,
+    slug: "legacy-cab-012-blameless-postmortems-and-the-rough-ashlar",
+    title:
+      "Legacy Archive #12: Blameless Post-Mortems, The Rough Ashlar, and Why Firing the Operator Guarantees a Repeat Outage",
+    summary:
+      "Original full-length Change Advisory Board deep-dive episode from the pre-automation archive. Exploring the historical origins of blameless aviation and SRE post-mortems alongside the operative use of The Common Gavel.",
+    published_at: "2025-04-18T14:00:00Z",
+    duration_seconds: 1640,
+    file_size_bytes: 26240000,
+    audio_url: "/audio/cab-episode-012-rough-ashlar.mp3",
+    transcript: `[ARCHIVE TRANSCRIPT — EPISODE 12]
+Welcome to the Change Advisory Board. In today's deep dive, we examine why human institutions default to scapegoating during high-visibility outages, and how both Site Reliability Engineering and the Masonic tradition offer a more durable path.
+
+When an outage hits the front page, the first impulse of an unexamined hierarchy is to find the last human hand that touched the control plane and sever it. It feels decisive. It gives the board or the committee a clean headline before the weekend. Yet in distributed systems engineering, we learned decades ago that human error is never the root cause—it is the symptom of a system whose guardrails, affordances, and error budgets were already compromised.
+
+In the lodge, we speak of the Rough Ashlar and the Common Gavel. We do not strike the stone to destroy it; we chip away the superfluous projections—fear, vanity, defensive posturing—so the true geometry underneath can be measured and squared...`,
+  },
+  {
+    episode_number: 11,
+    slug: "legacy-cab-011-error-budgets-and-the-twenty-four-inch-gauge",
+    title:
+      "Legacy Archive #11: Error Budgets, Toil Caps, and the Twenty-Four-Inch Gauge in Civic Life",
+    summary:
+      "Original Change Advisory Board archive episode examining how SRE error budgets quantify the tension between innovation velocity and stability, and how citizens can apply the 24-Inch Gauge to modern media consumption.",
+    published_at: "2025-03-28T14:00:00Z",
+    duration_seconds: 1515,
+    file_size_bytes: 24240000,
+    audio_url: "/audio/cab-episode-011-error-budgets.mp3",
+    transcript: `[ARCHIVE TRANSCRIPT — EPISODE 11]
+Every system has a finite capacity for change before its reliability degrades, and every human mind has a finite capacity for interrupts before its judgment degrades. In Site Reliability Engineering, we formalize this through the Error Budget and the 50% toil cap: if an on-call team spends more than half its hours extinguishing repetitive fires, feature deployments freeze until engineering bandwidth is reinvested in automation and root-cause remediation.
+
+Now apply the 24-Inch Gauge to how we consume civic news. The modern outrage machine is an unthrottled pager that pages at P0 severity every twelve minutes...`,
+  },
+  {
+    episode_number: 10,
+    slug: "legacy-cab-010-slas-slos-and-trying-the-plumb",
+    title:
+      "Legacy Archive #10: SLAs, SLOs, SLIs, and Trying the Wall by The Plumb",
+    summary:
+      "Original Change Advisory Board archive episode dissecting the difference between external promises (SLAs), internal objectives (SLOs), and actual measurements (SLIs)—and why The Plumb never bends to quarterly politics.",
+    published_at: "2025-03-07T14:00:00Z",
+    duration_seconds: 1710,
+    file_size_bytes: 27360000,
+    audio_url: "/audio/cab-episode-010-trying-the-plumb.mp3",
+    transcript: `[ARCHIVE TRANSCRIPT — EPISODE 10]
+A plumb line works because gravity cannot be lobbied. You can repaint a leaning wall, you can issue a press release declaring the masonry vertical, or you can redefine 'upright' in a committee memo—but the lead weight on the cord still points to the center of the earth.
+
+In systems engineering, Service Level Indicators (SLIs) are our plumb line. The danger begins when organizations confuse the indicator with the public relations narrative...`,
+  },
+];
+
 /**
- * Queries D1 `telemetry_articles` over the past 7 days to compute real telemetry aggregates.
+ * Ensures the 5 baseline archive episodes (#42, #41, #12, #11, #10) are seeded once into D1 `episodes`
+ * so all episodes visible on `/archive` and `/feed.xml` are managed in D1 and can be edited or deleted.
+ */
+export async function ensureBaselineEpisodesSeeded(
+  db: D1DatabaseLike
+): Promise<void> {
+  try {
+    await db
+      .prepare(
+        `CREATE TABLE IF NOT EXISTS system_settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )`
+      )
+      .run();
+
+    const flag = await db
+      .prepare(
+        "SELECT value FROM system_settings WHERE key = 'baseline_episodes_seeded_v1'"
+      )
+      .first<{ value: string }>();
+
+    if (flag?.value === "1") {
+      return;
+    }
+
+    for (const ep of BASELINE_ARCHIVE_EPISODES) {
+      await db
+        .prepare(
+          `INSERT OR IGNORE INTO episodes (
+            episode_number,
+            slug,
+            title,
+            summary,
+            transcript,
+            audio_url,
+            duration_seconds,
+            file_size_bytes,
+            published_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        )
+        .bind(
+          ep.episode_number,
+          ep.slug,
+          ep.title,
+          ep.summary,
+          ep.transcript,
+          ep.audio_url,
+          ep.duration_seconds,
+          ep.file_size_bytes,
+          ep.published_at
+        )
+        .run();
+    }
+
+    await db
+      .prepare(
+        `INSERT INTO system_settings (key, value, updated_at)
+         VALUES ('baseline_episodes_seeded_v1', '1', datetime('now'))
+         ON CONFLICT(key) DO UPDATE SET value = '1', updated_at = datetime('now')`
+      )
+      .run();
+  } catch (err) {
+    console.warn("[Rollup] Failed to seed baseline archive episodes:", err);
+  }
+}
+
+export function extractR2KeyFromAudioUrl(
+  audioUrl: string,
+  fallbackSlug?: string
+): string {
+  const trimmed = (audioUrl || "").trim();
+  if (trimmed.startsWith("/audio/")) {
+    return decodeURIComponent(trimmed.slice("/audio/".length));
+  }
+  try {
+    const u = new URL(trimmed);
+    if (u.pathname.startsWith("/audio/")) {
+      return decodeURIComponent(u.pathname.slice("/audio/".length));
+    }
+    const base = u.pathname.split("/").pop();
+    if (base) return decodeURIComponent(base);
+  } catch {
+    // Not a full URL
+  }
+  const parts = trimmed.split("/").filter(Boolean);
+  if (parts.length > 0) {
+    return decodeURIComponent(parts[parts.length - 1]);
+  }
+  return `${fallbackSlug || "episode"}.mp3`;
+}
+
+export function parseEpisodeTranscriptSections(transcript: string): {
+  weeklyTelemetry: string;
+  separatingSignalFromPanic: string;
+  forwardPosture: string;
+} {
+  if (!transcript) {
+    return {
+      weeklyTelemetry: "",
+      separatingSignalFromPanic: "",
+      forwardPosture: "",
+    };
+  }
+  const part1Match = transcript.match(
+    /\[00:00[^\]]*\]([\s\S]*?)(?=\[01:15|$)/i
+  );
+  const part2Match = transcript.match(
+    /\[01:15[^\]]*\]([\s\S]*?)(?=\[03:30|$)/i
+  );
+  const part3Match = transcript.match(/\[03:30[^\]]*\]([\s\S]*?)$/i);
+
+  if (!part1Match && !part2Match && !part3Match) {
+    return {
+      weeklyTelemetry: transcript.trim(),
+      separatingSignalFromPanic: "",
+      forwardPosture: "",
+    };
+  }
+
+  return {
+    weeklyTelemetry: (part1Match?.[1] || "").trim(),
+    separatingSignalFromPanic: (part2Match?.[1] || "").trim(),
+    forwardPosture: (part3Match?.[1] || "").trim(),
+  };
+}
+
+export function formatThreePartTranscript(sections: {
+  weeklyTelemetry?: string;
+  separatingSignalFromPanic?: string;
+  forwardPosture?: string;
+}): string {
+  const cleanPart1 = (sections.weeklyTelemetry || "")
+    .replace(/^\[00:00[^\]]*\]\s*/i, "")
+    .trim();
+  const cleanPart2 = (sections.separatingSignalFromPanic || "")
+    .replace(/^\[01:15[^\]]*\]\s*/i, "")
+    .trim();
+  const cleanPart3 = (sections.forwardPosture || "")
+    .replace(/^\[03:30[^\]]*\]\s*/i, "")
+    .trim();
+
+  if (!cleanPart2 && !cleanPart3) {
+    return cleanPart1;
+  }
+
+  return `[00:00 — THE WEEKLY TELEMETRY]\n${cleanPart1}\n\n[01:15 — SEPARATING SIGNAL FROM PANIC]\n${cleanPart2}\n\n[03:30 — THE FORWARD POSTURE / TOOLS ON THE TRESTLEBOARD]\n${cleanPart3}`;
+}
+
+export function mapD1RowToAdminEpisode(
+  row: D1EpisodeTableRow
+): AdminEpisodeRecord {
+  const episodeNumber = Number(row.episode_number || 43);
+  const durationSeconds = Number(row.duration_seconds || 300);
+  const mins = Math.floor(durationSeconds / 60)
+    .toString()
+    .padStart(2, "0");
+  const secs = Math.floor(durationSeconds % 60)
+    .toString()
+    .padStart(2, "0");
+  const transcript = row.transcript || row.summary || "";
+  const isLegacy =
+    row.slug.startsWith("legacy-") ||
+    row.title.toLowerCase().includes("legacy archive") ||
+    episodeNumber <= 30;
+
+  return {
+    id: Number(row.id),
+    episodeNumber,
+    slug: row.slug,
+    series: isLegacy ? "legacy_archive" : "weekly_rollup",
+    title: row.title,
+    summary: row.summary,
+    transcript,
+    transcriptSections: parseEpisodeTranscriptSections(transcript),
+    audioUrl: row.audio_url,
+    r2Key: extractR2KeyFromAudioUrl(row.audio_url, row.slug),
+    durationSeconds,
+    durationFormatted: `${mins}:${secs}`,
+    fileSizeBytes: Number(row.file_size_bytes || 256000),
+    publishedAt: row.published_at,
+  };
+}
+
+/**
+ * Queries D1 `telemetry_articles` over the specified window (default 7 days) or hand-picked `incidentIds`
+ * to compute real telemetry aggregates.
  */
 export async function computeWeeklyAggregatesFromD1(
-  db: D1DatabaseLike
+  db: D1DatabaseLike,
+  options?: {
+    windowDays?: number;
+    incidentIds?: number[];
+  }
 ): Promise<WeeklyTelemetryAggregates> {
+  const windowDays = Math.min(
+    90,
+    Math.max(1, Number(options?.windowDays ?? 7))
+  );
+  const windowModifier = `-${windowDays} days`;
+
   const recentResult = await db
     .prepare(
       `SELECT * FROM telemetry_articles
-       WHERE published_at >= datetime('now', '-7 days')
-          OR ingested_at >= datetime('now', '-7 days')
+       WHERE published_at >= datetime('now', ?)
+          OR ingested_at >= datetime('now', ?)
        ORDER BY published_at DESC`
     )
+    .bind(windowModifier, windowModifier)
     .all<TelemetryArticleRow>();
 
   let rows = recentResult.results || [];
   if (rows.length === 0) {
     const fallbackAll = await db
-      .prepare("SELECT * FROM telemetry_articles ORDER BY published_at DESC LIMIT 50")
+      .prepare(
+        "SELECT * FROM telemetry_articles ORDER BY published_at DESC LIMIT 50"
+      )
       .all<TelemetryArticleRow>();
     rows = fallbackAll.results || [];
   }
 
-  const totalEvaluated = rows.length;
+  let customSelectedRows: TelemetryArticleRow[] = [];
+  if (options?.incidentIds && options.incidentIds.length > 0) {
+    const validIds = options.incidentIds
+      .map((n) => Number(n))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    if (validIds.length > 0) {
+      const placeholders = validIds.map(() => "?").join(", ");
+      const customRes = await db
+        .prepare(
+          `SELECT * FROM telemetry_articles WHERE id IN (${placeholders}) ORDER BY is_systemic_prob DESC, published_at DESC`
+        )
+        .bind(...validIds)
+        .all<TelemetryArticleRow>();
+      customSelectedRows = customRes.results || [];
+    }
+  }
+
+  const totalEvaluated = Math.max(rows.length, customSelectedRows.length);
   const droppedRows = rows.filter((r) => r.status === "dropped");
   const activeRows = rows.filter(
     (r) => r.status === "synthesized" || r.status === "triaged"
@@ -178,7 +556,12 @@ export async function computeWeeklyAggregatesFromD1(
     capacity_exhaustion: 0,
   };
 
-  const poolForDominant = activeRows.length > 0 ? activeRows : rows;
+  const poolForDominant =
+    customSelectedRows.length > 0
+      ? customSelectedRows
+      : activeRows.length > 0
+      ? activeRows
+      : rows;
   for (const row of poolForDominant) {
     if (row.primary_tool in toolCounts) {
       toolCounts[row.primary_tool]++;
@@ -204,20 +587,27 @@ export async function computeWeeklyAggregatesFromD1(
   const topSreFailureMode: JevSreFailureModeKey =
     sortedSre[0]?.[0] || "configuration_drift";
 
-  // Prefer 'synthesized' rows first, then 'triaged', ordered by systemic probability & recency
-  const synthesizedRows = rows
-    .filter((r) => r.status === "synthesized")
-    .sort((a, b) => b.is_systemic_prob - a.is_systemic_prob);
-  const triagedRows = rows
-    .filter((r) => r.status === "triaged")
-    .sort((a, b) => b.is_systemic_prob - a.is_systemic_prob);
+  let topIncidents: TelemetryArticleRow[];
+  if (customSelectedRows.length > 0) {
+    topIncidents = customSelectedRows.slice(0, 6);
+  } else {
+    const synthesizedRows = rows
+      .filter((r) => r.status === "synthesized")
+      .sort((a, b) => b.is_systemic_prob - a.is_systemic_prob);
+    const triagedRows = rows
+      .filter((r) => r.status === "triaged")
+      .sort((a, b) => b.is_systemic_prob - a.is_systemic_prob);
 
-  const topIncidents = [...synthesizedRows, ...triagedRows].slice(0, 5);
+    topIncidents = [...synthesizedRows, ...triagedRows].slice(0, 5);
+  }
 
   return {
-    windowDays: 7,
+    windowDays,
     totalEvaluated,
-    triagedOrSynthesizedCount: activeRows.length,
+    triagedOrSynthesizedCount:
+      customSelectedRows.length > 0
+        ? customSelectedRows.length
+        : activeRows.length,
     droppedCount: droppedRows.length,
     noiseRejectionRatePct,
     dominantTool,
@@ -232,7 +622,8 @@ export async function computeWeeklyAggregatesFromD1(
 
 function buildDeterministicRollupScript(
   agg: WeeklyTelemetryAggregates,
-  episodeNumber: number
+  episodeNumber: number,
+  editorialFocusNote?: string
 ): RollupTranscriptPayload {
   const inc1 = agg.topIncidents[0];
   const inc2 = agg.topIncidents[1] || inc1;
@@ -250,8 +641,11 @@ function buildDeterministicRollupScript(
 
   const prop1 = parseProportionality(inc1);
   const prop2 = parseProportionality(inc2);
+  const focusClause = editorialFocusNote?.trim()
+    ? ` Editorial Focus Directive for this docket: ${editorialFocusNote.trim()}.`
+    : "";
 
-  const weekly_telemetry = `Welcome to the Friday Change Advisory Board Weekly Brief, Episode ${episodeNumber}. Across the past seven days of automated ingestion, our System-1 TypeSafe Jev classifier evaluated ${agg.totalEvaluated} dispatches across the five primary US feeds, rejecting ${agg.noiseRejectionRatePct}% (${agg.droppedCount} items) as non-systemic noise at the ingestion gate and promoting ${agg.triagedOrSynthesizedCount} high-signal incidents for System-2 review. Looking across the trestleboard this week, ${agg.dominantToolDisplay} led all Working Tools at ${agg.dominantToolPct}% of primary classifications, while ${agg.topSreFailureDisplay} emerged as the dominant operational failure mode. Three active incidents anchor our post-incident docket today: first, from ${inc1?.source_feed || "WSJ US Business"}, "${inc1?.title || "Institutional Capacity & Policy Drift"}", classified under ${WORKING_TOOL_DISPLAY_NAMES[inc1?.primary_tool || "square"]}; second, from ${inc2?.source_feed || "NYT HomePage"}, "${inc2?.title || "Cross-Silo Coordination Strain"}", flagged under ${WORKING_TOOL_DISPLAY_NAMES[inc2?.primary_tool || "level"]}; and third, "${inc3?.title || "Regulatory Execution Divergence"}", where ${SRE_FAILURE_DISPLAY_NAMES[inc3?.sre_failure_mode || "configuration_drift"]} exposed the gap between nominal policy and live production state.`;
+  const weekly_telemetry = `Welcome to the Friday Change Advisory Board Weekly Brief, Episode ${episodeNumber}. Across the past ${agg.windowDays} days of automated ingestion, our System-1 TypeSafe Jev classifier evaluated ${agg.totalEvaluated} dispatches across the active US feeds, rejecting ${agg.noiseRejectionRatePct}% (${agg.droppedCount} items) as non-systemic noise at the ingestion gate and promoting ${agg.triagedOrSynthesizedCount} high-signal incidents for System-2 review.${focusClause} Looking across the trestleboard this week, ${agg.dominantToolDisplay} led all Working Tools at ${agg.dominantToolPct}% of primary classifications, while ${agg.topSreFailureDisplay} emerged as the dominant operational failure mode. Three active incidents anchor our post-incident docket today: first, from ${inc1?.source_feed || "WSJ US Business"}, "${inc1?.title || "Institutional Capacity & Policy Drift"}", classified under ${WORKING_TOOL_DISPLAY_NAMES[inc1?.primary_tool || "square"]}; second, from ${inc2?.source_feed || "NYT HomePage"}, "${inc2?.title || "Cross-Silo Coordination Strain"}", flagged under ${WORKING_TOOL_DISPLAY_NAMES[inc2?.primary_tool || "level"]}; and third, "${inc3?.title || "Regulatory Execution Divergence"}", where ${SRE_FAILURE_DISPLAY_NAMES[inc3?.sre_failure_mode || "configuration_drift"]} exposed the gap between nominal policy and live production state.`;
 
   const separating_signal_from_panic = `The 24-hour commentary cycle wants you to read each of these events as a morality play or an unprecedented institutional collapse. When we apply the Proportionality Check, a far more actionable systems pattern comes into focus. Take "${inc1?.title || "our lead dispatch"}" first. ${prop1?.noise_overblown || "Public commentary immediately fixated on headline optics and individual blame."} Yet the structural signal underneath is straightforward: ${prop1?.structural_signal || "when an institution defers structural reconciliation, live execution inevitably drifts from its chartered specification."} We see the exact same signal-to-noise inversion in "${inc2?.title || "our second incident"}". ${prop2?.noise_overblown || "Partisan observers treated the disruption as a sudden shock."} In reality, ${prop2?.structural_signal || "Jev's telemetry points directly to capacity exhaustion and asymmetric risk allocation that accumulated quietly across multiple quarters."} And in "${inc3?.title || "our third triaged event"}", the friction between ${WORKING_TOOL_DISPLAY_NAMES[inc3?.primary_tool || "trowel"]} and ${WORKING_TOOL_DISPLAY_NAMES[inc3?.secondary_tool || "common_gavel"]} demonstrates how quickly cross-group coordination fractures when upstream safeguards go untested in production. None of these incidents have completed a verified post-mortem, which means any sweeping verdict right now is premature jitter rather than verified engineering truth.`;
 
@@ -269,12 +663,17 @@ function buildDeterministicRollupScript(
 export async function generateRollupTranscriptWithGemini(
   agg: WeeklyTelemetryAggregates,
   episodeNumber: number,
-  geminiApiKey?: string
+  geminiApiKey?: string,
+  editorialFocusNote?: string
 ): Promise<{ payload: RollupTranscriptPayload; modelUsed: string }> {
   const trimmedKey = geminiApiKey?.trim() || "";
   if (!trimmedKey || trimmedKey === "your_gemini_api_key_here") {
     return {
-      payload: buildDeterministicRollupScript(agg, episodeNumber),
+      payload: buildDeterministicRollupScript(
+        agg,
+        episodeNumber,
+        editorialFocusNote
+      ),
       modelUsed: "deterministic-rollup-fallback",
     };
   }
@@ -315,24 +714,28 @@ HARD GOVERNANCE CONSTRAINTS (NON-NEGOTIABLE):
    - separating_signal_from_panic: ~350 words
    - forward_posture: ~220 words`;
 
-  const userPrompt = `Generate Episode #${episodeNumber} of the Friday 5-Minute "CAB Weekly Brief" from the following live 7-day D1 database telemetry:
+  const focusDirectiveBlock = editorialFocusNote?.trim()
+    ? `\nPRODUCER / EDITORIAL FOCUS NOTE FOR THIS EPISODE:\n${editorialFocusNote.trim()}\n`
+    : "";
 
-7-DAY TELEMETRY AGGREGATES:
+  const userPrompt = `Generate Episode #${episodeNumber} of the Friday 5-Minute "CAB Weekly Brief" from the following live ${agg.windowDays}-day D1 database telemetry:
+
+${agg.windowDays}-DAY TELEMETRY AGGREGATES:
 - Total RSS Items Evaluated: ${agg.totalEvaluated}
 - High-Signal Incidents Promoted: ${agg.triagedOrSynthesizedCount}
 - Low-Signal Noise Dropped: ${agg.droppedCount} (${agg.noiseRejectionRatePct}% noise rejection rate)
 - Dominant Working Tool: ${agg.dominantToolDisplay} (${agg.dominantToolPct}%)
 - Tool Distribution: ${JSON.stringify(agg.toolDistribution)}
 - Top SRE Failure Mode: ${agg.topSreFailureDisplay}
-
+${focusDirectiveBlock}
 TOP SYNTHESIZED INCIDENTS ON THE TRESTLEBOARD:
 ${incidentSummaries}
 
 Return valid JSON matching the required schema with "title", "summary", "weekly_telemetry" (~180 words), "separating_signal_from_panic" (~350 words), and "forward_posture" (~220 words). Do not include section header brackets inside the individual string fields; we will prepend the timestamp headers automatically.`;
 
   const candidateModels = [
-    "gemini-3.8-flash",
     "gemini-2.5-flash",
+    "gemini-3.8-flash",
     "gemini-flash-latest",
   ];
 
@@ -402,7 +805,11 @@ Return valid JSON matching the required schema with "title", "summary", "weekly_
     `[Rollup Pipeline] Falling back to deterministic rollup script after error: ${lastError}`
   );
   return {
-    payload: buildDeterministicRollupScript(agg, episodeNumber),
+    payload: buildDeterministicRollupScript(
+      agg,
+      episodeNumber,
+      editorialFocusNote
+    ),
     modelUsed: "deterministic-rollup-fallback",
   };
 }
@@ -492,65 +899,74 @@ export function buildValidMp3AudioBytes(
 export async function synthesizeRollupAudioBytes(
   title: string,
   transcript: string,
-  geminiApiKey?: string
+  geminiApiKey?: string,
+  ttsOptions?: {
+    voiceName?: string;
+    provider?: "gemini-tts" | "mpeg-framed";
+  }
 ): Promise<{ audioBytes: Uint8Array; audioSource: string }> {
-  const trimmedKey = geminiApiKey?.trim() || "";
-  if (trimmedKey && trimmedKey !== "your_gemini_api_key_here") {
-    const ttsModels = ["gemini-2.5-flash-preview-tts", "gemini-3.8-flash-tts"];
-    for (const ttsModel of ttsModels) {
-      try {
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${ttsModel}:generateContent?key=${encodeURIComponent(
-            trimmedKey
-          )}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [
-                    {
-                      text: transcript.slice(0, 1800),
-                    },
-                  ],
-                },
-              ],
-              generationConfig: {
-                responseModalities: ["AUDIO"],
-                speechConfig: {
-                  voiceConfig: {
-                    prebuiltVoiceConfig: {
-                      voiceName: "Kore",
+  const voiceName = ttsOptions?.voiceName?.trim() || "Kore";
+  const provider = ttsOptions?.provider || "gemini-tts";
+
+  if (provider !== "mpeg-framed") {
+    const trimmedKey = geminiApiKey?.trim() || "";
+    if (trimmedKey && trimmedKey !== "your_gemini_api_key_here") {
+      const ttsModels = ["gemini-2.5-flash-preview-tts", "gemini-3.8-flash-tts"];
+      for (const ttsModel of ttsModels) {
+        try {
+          const res = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${ttsModel}:generateContent?key=${encodeURIComponent(
+              trimmedKey
+            )}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [
+                  {
+                    parts: [
+                      {
+                        text: transcript.slice(0, 1800),
+                      },
+                    ],
+                  },
+                ],
+                generationConfig: {
+                  responseModalities: ["AUDIO"],
+                  speechConfig: {
+                    voiceConfig: {
+                      prebuiltVoiceConfig: {
+                        voiceName,
+                      },
                     },
                   },
                 },
-              },
-            }),
-            signal: AbortSignal.timeout(15000),
-          }
-        );
+              }),
+              signal: AbortSignal.timeout(15000),
+            }
+          );
 
-        if (res.ok) {
-          const data: any = await res.json();
-          const inlineData =
-            data?.candidates?.[0]?.content?.parts?.[0]?.inlineData;
-          if (inlineData?.data && typeof inlineData.data === "string") {
-            const binaryString = atob(inlineData.data);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-              bytes[i] = binaryString.charCodeAt(i);
-            }
-            if (bytes.byteLength > 512) {
-              return {
-                audioBytes: bytes,
-                audioSource: `gemini-tts (${ttsModel})`,
-              };
+          if (res.ok) {
+            const data: any = await res.json();
+            const inlineData =
+              data?.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+            if (inlineData?.data && typeof inlineData.data === "string") {
+              const binaryString = atob(inlineData.data);
+              const bytes = new Uint8Array(binaryString.length);
+              for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+              }
+              if (bytes.byteLength > 512) {
+                return {
+                  audioBytes: bytes,
+                  audioSource: `gemini-tts (${ttsModel} / ${voiceName})`,
+                };
+              }
             }
           }
+        } catch {
+          // Fall through to next TTS model or framed MP3 generator
         }
-      } catch {
-        // Fall through to next TTS model or framed MP3 generator
       }
     }
   }
@@ -564,7 +980,7 @@ export async function synthesizeRollupAudioBytes(
 
 /**
  * Runs the Friday 5-Minute CAB Weekly Brief generator:
- * 1. Computes 7-day telemetry aggregates from D1 `telemetry_articles`
+ * 1. Computes telemetry aggregates from D1 `telemetry_articles` (supporting windowDays & incidentIds overrides)
  * 2. Calls Gemini to generate the 3-part ~750-word podcast transcript
  * 3. Synthesizes audio & writes the object to R2 (`env.AUDIO_BUCKET`)
  * 4. Upserts the episode into D1 `episodes`
@@ -573,22 +989,35 @@ export async function runWeeklyRollupPipeline(options: {
   db: D1DatabaseLike;
   audioBucket?: R2BucketLike;
   geminiApiKey?: string;
+  overrides?: GenerateEpisodeOverrides;
 }): Promise<RollupEpisodeRecord> {
   const startMs = Date.now();
   const startedAt = new Date().toISOString();
-  const agg = await computeWeeklyAggregatesFromD1(options.db);
+  await ensureBaselineEpisodesSeeded(options.db);
 
-  // Determine episode number from D1 episodes table (start at #43 so it continues the seed archive)
-  const latestEpRow = await options.db
-    .prepare(
-      "SELECT MAX(episode_number) as max_ep FROM episodes"
-    )
-    .first<{ max_ep: number | null }>();
+  const overrides = options.overrides || {};
+  const agg = await computeWeeklyAggregatesFromD1(options.db, {
+    windowDays: overrides.windowDays,
+    incidentIds: overrides.incidentIds,
+  });
 
-  const nextEpisodeNumber =
-    latestEpRow?.max_ep && latestEpRow.max_ep >= 42
-      ? latestEpRow.max_ep + 1
-      : 43;
+  let nextEpisodeNumber: number;
+  if (
+    overrides.episodeNumber &&
+    Number.isFinite(Number(overrides.episodeNumber)) &&
+    Number(overrides.episodeNumber) > 0
+  ) {
+    nextEpisodeNumber = Math.floor(Number(overrides.episodeNumber));
+  } else {
+    const latestEpRow = await options.db
+      .prepare("SELECT MAX(episode_number) as max_ep FROM episodes")
+      .first<{ max_ep: number | null }>();
+
+    nextEpisodeNumber =
+      latestEpRow?.max_ep && latestEpRow.max_ep >= 42
+        ? latestEpRow.max_ep + 1
+        : 43;
+  }
 
   const dateTag = new Date().toISOString().slice(0, 10);
   const slug = `cab-weekly-brief-${nextEpisodeNumber}-${dateTag}`;
@@ -598,8 +1027,16 @@ export async function runWeeklyRollupPipeline(options: {
   const { payload, modelUsed } = await generateRollupTranscriptWithGemini(
     agg,
     nextEpisodeNumber,
-    options.geminiApiKey
+    options.geminiApiKey,
+    overrides.editorialFocusNote
   );
+
+  const finalTitle = overrides.titleOverride?.trim()
+    ? overrides.titleOverride.trim()
+    : payload.title;
+  const finalSummary = overrides.summaryOverride?.trim()
+    ? overrides.summaryOverride.trim()
+    : payload.summary;
 
   const cleanPart1 = payload.weekly_telemetry
     .replace(/^\[00:00[^\]]*\]\s*/i, "")
@@ -614,9 +1051,13 @@ export async function runWeeklyRollupPipeline(options: {
   const formattedTranscript = `[00:00 — THE WEEKLY TELEMETRY]\n${cleanPart1}\n\n[01:15 — SEPARATING SIGNAL FROM PANIC]\n${cleanPart2}\n\n[03:30 — THE FORWARD POSTURE / TOOLS ON THE TRESTLEBOARD]\n${cleanPart3}`;
 
   const { audioBytes, audioSource } = await synthesizeRollupAudioBytes(
-    payload.title,
+    finalTitle,
     formattedTranscript,
-    options.geminiApiKey
+    options.geminiApiKey,
+    {
+      voiceName: overrides.ttsVoice,
+      provider: overrides.ttsProvider,
+    }
   );
 
   if (options.audioBucket && typeof options.audioBucket.put === "function") {
@@ -634,7 +1075,13 @@ export async function runWeeklyRollupPipeline(options: {
   }
 
   const publishedAt = new Date().toISOString();
-  const durationSeconds = 300;
+  const wordCount = formattedTranscript
+    .split(/\s+/)
+    .filter(Boolean).length;
+  const durationSeconds = Math.max(
+    180,
+    Math.min(900, Math.round((wordCount / 150) * 60) || 300)
+  );
   const fileSizeBytes = audioBytes.byteLength;
 
   await options.db
@@ -651,6 +1098,7 @@ export async function runWeeklyRollupPipeline(options: {
         published_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(slug) DO UPDATE SET
+        episode_number = excluded.episode_number,
         title = excluded.title,
         summary = excluded.summary,
         transcript = excluded.transcript,
@@ -662,8 +1110,8 @@ export async function runWeeklyRollupPipeline(options: {
     .bind(
       nextEpisodeNumber,
       slug,
-      payload.title,
-      payload.summary,
+      finalTitle,
+      finalSummary,
       formattedTranscript,
       audioUrl,
       durationSeconds,
@@ -678,7 +1126,11 @@ export async function runWeeklyRollupPipeline(options: {
     .first<{ id: number }>();
 
   const elapsedMs = Math.max(150, Date.now() - startMs);
-  const notes = `Published CAB Weekly Brief #${nextEpisodeNumber} (${r2Key}, ${Math.round(fileSizeBytes / 1024)} KB) via ${modelUsed}. Dominant Tool: ${agg.dominantToolDisplay} (${agg.dominantToolPct}%).`;
+  const notes = `Published CAB Weekly Brief #${nextEpisodeNumber} (${r2Key}, ${Math.round(
+    fileSizeBytes / 1024
+  )} KB) via ${modelUsed}. Dominant Tool: ${agg.dominantToolDisplay} (${
+    agg.dominantToolPct
+  }%).`;
 
   try {
     await options.db
@@ -715,8 +1167,8 @@ export async function runWeeklyRollupPipeline(options: {
     id: insertedRow?.id,
     episode_number: nextEpisodeNumber,
     slug,
-    title: payload.title,
-    summary: payload.summary,
+    title: finalTitle,
+    summary: finalSummary,
     transcript: formattedTranscript,
     transcript_sections: {
       weekly_telemetry: cleanPart1,
@@ -738,5 +1190,427 @@ export async function runWeeklyRollupPipeline(options: {
       top_sre_failure_mode: agg.topSreFailureMode,
       featured_incident_ids: agg.topIncidents.map((i) => i.id),
     },
+  };
+}
+
+/**
+ * Lists all podcast episodes in D1 `episodes` ordered by published_at DESC, episode_number DESC.
+ */
+export async function listAdminEpisodes(
+  db: D1DatabaseLike
+): Promise<AdminEpisodeRecord[]> {
+  await ensureBaselineEpisodesSeeded(db);
+
+  const res = await db
+    .prepare(
+      "SELECT * FROM episodes ORDER BY published_at DESC, episode_number DESC, id DESC"
+    )
+    .all<D1EpisodeTableRow>();
+
+  return (res.results || []).map(mapD1RowToAdminEpisode);
+}
+
+/**
+ * Looks up a single episode in D1 `episodes` by numeric `id`, `d1-ep-<id>` string, or `slug`.
+ */
+export async function getAdminEpisodeByIdOrSlug(
+  db: D1DatabaseLike,
+  idOrSlug: number | string
+): Promise<{ row: D1EpisodeTableRow; record: AdminEpisodeRecord } | null> {
+  await ensureBaselineEpisodesSeeded(db);
+
+  const raw = String(idOrSlug).trim();
+  const strippedNumeric = raw.replace(/^d1-ep-/i, "");
+  const numericId = /^\d+$/.test(strippedNumeric)
+    ? parseInt(strippedNumeric, 10)
+    : null;
+
+  let row: D1EpisodeTableRow | null = null;
+  if (numericId !== null) {
+    row = await db
+      .prepare("SELECT * FROM episodes WHERE id = ?")
+      .bind(numericId)
+      .first<D1EpisodeTableRow>();
+  }
+
+  if (!row) {
+    row = await db
+      .prepare("SELECT * FROM episodes WHERE slug = ?")
+      .bind(raw)
+      .first<D1EpisodeTableRow>();
+  }
+
+  if (!row && numericId !== null) {
+    row = await db
+      .prepare("SELECT * FROM episodes WHERE episode_number = ?")
+      .bind(numericId)
+      .first<D1EpisodeTableRow>();
+  }
+
+  if (!row) return null;
+  return {
+    row,
+    record: mapD1RowToAdminEpisode(row),
+  };
+}
+
+/**
+ * Generates a new podcast episode on-demand with optional admin overrides and appends
+ * an `episode.generate` entry to `audit_ledger`.
+ */
+export async function generateAdminEpisode(options: {
+  db: D1DatabaseLike;
+  audioBucket?: R2BucketLike;
+  geminiApiKey?: string;
+  overrides?: GenerateEpisodeOverrides;
+  reason?: string;
+  actor: EpisodeAdminActor;
+}): Promise<{
+  episode: AdminEpisodeRecord;
+  rollup: RollupEpisodeRecord;
+  auditEntry: AuditLedgerEntry;
+}> {
+  const rollup = await runWeeklyRollupPipeline({
+    db: options.db,
+    audioBucket: options.audioBucket,
+    geminiApiKey: options.geminiApiKey,
+    overrides: options.overrides,
+  });
+
+  const fetched = await getAdminEpisodeByIdOrSlug(
+    options.db,
+    rollup.id ?? rollup.slug
+  );
+  if (!fetched) {
+    throw new Error(
+      `Failed to read back generated episode ${rollup.slug} from D1`
+    );
+  }
+
+  const afterState = {
+    ...fetched.row,
+    r2_key: rollup.r2_key,
+    model_used: rollup.model_used,
+    audio_source: rollup.audio_source,
+    aggregates: rollup.aggregates,
+  };
+
+  const defaultReason = options.overrides?.editorialFocusNote?.trim()
+    ? `Generated Episode #${rollup.episode_number} ("${rollup.title}") with producer note: ${options.overrides.editorialFocusNote.trim()}`
+    : `Generated podcast rollup Episode #${rollup.episode_number}: "${rollup.title}" (${rollup.r2_key})`;
+
+  const auditEntry = await appendAuditEntry(options.db, {
+    actorEmail: options.actor.actorEmail,
+    actorRole: options.actor.actorRole || "owner",
+    authMethod: options.actor.authMethod,
+    actorIpHash: options.actor.actorIpHash ?? null,
+    actionType: "episode.generate",
+    targetType: "episode",
+    targetId: String(fetched.row.id),
+    reason: options.reason?.trim() || defaultReason,
+    beforeState: null,
+    afterState,
+    replayCommand: {
+      op: "create",
+      action_type: "episode.generate",
+      target_type: "episode",
+      target_id: String(fetched.row.id),
+      slug: fetched.row.slug,
+      r2_key: rollup.r2_key,
+      invertible: true,
+    },
+  });
+
+  return {
+    episode: fetched.record,
+    rollup,
+    auditEntry,
+  };
+}
+
+/**
+ * Updates an existing podcast episode's title, summary, transcript (or 3-part sections),
+ * episode_number, or published_at, optionally re-synthesizing R2 MP3 audio, and appends
+ * an `episode.update` entry to `audit_ledger`.
+ */
+export async function updateAdminEpisode(options: {
+  db: D1DatabaseLike;
+  audioBucket?: R2BucketLike;
+  geminiApiKey?: string;
+  idOrSlug: number | string;
+  input: {
+    title?: string;
+    summary?: string;
+    transcript?: string;
+    transcriptSections?: {
+      weeklyTelemetry?: string;
+      separatingSignalFromPanic?: string;
+      forwardPosture?: string;
+    };
+    episodeNumber?: number;
+    publishedAt?: string;
+    regenerateAudio?: boolean;
+    ttsVoice?: string;
+    ttsProvider?: "gemini-tts" | "mpeg-framed";
+    reason?: string;
+  };
+  actor: EpisodeAdminActor;
+}): Promise<{
+  episode: AdminEpisodeRecord;
+  audioRegenerated: boolean;
+  audioSource?: string;
+  auditEntry: AuditLedgerEntry;
+}> {
+  const existing = await getAdminEpisodeByIdOrSlug(
+    options.db,
+    options.idOrSlug
+  );
+  if (!existing) {
+    throw new Error(`Episode not found: ${options.idOrSlug}`);
+  }
+
+  const beforeRow = existing.row;
+  const input = options.input;
+
+  const updatedTitle =
+    input.title !== undefined && input.title.trim()
+      ? input.title.trim()
+      : beforeRow.title;
+  const updatedSummary =
+    input.summary !== undefined && input.summary.trim()
+      ? input.summary.trim()
+      : beforeRow.summary;
+  const updatedEpisodeNumber =
+    input.episodeNumber !== undefined &&
+    Number.isFinite(Number(input.episodeNumber)) &&
+    Number(input.episodeNumber) > 0
+      ? Math.floor(Number(input.episodeNumber))
+      : beforeRow.episode_number;
+  const updatedPublishedAt =
+    input.publishedAt !== undefined && input.publishedAt.trim()
+      ? input.publishedAt.trim()
+      : beforeRow.published_at;
+
+  let updatedTranscript = beforeRow.transcript || "";
+  if (input.transcriptSections) {
+    const currentParsed = parseEpisodeTranscriptSections(updatedTranscript);
+    updatedTranscript = formatThreePartTranscript({
+      weeklyTelemetry:
+        input.transcriptSections.weeklyTelemetry ??
+        currentParsed.weeklyTelemetry,
+      separatingSignalFromPanic:
+        input.transcriptSections.separatingSignalFromPanic ??
+        currentParsed.separatingSignalFromPanic,
+      forwardPosture:
+        input.transcriptSections.forwardPosture ?? currentParsed.forwardPosture,
+    });
+  } else if (input.transcript !== undefined) {
+    updatedTranscript = input.transcript.trim();
+  }
+
+  let updatedFileSizeBytes = Number(beforeRow.file_size_bytes || 256000);
+  let updatedDurationSeconds = Number(beforeRow.duration_seconds || 300);
+  let audioRegenerated = false;
+  let audioSource: string | undefined = undefined;
+  const r2Key = extractR2KeyFromAudioUrl(beforeRow.audio_url, beforeRow.slug);
+
+  if (input.regenerateAudio) {
+    const synth = await synthesizeRollupAudioBytes(
+      updatedTitle,
+      updatedTranscript,
+      options.geminiApiKey,
+      {
+        voiceName: input.ttsVoice,
+        provider: input.ttsProvider,
+      }
+    );
+    updatedFileSizeBytes = synth.audioBytes.byteLength;
+    audioSource = synth.audioSource;
+    const wordCount = updatedTranscript.split(/\s+/).filter(Boolean).length;
+    updatedDurationSeconds = Math.max(
+      180,
+      Math.min(1800, Math.round((wordCount / 150) * 60) || 300)
+    );
+
+    if (options.audioBucket && typeof options.audioBucket.put === "function") {
+      await options.audioBucket.put(r2Key, synth.audioBytes, {
+        httpMetadata: {
+          contentType: "audio/mpeg",
+        },
+        customMetadata: {
+          episodeNumber: String(updatedEpisodeNumber ?? 43),
+          slug: beforeRow.slug,
+          regeneratedAt: new Date().toISOString(),
+        },
+      });
+    }
+    audioRegenerated = true;
+  }
+
+  await options.db
+    .prepare(
+      `UPDATE episodes
+       SET episode_number = ?,
+           title = ?,
+           summary = ?,
+           transcript = ?,
+           duration_seconds = ?,
+           file_size_bytes = ?,
+           published_at = ?
+       WHERE id = ?`
+    )
+    .bind(
+      updatedEpisodeNumber,
+      updatedTitle,
+      updatedSummary,
+      updatedTranscript,
+      updatedDurationSeconds,
+      updatedFileSizeBytes,
+      updatedPublishedAt,
+      beforeRow.id
+    )
+    .run();
+
+  const updated = await getAdminEpisodeByIdOrSlug(options.db, beforeRow.id);
+  if (!updated) {
+    throw new Error(`Failed to read back updated episode #${beforeRow.id}`);
+  }
+
+  const defaultReason = `Updated Episode #${updated.record.episodeNumber} ("${
+    updated.record.title
+  }")${audioRegenerated ? ` and re-synthesized R2 audio (${r2Key})` : ""}`;
+
+  const auditEntry = await appendAuditEntry(options.db, {
+    actorEmail: options.actor.actorEmail,
+    actorRole: options.actor.actorRole || "owner",
+    authMethod: options.actor.authMethod,
+    actorIpHash: options.actor.actorIpHash ?? null,
+    actionType: "episode.update",
+    targetType: "episode",
+    targetId: String(beforeRow.id),
+    reason: input.reason?.trim() || defaultReason,
+    beforeState: {
+      ...beforeRow,
+      r2_key: r2Key,
+    },
+    afterState: {
+      ...updated.row,
+      r2_key: r2Key,
+      audio_regenerated: audioRegenerated,
+      audio_source: audioSource,
+    },
+    replayCommand: {
+      op: "update",
+      action_type: "episode.update",
+      target_type: "episode",
+      target_id: String(beforeRow.id),
+      slug: beforeRow.slug,
+      r2_key: r2Key,
+      invertible: true,
+    },
+  });
+
+  return {
+    episode: updated.record,
+    audioRegenerated,
+    audioSource,
+    auditEntry,
+  };
+}
+
+/**
+ * Deletes an episode from D1 `episodes`, optionally purges its `.mp3` object from R2 `cabcall-audio`,
+ * and appends an `episode.delete` entry to `audit_ledger` containing the full `before_state_json`
+ * (including full transcript, metadata, and audio URL) so it can be 1-click restored via Audit Replay.
+ */
+export async function deleteAdminEpisode(options: {
+  db: D1DatabaseLike;
+  audioBucket?: R2BucketLike;
+  idOrSlug: number | string;
+  purgeAudio?: boolean;
+  reason?: string;
+  actor: EpisodeAdminActor;
+}): Promise<{
+  deletedId: number;
+  deletedSlug: string;
+  deletedEpisodeNumber: number;
+  r2Key: string;
+  audioPurged: boolean;
+  beforeState: D1EpisodeTableRow & { r2_key: string };
+  auditEntry: AuditLedgerEntry;
+}> {
+  const existing = await getAdminEpisodeByIdOrSlug(
+    options.db,
+    options.idOrSlug
+  );
+  if (!existing) {
+    throw new Error(`Episode not found: ${options.idOrSlug}`);
+  }
+
+  const beforeRow = existing.row;
+  const r2Key = extractR2KeyFromAudioUrl(beforeRow.audio_url, beforeRow.slug);
+  const shouldPurgeAudio = options.purgeAudio !== false;
+  let audioPurged = false;
+
+  if (
+    shouldPurgeAudio &&
+    options.audioBucket &&
+    typeof options.audioBucket.delete === "function"
+  ) {
+    try {
+      await options.audioBucket.delete(r2Key);
+      audioPurged = true;
+    } catch (err) {
+      console.warn(`[R2 Delete] Failed to delete R2 key ${r2Key}:`, err);
+    }
+  }
+
+  await options.db
+    .prepare("DELETE FROM episodes WHERE id = ?")
+    .bind(beforeRow.id)
+    .run();
+
+  const beforeStateWithR2 = {
+    ...beforeRow,
+    r2_key: r2Key,
+  };
+
+  const defaultReason = `Deleted Episode #${
+    beforeRow.episode_number ?? existing.record.episodeNumber
+  } ("${beforeRow.title}")${
+    audioPurged ? ` and purged R2 object ${r2Key}` : ""
+  }`;
+
+  const auditEntry = await appendAuditEntry(options.db, {
+    actorEmail: options.actor.actorEmail,
+    actorRole: options.actor.actorRole || "owner",
+    authMethod: options.actor.authMethod,
+    actorIpHash: options.actor.actorIpHash ?? null,
+    actionType: "episode.delete",
+    targetType: "episode",
+    targetId: String(beforeRow.id),
+    reason: options.reason?.trim() || defaultReason,
+    beforeState: beforeStateWithR2,
+    afterState: null,
+    replayCommand: {
+      op: "delete",
+      action_type: "episode.delete",
+      target_type: "episode",
+      target_id: String(beforeRow.id),
+      slug: beforeRow.slug,
+      r2_key: r2Key,
+      audio_purged: audioPurged,
+      invertible: true,
+    },
+  });
+
+  return {
+    deletedId: Number(beforeRow.id),
+    deletedSlug: beforeRow.slug,
+    deletedEpisodeNumber: existing.record.episodeNumber,
+    r2Key,
+    audioPurged,
+    beforeState: beforeStateWithR2,
+    auditEntry,
   };
 }

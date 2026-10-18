@@ -9,7 +9,7 @@ export const metadata = {
 };
 
 export default async function ArchivePage() {
-  await ensureD1Snapshot();
+  await ensureD1Snapshot(true);
   const episodes = getAllEpisodes();
   return <PodcastArchiveClient initialEpisodes={episodes} />;
 }

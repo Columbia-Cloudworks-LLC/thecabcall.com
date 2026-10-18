@@ -335,12 +335,16 @@ export function mapD1RowToPodcastEpisode(
   }));
 
   const transcript = row.transcript || row.summary;
+  const isLegacy =
+    row.slug.startsWith("legacy-") ||
+    row.title.toLowerCase().includes("legacy archive") ||
+    episodeNumber <= 30;
 
   return {
     id: `d1-ep-${row.id}`,
     slug: row.slug,
     episodeNumber,
-    series: "weekly_rollup",
+    series: isLegacy ? "legacy_archive" : "weekly_rollup",
     title: row.title,
     summary: row.summary,
     transcript,
@@ -683,7 +687,7 @@ let cachedRemoteSnapshot: LocalD1Snapshot | null = null;
 let cachedRemoteSnapshotAtMs = 0;
 let inFlightRemoteSnapshotPromise: Promise<LocalD1Snapshot | null> | null =
   null;
-const REMOTE_SNAPSHOT_TTL_MS = 15_000;
+const REMOTE_SNAPSHOT_TTL_MS = 1_500;
 
 /**
  * Fetches `/api/snapshot` from the remote Cloudflare Worker and populates the in-memory snapshot cache.
@@ -705,9 +709,7 @@ export async function fetchRemoteWorkerSnapshot(
   }
 
   const workerUrl = getEffectiveWorkerUrl();
-  const snapshotUrl = `${workerUrl}/api/snapshot${
-    forceFresh ? "?fresh=1" : ""
-  }`;
+  const snapshotUrl = `${workerUrl}/api/snapshot?fresh=1`;
 
   const fetchPromise = (async (): Promise<LocalD1Snapshot | null> => {
     try {
@@ -716,7 +718,7 @@ export async function fetchRemoteWorkerSnapshot(
         headers: {
           Accept: "application/json",
         },
-        cache: forceFresh ? "no-store" : "default",
+        cache: "no-store",
         signal: AbortSignal.timeout(8000),
       });
 
@@ -997,6 +999,7 @@ export async function fetchRemoteWorkerAudioBytes(
       `${workerUrl}/audio/${encodeURIComponent(filename)}`,
       {
         method: "GET",
+        cache: "no-store",
         signal: AbortSignal.timeout(10000),
       }
     );
@@ -1069,6 +1072,20 @@ export function createLocalR2AudioAdapter(): R2BucketLike {
         };
       } catch {
         return null;
+      }
+    },
+    async delete(key) {
+      try {
+        const keys = Array.isArray(key) ? key : [key];
+        for (const k of keys) {
+          const safeKey = path.basename(k);
+          const filePath = path.join(audioDir, safeKey);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        }
+      } catch (err) {
+        console.warn("[R2 Bridge] Failed to delete local audio file:", err);
       }
     },
   };

@@ -19,8 +19,8 @@
 | **Friday 5-Min Podcast Rollup + TTS Audio** | Live on Cloudflare Edge & R2 (`cabcall-audio`) | `src/pipeline/rollup.ts` |
 | **Cloudflare Worker Entrypoint & Crons** | Deployed (`https://thecabcall.thecabcall.workers.dev`) | `src/worker.ts`, `wrangler.jsonc` |
 | **D1 SQLite Schema & Migrations** | Applied to remote `cabcall-db` (`094cf69c-0fe3-409b-a871-06f3610a28a6`) & local `.wrangler` | `migrations/0001_init.sql`, `migrations/0002_pipeline_runs.sql`, `migrations/0003_audit_ledger.sql`, `migrations/0004_admin_auth.sql`, `migrations/0005_dynamic_feeds_and_filters.sql` |
-| **Database & Audio Bridge** | Live Cloud Worker Bridge (`/api/snapshot` + R2 audio) with local `.wrangler` fallback | `src/lib/d1-bridge.ts`, `src/lib/store.ts`, `src/lib/feeds-filters.ts` |
-| **Admin Governance, Auth & Audit Ledger** | Issues #6, #7, #8 & #10 (Audit Ledger, Admin OAuth/Magic-Link Auth & Invites, Command Center Shell & Audit Replay Studio, Dynamic Feeds & Filters Studio) live in Production; Issues #9, #11 & #12 planned below | `migrations/0003_audit_ledger.sql`, `migrations/0004_admin_auth.sql`, `migrations/0005_dynamic_feeds_and_filters.sql`, `src/pipeline/audit.ts`, `src/pipeline/auth.ts`, `src/pipeline/ingest.ts`, `src/lib/audit.ts`, `src/lib/auth.ts`, `src/lib/feeds-filters.ts`, `src/app/admin/` |
+| **Database & Audio Bridge** | Live Cloud Worker Bridge (`/api/snapshot` + R2 audio) with local `.wrangler` fallback | `src/lib/d1-bridge.ts`, `src/lib/store.ts`, `src/lib/episodes.ts`, `src/lib/feeds-filters.ts` |
+| **Admin Governance, Auth & Audit Ledger** | Issues #6, #7, #8, #9 & #10 (Audit Ledger, Admin OAuth/Magic-Link Auth & Invites, Command Center Shell & Audit Replay Studio, Podcast Episode & R2 Audio Studio, Dynamic Feeds & Filters Studio) live in Production; Issues #11 & #12 planned below | `migrations/0003_audit_ledger.sql`, `migrations/0004_admin_auth.sql`, `migrations/0005_dynamic_feeds_and_filters.sql`, `src/pipeline/audit.ts`, `src/pipeline/auth.ts`, `src/pipeline/ingest.ts`, `src/pipeline/rollup.ts`, `src/lib/audit.ts`, `src/lib/auth.ts`, `src/lib/episodes.ts`, `src/lib/feeds-filters.ts`, `src/app/admin/` |
 
 ---
 
@@ -39,7 +39,7 @@
 - [x] **Issue #6 ([GitHub Issue #6](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/6)): Immutable Replayable Audit Ledger & Disclosure Engine (D1 Append-Only Schema, SHA-256 Hash Chain & Replay API)**
 - [x] **Issue #7 ([GitHub Issue #7](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/7)): Admin Authentication & User Access Control (Google OAuth Owner Lock, Email Invites & Magic Link Fallback)**
 - [x] **Issue #8 ([GitHub Issue #8](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/8)): Admin Dashboard Shell, Telemetry Command Center & Audit Trail Explorer / Replay Studio (`/admin` & `/admin/audit`)**
-- [ ] **Issue #9 ([GitHub Issue #9](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/9)): Podcast Episode Admin Studio — Delete Episodes, Purge R2 Audio, Edit Transcripts & Generate New Episodes (`/admin/episodes`)**
+- [x] **Issue #9 ([GitHub Issue #9](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/9)): Podcast Episode Admin Studio — Delete Episodes, Purge R2 Audio, Edit Transcripts & Generate New Episodes (`/admin/episodes`)**
 - [x] **Issue #10 ([GitHub Issue #10](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/10)): Dynamic Inbound RSS Feed & Triage Filter Management (`/admin/feeds` & `/admin/filters`)**
 - [ ] **Issue #11 ([GitHub Issue #11](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/11)): Editorial Pipeline & Incident Studio — De-Alarmist Title Rewriting, Image Attachment Pipeline & Brief Overrides (`/admin/incidents` & `/admin/transforms`)**
 - [ ] **Issue #12 ([GitHub Issue #12](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/12)): Outbound Published Feeds & Syndication Studio — Customize Podcast RSS & Publish De-Alarmed Incident Feeds (`/admin/publishing`, `/feed.xml` & `/feeds/incidents.*`)**
@@ -325,7 +325,7 @@
 
 ## Issue #9 (Epic 6.4): Podcast Episode Admin Studio — Delete Episodes, Purge R2 Audio, Edit Transcripts & Generate New Episodes (`/admin/episodes`)
 - **GitHub Issue:** [#9](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/9)
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Objective:** Give the Admin complete lifecycle control over all podcast episodes in `/admin/episodes`: delete any episode (removing it from D1 `episodes` and deleting/archiving its `.mp3` object in Cloudflare R2 `cabcall-audio`), generate a new podcast episode on-demand with customizable parameters, edit existing episode titles/summaries/transcripts, or restore a deleted episode directly from its immutable `audit_ledger` snapshot.
 - **Automated Steps for Antigravity:**
   1. **R2 Delete Support & Worker Episode Admin Endpoints (`src/pipeline/rollup.ts`, `src/worker.ts`):**

@@ -41,14 +41,20 @@ export async function GET(
   if (!audioBytes) {
     const slug = cleanName.replace(/\.mp3$/i, "");
     const d1 = await ensureD1Snapshot();
-    const episode =
-      d1.episodes.find(
-        (ep) => ep.slug === slug || ep.audioUrl.endsWith(cleanName)
-      ) || d1.episodes[0];
+    const episode = d1.episodes.find(
+      (ep) => ep.slug === slug || ep.audioUrl.endsWith(cleanName)
+    );
+
+    if (!episode) {
+      return NextResponse.json(
+        { error: "Audio object not found", key: cleanName },
+        { status: 404, headers: { "Cache-Control": "no-store" } }
+      );
+    }
 
     audioBytes = buildValidMp3AudioBytes(
-      episode?.title || slug,
-      episode?.transcript || "The CAB Call Weekly Brief",
+      episode.title || slug,
+      episode.transcript || "The CAB Call Weekly Brief",
       600
     );
   }
@@ -82,7 +88,7 @@ export async function GET(
           "Accept-Ranges": "bytes",
           "Content-Range": `bytes ${start}-${end}/${totalSize}`,
           "Content-Length": String(sliced.byteLength),
-          "Cache-Control": "public, max-age=3600",
+          "Cache-Control": "no-cache",
         },
       });
     }
@@ -94,7 +100,7 @@ export async function GET(
       "Content-Type": "audio/mpeg",
       "Accept-Ranges": "bytes",
       "Content-Length": String(totalSize),
-      "Cache-Control": "public, max-age=3600",
+      "Cache-Control": "no-cache",
     },
   });
 }

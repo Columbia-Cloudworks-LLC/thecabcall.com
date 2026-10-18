@@ -49,6 +49,9 @@ export async function POST(req: NextRequest) {
       reason: body.reason,
     });
 
+    const { invalidateEpisodePublicCaches } = await import("@/lib/episodes");
+    invalidateEpisodePublicCaches();
+
     return NextResponse.json(result);
   } catch (err) {
     return NextResponse.json(

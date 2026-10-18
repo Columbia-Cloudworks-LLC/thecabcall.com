@@ -84,6 +84,13 @@ export function insertIncident(incident: IncidentArticle): void {
 
 export function getAllEpisodes(): PodcastEpisode[] {
   const d1 = readLocalD1Snapshot();
+  if (d1.available) {
+    return [...d1.episodes].sort(
+      (a, b) =>
+        new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+    );
+  }
+
   const seenSlugs = new Set<string>();
   const merged: PodcastEpisode[] = [];
 
