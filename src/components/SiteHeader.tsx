@@ -5,13 +5,32 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { SquareAndCompassesCrest } from "./MasonicEngravings";
 
-const NAV_ITEMS = [
+export const NAV_ITEMS = [
   { href: "/", label: "The Trestleboard" },
   { href: "/knowledge-graph", label: "The Archive" },
   { href: "/archive", label: "The CAB Call Podcast" },
   { href: "/rubric", label: "The Working Tools & Rubric" },
   { href: "/status", label: "About & Feeds" },
 ];
+
+/**
+ * Determines whether a top-level navigation item is the active "You Are Here"
+ * street sign for the given pathname (Krug "Trunk Test" compliance).
+ * Individual case briefs (`/incidents/[slug]`) belong to The Trestleboard (`/`).
+ */
+export function isNavItemActive(itemHref: string, pathname: string): boolean {
+  const normalizedPath = (pathname || "/").trim() || "/";
+  if (itemHref === "/") {
+    return (
+      normalizedPath === "/" ||
+      normalizedPath === "/incidents" ||
+      normalizedPath.startsWith("/incidents/")
+    );
+  }
+  return (
+    normalizedPath === itemHref || normalizedPath.startsWith(`${itemHref}/`)
+  );
+}
 
 export function SiteHeader() {
   const pathname = usePathname();
@@ -42,17 +61,15 @@ export function SiteHeader() {
           className="flex items-center gap-1.5 sm:gap-2 flex-nowrap overflow-x-auto xl:overflow-visible shrink-0 pb-1 xl:pb-0"
         >
           {NAV_ITEMS.map((item) => {
-            const isActive =
-              item.href === "/"
-                ? pathname === "/"
-                : pathname.startsWith(item.href);
+            const isActive = isNavItemActive(item.href, pathname);
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                aria-current={isActive ? "page" : undefined}
                 className={`px-3 py-2 border whitespace-nowrap font-display text-[11px] sm:text-xs tracking-wider transition-all ${
                   isActive
-                    ? "bg-[#111726] border-[#C5A059] text-[#F3EFE6] shadow-[inset_0_0_0_1px_rgba(197,160,89,0.35)]"
+                    ? "bg-[#111726] border-[#C5A059] border-b-2 border-b-[#C5A059] text-[#F3EFE6] font-bold shadow-[inset_0_0_0_1px_rgba(197,160,89,0.35)]"
                     : "bg-[#0B0E14]/85 border-[#8A6D3B]/40 text-[#94A3B8] hover:text-[#F3EFE6] hover:border-[#C5A059]/65"
                 }`}
               >

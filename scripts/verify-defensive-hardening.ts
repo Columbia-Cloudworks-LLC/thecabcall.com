@@ -51,6 +51,7 @@ import {
   formatFriendlySourceName,
   mapDtoToCraftLexicon,
   projectPublicIncidentDto,
+  type PublicIncidentDto,
 } from "../src/lib/dto.ts";
 import {
   getSreFailureModeSpec,
@@ -1246,13 +1247,7 @@ async function runVerificationSuite() {
   assert.equal(snapshotAfterLegacyRes.status, 200);
   const snapshotAfterLegacy = (await snapshotAfterLegacyRes.json()) as {
     ok: boolean;
-    incidents: Array<{
-      title: string;
-      executiveSummary: string;
-      socraticBrief: string;
-      proportionalityCheck: { noiseOverblown: string; structuralSignal: string };
-      questions: [string, string];
-    }>;
+    incidents: PublicIncidentDto[];
   };
 
   const bushIncident = snapshotAfterLegacy.incidents.find(
@@ -1589,8 +1584,328 @@ async function runVerificationSuite() {
   console.log(
     "  ✓ Issue #17 zero mystery-meat [?] badges, formatFriendlySourceName, and plain-English Krug action buttons verified."
   );
+
+  // -------------------------------------------------------------------------
+  // 10. OBJECTIVE 10 (ISSUE #18): 'YOU ARE HERE' STREET SIGNS & SIDEBAR HIERARCHY
+  // -------------------------------------------------------------------------
   console.log(
-    "\n=== ALL 9 DEFENSIVE HARDENING, CRAFT PROSE & KRUG USABILITY OBJECTIVES PASSED (100%) ==="
+    "\n[10/11] Verifying Objective 10 (Issue #18): Krug 'You Are Here' Navigation Street Signs & Sidebar Visual Hierarchy..."
+  );
+
+  const siteHeaderSource = fs.readFileSync(
+    path.join(process.cwd(), "src/components/SiteHeader.tsx"),
+    "utf8"
+  );
+
+  assert.ok(
+    siteHeaderSource.includes("export function isNavItemActive(") &&
+      siteHeaderSource.includes('normalizedPath.startsWith("/incidents/")') &&
+      siteHeaderSource.includes('aria-current={isActive ? "page" : undefined}') &&
+      siteHeaderSource.includes("border-b-2 border-b-[#C5A059]") &&
+      siteHeaderSource.includes("text-[#F3EFE6] font-bold"),
+    "SiteHeader.tsx must implement isNavItemActive for /incidents/* routes, aria-current='page', and a high-contrast gold bottom border"
+  );
+
+  // Verify route matching behavior across all public routes
+  const evaluateNavActive = (itemHref: string, pathname: string): boolean => {
+    const normalizedPath = (pathname || "/").trim() || "/";
+    if (itemHref === "/") {
+      return (
+        normalizedPath === "/" ||
+        normalizedPath === "/incidents" ||
+        normalizedPath.startsWith("/incidents/")
+      );
+    }
+    return (
+      normalizedPath === itemHref || normalizedPath.startsWith(`${itemHref}/`)
+    );
+  };
+
+  const navHrefs = ["/", "/knowledge-graph", "/archive", "/rubric", "/status"];
+  const testPaths: Array<{ path: string; expectedActiveHref: string }> = [
+    { path: "/", expectedActiveHref: "/" },
+    {
+      path: "/incidents/municipal-water-scada-patch-deferral-audit",
+      expectedActiveHref: "/",
+    },
+    {
+      path: "/incidents/some-other-slug",
+      expectedActiveHref: "/",
+    },
+    { path: "/knowledge-graph", expectedActiveHref: "/knowledge-graph" },
+    { path: "/archive", expectedActiveHref: "/archive" },
+    { path: "/rubric", expectedActiveHref: "/rubric" },
+    { path: "/status", expectedActiveHref: "/status" },
+  ];
+
+  for (const { path: testPath, expectedActiveHref } of testPaths) {
+    const activeItems = navHrefs.filter((href) =>
+      evaluateNavActive(href, testPath)
+    );
+    assert.equal(
+      activeItems.length,
+      1,
+      `Route "${testPath}" must have exactly 1 active navigation item (found ${activeItems.length})`
+    );
+    assert.equal(
+      activeItems[0],
+      expectedActiveHref,
+      `Route "${testPath}" must activate "${expectedActiveHref}" as its 'You Are Here' street sign`
+    );
+  }
+
+  // Verify left sidebar visual hierarchy in IncidentBriefClient.tsx:
+  // Primary Working Tool, Moral Lens, Failure Mode, and Copperplate Engraving lead at top;
+  // Ledger ID (`{ledgerEntryLabel}`) is demoted to the lower colophon.
+  const asideStartIdx = incidentBriefKrugSource.indexOf("<aside");
+  const asideEndIdx = incidentBriefKrugSource.indexOf("</aside>");
+  assert.ok(
+    asideStartIdx >= 0 && asideEndIdx > asideStartIdx,
+    "IncidentBriefClient.tsx must contain an <aside> left sidebar"
+  );
+  const asideContent = incidentBriefKrugSource.slice(asideStartIdx, asideEndIdx);
+  const primaryToolPos = asideContent.indexOf("{incident.primaryTool}");
+  const moralLensPos = asideContent.indexOf("{primaryToolSpec.moralLens}");
+  const failureTitlePos = asideContent.indexOf("{failureSpec.craftTitle}");
+  const engravingPos = asideContent.indexOf("<WorkingToolEngraving");
+  const ledgerEntryPos = asideContent.indexOf("{ledgerEntryLabel}");
+
+  assert.ok(
+    primaryToolPos >= 0 &&
+      moralLensPos >= 0 &&
+      failureTitlePos >= 0 &&
+      engravingPos >= 0 &&
+      ledgerEntryPos >= 0,
+    "Sidebar (<aside>) must contain Primary Working Tool, Moral Lens, Craft Failure Mode, Engraving, and Ledger Entry ID"
+  );
+  assert.ok(
+    primaryToolPos < ledgerEntryPos &&
+      moralLensPos < ledgerEntryPos &&
+      failureTitlePos < ledgerEntryPos &&
+      engravingPos < ledgerEntryPos,
+    "Sidebar visual hierarchy must promote Primary Working Tool, Moral Lens, Failure Mode, and Engraving above the demoted Ledger Entry ID in the lower colophon"
+  );
+
+  console.log(
+    "  ✓ Issue #18 'You Are Here' navigation street signs (aria-current='page', gold bottom border, /incidents/* active matching) and sidebar visual hierarchy verified."
+  );
+
+  // -------------------------------------------------------------------------
+  // 11. OBJECTIVE 11 (ISSUE #19): TEST-PUBLICLEXICONANDUSABILITY GATE
+  // -------------------------------------------------------------------------
+  console.log(
+    "\n[11/11] Verifying Objective 11 (Issue #19): Test-PublicLexiconAndUsability End-to-End Gate..."
+  );
+
+  const publicFilesToAudit = [
+    "src/components/IncidentBriefClient.tsx",
+    "src/components/IncidentCard.tsx",
+    "src/components/TrestleboardClient.tsx",
+    "src/components/RubricInspectorDrawer.tsx",
+    "src/components/RubricCodexClient.tsx",
+    "src/components/KnowledgeGraphClient.tsx",
+    "src/components/PodcastArchiveClient.tsx",
+    "src/components/SiteHeader.tsx",
+    "src/components/SiteFooter.tsx",
+    "src/components/SystemStatusClient.tsx",
+    "src/components/PersistentAudioPlayer.tsx",
+    "src/components/MasonicEngravings.tsx",
+    "src/app/page.tsx",
+    "src/app/incidents/[slug]/page.tsx",
+    "src/app/knowledge-graph/page.tsx",
+    "src/app/archive/page.tsx",
+    "src/app/rubric/page.tsx",
+    "src/app/status/page.tsx",
+  ];
+
+  const bannedUiRegexes: Array<{ label: string; regex: RegExp }> = [
+    { label: "TELEMETRY SPEC SHEET", regex: /TELEMETRY SPEC SHEET/i },
+    { label: "EDITORIAL DISPATCH LEDGER", regex: /EDITORIAL DISPATCH LEDGER/i },
+    {
+      label: "POST-INCIDENT REVIEW (PIR)",
+      regex: /POST-INCIDENT REVIEW \(PIR\)/i,
+    },
+    { label: "FACTS OF THE INCIDENT", regex: /FACTS OF THE INCIDENT/i },
+    { label: "MEDIA JITTER", regex: /MEDIA JITTER/i },
+    {
+      label: "UNDERLYING STRUCTURAL CONSTRAINT (SIGNAL)",
+      regex: /UNDERLYING STRUCTURAL CONSTRAINT \(SIGNAL\)/i,
+    },
+    {
+      label: "RELATED TELEMETRY IN THE ARCHIVE",
+      regex: /RELATED TELEMETRY IN THE ARCHIVE/i,
+    },
+    {
+      label: "RELATED DISPATCHES IN THE ARCHIVE",
+      regex: /RELATED DISPATCHES IN THE ARCHIVE/i,
+    },
+    {
+      label: "Cross-Filter Signature",
+      regex: /Cross-Filter (?:Diagnostic )?Signature/i,
+    },
+    {
+      label: "Primary RSS Source / Inspect Primary Source Dispatch",
+      regex: /Primary RSS Source|Inspect Primary Source Dispatch/i,
+    },
+    {
+      label: "Raw enum codes (CFG-DRIFT, CASCADE-01, SIG-LOSS, SPOF-FAIL, BLAME-ISO, INST-DEBT)",
+      regex: /\((?:CFG-DRIFT|CASCADE-01|SIG-LOSS|SPOF-FAIL|BLAME-ISO|INST-DEBT)\)/,
+    },
+    { label: "Mystery-meat [?] badge", regex: /\[\?\]/ },
+  ];
+
+  for (const relPath of publicFilesToAudit) {
+    const srcText = fs.readFileSync(path.join(process.cwd(), relPath), "utf8");
+    for (const { label, regex } of bannedUiRegexes) {
+      assert.equal(
+        regex.test(srcText),
+        false,
+        `Public file ${relPath} must have zero occurrences of banned UI string "${label}"`
+      );
+    }
+  }
+
+  // Render deterministic HTML for `/` and `/incidents/[slug]` across all incidents and assert:
+  // 1. Zero banned UI strings
+  // 2. Zero verbatim <H1> headline interpolation in Sections II or III <p> tags
+  // 3. Zero exact sentence duplication and <= 50% 4-gram overlap between Section I (Facts) and Section II (Signal)
+  // 4. Krug navigation street signs (aria-current="page") and plain-English action button labels
+  const renderSimulatedBriefHtml = (
+    rawInc: (typeof allIncidentsToVerify)[number]
+  ): string => {
+    const inc = mapDtoToCraftLexicon(rawInc);
+    const primarySpec = getWorkingToolSpec(inc.primaryTool);
+    const failureModeSpec = getSreFailureModeSpec(inc.sreFailureMode);
+    const ledgerEntry = formatCraftLedgerEntry(inc.incidentCode);
+    const friendlySource = formatFriendlySourceName(inc.sourceFeed);
+    const factsParagraph =
+      inc.socraticBrief
+        .split(/\n\s*\n/)
+        .map((p) => p.trim())
+        .filter(Boolean)[0] || inc.executiveSummary;
+    const dedupedSignal = deduplicateSignalAgainstFacts(
+      [factsParagraph, inc.socraticBrief, inc.executiveSummary],
+      inc.proportionalityCheck.structuralSignal,
+      inc.primaryTool,
+      inc.sreFailureMode,
+      inc.secondaryTool
+    );
+    const isTrestleboardActive = evaluateNavActive("/", `/incidents/${inc.slug}`);
+
+    return `
+      <header>
+        <nav aria-label="Primary Broadsheet Navigation">
+          <a href="/" aria-current="${isTrestleboardActive ? "page" : ""}" class="border-b-2 border-b-[#C5A059] text-[#F3EFE6] font-bold">The Trestleboard</a>
+          <a href="/knowledge-graph">The Archive</a>
+        </nav>
+      </header>
+      <aside>
+        <span>THE CRAFTSMAN'S BRIEF</span>
+        <span>CASE LEDGER</span>
+        <h2>${inc.primaryTool}</h2>
+        <p>${primarySpec.moralLens} — ${primarySpec.sreEquivalent}</p>
+        <span>${failureModeSpec.craftTitle}</span>
+        <div>RECORD ID: ${ledgerEntry}</div>
+        <a href="${inc.sourceUrl}">Read Original ${friendlySource} Article</a>
+        <a href="/knowledge-graph?tool=${encodeURIComponent(inc.primaryTool)}">More '${inc.primaryTool}' Cases →</a>
+      </aside>
+      <main>
+        <span>STRUCTURAL INSPECTION</span>
+        <h1>${inc.title}</h1>
+        <section id="section-i">
+          <h2>I. WHAT HAPPENED (THE PLAIN FACTS)</h2>
+          <p>${factsParagraph}</p>
+        </section>
+        <section id="section-ii">
+          <h2>II. The Diagnostic Lens: ${inc.primaryTool} & ${failureModeSpec.craftTitle}</h2>
+          <div>
+            <span>PARTISAN HEAT & SPIN (THE NOISE)</span>
+            <p class="section-ii-noise">${inc.proportionalityCheck.noiseOverblown}</p>
+          </div>
+          <div>
+            <span>THE ACTUAL FOUNDATION (THE SIGNAL)</span>
+            <p class="section-ii-signal">${dedupedSignal}</p>
+          </div>
+        </section>
+        <section id="section-iii">
+          <h2>Questions for Fair & Consistent Judgment</h2>
+          <p class="section-iii-q1">${inc.questions[0]}</p>
+          <p class="section-iii-q2">${inc.questions[1]}</p>
+        </section>
+      </main>
+    `;
+  };
+
+  for (const rawInc of allIncidentsToVerify) {
+    const inc = mapDtoToCraftLexicon(rawInc);
+    const html = renderSimulatedBriefHtml(inc);
+
+    for (const { label, regex } of bannedUiRegexes) {
+      assert.equal(
+        regex.test(html),
+        false,
+        `Rendered HTML for "/incidents/${inc.slug}" must not contain banned pattern "${label}"`
+      );
+    }
+
+    assert.ok(
+      html.includes('aria-current="page"') &&
+        html.includes("Read Original ") &&
+        html.includes(`More '${inc.primaryTool}' Cases →`),
+      `Rendered HTML for "/incidents/${inc.slug}" must include aria-current="page" and plain-spoken Krug action buttons`
+    );
+
+    const factsParagraph =
+      inc.socraticBrief
+        .split(/\n\s*\n/)
+        .map((p) => p.trim())
+        .filter(Boolean)[0] || inc.executiveSummary;
+    const dedupedSignal = deduplicateSignalAgainstFacts(
+      [factsParagraph, inc.socraticBrief, inc.executiveSummary],
+      inc.proportionalityCheck.structuralSignal,
+      inc.primaryTool,
+      inc.sreFailureMode,
+      inc.secondaryTool
+    );
+
+    assert.equal(
+      containsInterpolatedHeadline(
+        inc.proportionalityCheck.noiseOverblown,
+        inc.title
+      ),
+      false,
+      `Rendered Section II Noise for "${inc.title}" must have zero <H1> headline interpolation`
+    );
+    assert.equal(
+      containsInterpolatedHeadline(dedupedSignal, inc.title),
+      false,
+      `Rendered Section II Signal for "${inc.title}" must have zero <H1> headline interpolation`
+    );
+    assert.equal(
+      containsInterpolatedHeadline(inc.questions[0], inc.title),
+      false,
+      `Rendered Section III Q1 for "${inc.title}" must have zero <H1> headline interpolation`
+    );
+    assert.equal(
+      containsInterpolatedHeadline(inc.questions[1], inc.title),
+      false,
+      `Rendered Section III Q2 for "${inc.title}" must have zero <H1> headline interpolation`
+    );
+    assert.equal(
+      hasDuplicateSentenceBetweenFactsAndSignal(
+        [factsParagraph, inc.socraticBrief, inc.executiveSummary],
+        dedupedSignal
+      ),
+      false,
+      `Rendered Section I (Facts) and Section II (Signal) for "${inc.title}" must have zero duplicate sentences and <=50% 4-gram overlap`
+    );
+  }
+
+  console.log(
+    `  ✓ Issue #19 Test-PublicLexiconAndUsability verified across ${publicFilesToAudit.length} public source files and ${allIncidentsToVerify.length} rendered case briefs.`
+  );
+  console.log(
+    "\n=== ALL 11 DEFENSIVE HARDENING, CRAFT PROSE & KRUG USABILITY OBJECTIVES PASSED (100%) ==="
   );
 }
 

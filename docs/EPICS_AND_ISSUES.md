@@ -50,8 +50,8 @@
 - [x] **Issue #15 ([GitHub Issue #15](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/15)): [Prose & Templates] Eliminate Broken Headline Interpolation & Corporate Compliance Jargon**
 - [x] **Issue #16 ([GitHub Issue #16](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/16)): [Defensive Rendering] Prevent Verbatim Sentence Duplication Across Sections I & II**
 - [x] **Issue #17 ([GitHub Issue #17](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/17)): [Usability / Krug] Remove Mystery-Meat `[?]` Badges and Clarify Action Button Labels**
-- [ ] **Issue #18 ([GitHub Issue #18](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/18)): [Navigation / Krug] Implement 'You Are Here' Street Signs & Sidebar Visual Hierarchy**
-- [ ] **Issue #19 ([GitHub Issue #19](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/19)): [Verification] Add a 'Banned Jargon & Krug Usability Gate' to the PowerShell Test Harness**
+- [x] **Issue #18 ([GitHub Issue #18](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/18)): [Navigation / Krug] Implement 'You Are Here' Street Signs & Sidebar Visual Hierarchy**
+- [x] **Issue #19 ([GitHub Issue #19](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/19)): [Verification] Add a 'Banned Jargon & Krug Usability Gate' to the PowerShell Test Harness**
 
 ---
 

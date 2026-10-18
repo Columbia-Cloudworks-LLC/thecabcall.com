@@ -104,7 +104,8 @@ export function IncidentBriefClient({
         {/* LEFT COLUMN (4 cols): Fixed Craftsman's Brief / Case Ledger Sidebar */}
         <aside className="lg:col-span-4 space-y-6 lg:sticky lg:top-6">
           <div className="tracing-board-frame p-5 sm:p-6 space-y-5">
-            <div className="border-b border-[#8A6D3B]/40 pb-3">
+            {/* Primary Visual Anchor: Working Tool + Moral Lens + Craft Failure Mode */}
+            <div className="border-b border-[#8A6D3B]/40 pb-3.5 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#C5A059]">
                   THE CRAFTSMAN&apos;S BRIEF
@@ -113,16 +114,21 @@ export function IncidentBriefClient({
                   CASE LEDGER
                 </span>
               </div>
-              <div className="flex items-baseline justify-between mt-1.5">
-                <h2 className="font-display text-lg font-bold text-[#F3EFE6]">
+              <div>
+                <h2 className="font-display text-xl font-bold text-[#F3EFE6] leading-snug">
                   {incident.primaryTool}
                 </h2>
-                <span className="font-mono text-[11px] text-[#94A3B8]">
-                  {incident.domainSector}
-                </span>
+                <p className="font-serif italic text-xs text-[#C5A059] mt-0.5 leading-snug">
+                  {primaryToolSpec.moralLens} — {primaryToolSpec.sreEquivalent}
+                </p>
               </div>
-              <div className="font-mono text-[10px] text-[#94A3B8]/70 mt-1">
-                {ledgerEntryLabel}
+              <div className="pt-2 border-t border-[#8A6D3B]/25 flex items-baseline justify-between gap-2">
+                <span className="font-mono text-[10px] uppercase tracking-wider text-[#F59E0B] shrink-0">
+                  Craft Failure Mode:
+                </span>
+                <span className="font-mono text-xs font-semibold text-[#F59E0B] text-right">
+                  {failureSpec.craftTitle}
+                </span>
               </div>
             </div>
 
@@ -163,35 +169,6 @@ export function IncidentBriefClient({
                     <span>Tool Guide</span>
                   </button>
                 </div>
-                <p className="font-serif text-xs text-[#94A3B8] mt-1.5 leading-relaxed">
-                  {primaryToolSpec.moralLens} — {primaryToolSpec.sreEquivalent}
-                </p>
-              </div>
-
-              <div>
-                <span className="font-mono text-[10px] uppercase tracking-wider text-[#94A3B8] block mb-1">
-                  Secondary Working Tool:
-                </span>
-                <div className="flex items-center justify-between bg-[#0B0E14] border border-[#8A6D3B]/60 px-3 py-2 font-mono text-xs text-[#F3EFE6]">
-                  <Link
-                    href={`/knowledge-graph?tool=${encodeURIComponent(
-                      incident.secondaryTool
-                    )}`}
-                    className="hover:underline"
-                  >
-                    {secondaryToolSpec.numeral}. {incident.secondaryTool}
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      openRubricInspector({ tool: incident.secondaryTool })
-                    }
-                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#8A6D3B]/20 text-[#C5A059] hover:bg-[#C5A059] hover:text-[#0B0E14] transition-colors cursor-pointer"
-                  >
-                    <Info className="w-3 h-3" />
-                    <span>Tool Guide</span>
-                  </button>
-                </div>
               </div>
 
               <div>
@@ -224,23 +201,61 @@ export function IncidentBriefClient({
                   {failureSpec.summary}
                 </p>
               </div>
+
+              <div>
+                <span className="font-mono text-[10px] uppercase tracking-wider text-[#94A3B8] block mb-1">
+                  Secondary Working Tool:
+                </span>
+                <div className="flex items-center justify-between bg-[#0B0E14] border border-[#8A6D3B]/60 px-3 py-2 font-mono text-xs text-[#F3EFE6]">
+                  <Link
+                    href={`/knowledge-graph?tool=${encodeURIComponent(
+                      incident.secondaryTool
+                    )}`}
+                    className="hover:underline"
+                  >
+                    {secondaryToolSpec.numeral}. {incident.secondaryTool}
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      openRubricInspector({ tool: incident.secondaryTool })
+                    }
+                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#8A6D3B]/20 text-[#C5A059] hover:bg-[#C5A059] hover:text-[#0B0E14] transition-colors cursor-pointer"
+                  >
+                    <Info className="w-3 h-3" />
+                    <span>Tool Guide</span>
+                  </button>
+                </div>
+              </div>
             </div>
 
-            {/* Source & Published Metadata */}
+            {/* Lower Colophon: Source, Sector, Published Timestamp & Demoted Ledger ID */}
             <div className="pt-3 border-t border-[#8A6D3B]/35 space-y-2 font-mono text-xs">
-              <div className="flex justify-between">
+              <div className="flex justify-between gap-2">
                 <span className="text-[#94A3B8]">SOURCE DISPATCH:</span>
-                <span className="text-[#F3EFE6]">{incident.sourceFeed}</span>
+                <span className="text-[#F3EFE6] text-right">
+                  {incident.sourceFeed}
+                </span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between gap-2">
+                <span className="text-[#94A3B8]">DOMAIN SECTOR:</span>
+                <span className="text-[#F3EFE6] text-right">
+                  {incident.domainSector}
+                </span>
+              </div>
+              <div className="flex justify-between gap-2">
                 <span className="text-[#94A3B8]">PUBLISHED AT:</span>
-                <span className="text-[#F3EFE6]">
+                <span className="text-[#F3EFE6] text-right">
                   {new Date(incident.publishedAt)
                     .toISOString()
                     .slice(0, 16)
                     .replace("T", " ")}{" "}
                   UTC
                 </span>
+              </div>
+              <div className="flex justify-between gap-2 text-[11px] text-[#94A3B8]/75 pt-0.5">
+                <span>RECORD ID:</span>
+                <span className="text-right">{ledgerEntryLabel}</span>
               </div>
               <div className="pt-2 space-y-2">
                 <a
