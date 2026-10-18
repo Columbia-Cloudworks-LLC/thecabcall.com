@@ -14,6 +14,12 @@ import {
   Sparkles,
   Radio,
 } from "lucide-react";
+import {
+  formatCraftLedgerEntry,
+  isRenderablePublicEpisode,
+  mapDtoToCraftLexicon,
+  PublicEpisodeDto,
+} from "@/lib/dto";
 import { PodcastEpisode } from "@/lib/types";
 import { useTelemetry } from "./TelemetryContext";
 import { BrassSectionDivider } from "./MasonicEngravings";
@@ -21,7 +27,7 @@ import { BrassSectionDivider } from "./MasonicEngravings";
 export function PodcastArchiveClient({
   initialEpisodes,
 }: {
-  initialEpisodes: PodcastEpisode[];
+  initialEpisodes: Array<PublicEpisodeDto | PodcastEpisode>;
 }) {
   const {
     activeEpisode,
@@ -31,7 +37,11 @@ export function PodcastArchiveClient({
     openRubricInspector,
   } = useTelemetry();
 
-  const [episodes, setEpisodes] = useState<PodcastEpisode[]>(initialEpisodes);
+  const [episodes, setEpisodes] = useState<Array<PublicEpisodeDto | PodcastEpisode>>(
+    initialEpisodes
+      .map((ep) => mapDtoToCraftLexicon(ep))
+      .filter((ep) => isRenderablePublicEpisode(ep))
+  );
   const [seriesFilter, setSeriesFilter] = useState<
     "all" | "weekly_rollup" | "legacy_archive"
   >("all");
@@ -59,14 +69,15 @@ export function PodcastArchiveClient({
       });
       if (res.ok) {
         const data = await res.json();
-        if (data.episode) {
+        if (data.episode && isRenderablePublicEpisode(data.episode)) {
+          const mappedEp = mapDtoToCraftLexicon(data.episode);
           setEpisodes((prev) => [
-            data.episode,
-            ...prev.filter((e) => e.id !== data.episode.id),
+            mappedEp,
+            ...prev.filter((e) => e.id !== mappedEp.id),
           ]);
           setExpandedTranscripts((prev) => ({
             ...prev,
-            [data.episode.id]: true,
+            [mappedEp.id]: true,
           }));
         }
       }
@@ -75,7 +86,8 @@ export function PodcastArchiveClient({
     }
   };
 
-  const filteredEpisodes = episodes.filter((ep) =>
+  const validEpisodes = episodes.filter((ep) => isRenderablePublicEpisode(ep));
+  const filteredEpisodes = validEpisodes.filter((ep) =>
     seriesFilter === "all" ? true : ep.series === seriesFilter
   );
 
@@ -94,7 +106,7 @@ export function PodcastArchiveClient({
             <p className="font-serif text-sm sm:text-base text-[#94A3B8] leading-relaxed">
               Housing both the automated 5-minute Friday{" "}
               <strong className="text-[#F3EFE6]">CAB Weekly Brief</strong>{" "}
-              telemetry retrospectives (~750 words, strictly governed by the Zero Definitions and Epistemic Humility rules) and the original full-length{" "}
+              retrospectives (~750 words, strictly governed by the Zero Definitions and Epistemic Humility rules) and the original full-length{" "}
               <strong className="text-[#F3EFE6]">Legacy Deep-Dive Archive</strong>.
             </p>
 
@@ -122,8 +134,8 @@ export function PodcastArchiveClient({
                 <Rss className="w-4 h-4" />
                 <span>Direct RSS 2.0 Podcast Feed</span>
               </span>
-              <span className="font-mono text-[10px] text-[#10B981]">
-                $0/MO SELF-HOSTED XML
+              <span className="font-mono text-[10px] text-[#C5A059]">
+                SYNDICATED XML
               </span>
             </div>
 
@@ -203,7 +215,7 @@ export function PodcastArchiveClient({
                 : "bg-[#111726] text-[#94A3B8] border-[#8A6D3B]/45 hover:text-[#F3EFE6]"
             }`}
           >
-            Weekly Telemetry Rollups (5-Min) (
+            Weekly Trestleboard Briefs (5-Min) (
             {episodes.filter((e) => e.series === "weekly_rollup").length})
           </button>
           <button
@@ -330,7 +342,7 @@ export function PodcastArchiveClient({
               {ep.incidentMarkers.length > 0 && (
                 <div className="pt-3 border-t border-[#8A6D3B]/35 flex flex-wrap items-center gap-2 font-mono text-xs">
                   <span className="text-[#94A3B8] uppercase">
-                    Underlying Incident Briefs:
+                    Referenced Cases on the Trestleboard:
                   </span>
                   {ep.incidentMarkers.map((marker) => (
                     <div
@@ -351,7 +363,9 @@ export function PodcastArchiveClient({
                         href={`/incidents/${marker.incidentSlug}`}
                         className="px-2.5 py-1 text-[#F3EFE6] hover:text-[#C5A059] inline-flex items-center gap-1"
                       >
-                        <span>{marker.incidentCode}:</span>
+                        <span className="text-[#94A3B8]">
+                          {formatCraftLedgerEntry(marker.incidentCode)}:
+                        </span>
                         <span className="truncate max-w-[210px]">
                           {marker.incidentTitle}
                         </span>
@@ -384,7 +398,7 @@ export function PodcastArchiveClient({
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="p-4 bg-[#0B0E14] border border-[#8A6D3B]/45 space-y-2">
                         <div className="font-mono text-xs text-[#C5A059] uppercase">
-                          1. The Weekly Telemetry (0:00 – 1:15)
+                          1. The Week&apos;s Trestleboard (0:00 – 1:15)
                         </div>
                         <p className="font-serif text-sm text-[#F3EFE6]/90 leading-relaxed">
                           {ep.transcriptSections.weeklyTelemetry}

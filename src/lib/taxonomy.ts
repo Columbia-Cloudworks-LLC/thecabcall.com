@@ -12,7 +12,19 @@ export type SreFailureModeId =
   | "Alert Fatigue & Signal Loss"
   | "Single Point of Failure (SPOF) / Untested Failover"
   | "Blame Culture vs. Root-Cause Isolation"
-  | "Technical & Institutional Debt";
+  | "Technical & Institutional Debt"
+  | "Structural Friction";
+
+export const DEFAULT_CRAFT_WORKING_TOOL: WorkingToolId = "The Square";
+export const DEFAULT_CRAFT_FAILURE_MODE: SreFailureModeId = "Structural Friction";
+export const RAW_FAILURE_SHORT_CODES = [
+  "CFG-DRIFT",
+  "CASCADE-01",
+  "SIG-LOSS",
+  "SPOF-FAIL",
+  "BLAME-ISO",
+  "INST-DEBT",
+] as const;
 
 export type DomainSectorId =
   | "Public Policy & Governance"
@@ -233,14 +245,134 @@ export const DOMAIN_SECTORS: DomainSectorId[] = [
   "Institutional Leadership",
 ];
 
-export function getWorkingToolSpec(id: string): WorkingToolSpec {
+export const STRUCTURAL_FRICTION_FALLBACK_SPEC: SreFailureModeSpec = {
+  id: "Structural Friction",
+  shortCode: "",
+  severity: "warning",
+  summary:
+    "Underlying operational or institutional strain where formal design and field execution pull against one another.",
+  systemsDefinition:
+    "Occurs when unmapped dependencies, informal workarounds, or competing operational pressures introduce friction across system boundaries.",
+  civicManifestation:
+    "Public institutions, infrastructure operators, or governing bodies experiencing structural strain awaiting full inspection.",
+  defaultPairedTool: "The Square",
+};
+
+const WORKING_TOOL_ALIAS_MAP: Record<string, WorkingToolId> = {
+  "24-inch gauge": "24-Inch Gauge",
+  twenty_four_inch_gauge: "24-Inch Gauge",
+  "common gavel": "Common Gavel",
+  common_gavel: "Common Gavel",
+  "the plumb": "The Plumb",
+  plumb: "The Plumb",
+  "the square": "The Square",
+  square: "The Square",
+  "the level": "The Level",
+  level: "The Level",
+  "the trowel": "The Trowel",
+  trowel: "The Trowel",
+};
+
+const FAILURE_MODE_ALIAS_MAP: Record<string, SreFailureModeId> = {
+  "configuration drift": "Configuration Drift",
+  configuration_drift: "Configuration Drift",
+  "cfg-drift": "Configuration Drift",
+  "cascading failure": "Cascading Failure",
+  cascading_failure: "Cascading Failure",
+  "cascade-01": "Cascading Failure",
+  "alert fatigue & signal loss": "Alert Fatigue & Signal Loss",
+  "alert fatigue": "Alert Fatigue & Signal Loss",
+  alert_fatigue: "Alert Fatigue & Signal Loss",
+  "sig-loss": "Alert Fatigue & Signal Loss",
+  "single point of failure (spof) / untested failover":
+    "Single Point of Failure (SPOF) / Untested Failover",
+  "single point of failure":
+    "Single Point of Failure (SPOF) / Untested Failover",
+  "untested failover": "Single Point of Failure (SPOF) / Untested Failover",
+  untested_failover: "Single Point of Failure (SPOF) / Untested Failover",
+  "spof-fail": "Single Point of Failure (SPOF) / Untested Failover",
+  "blame culture vs. root-cause isolation":
+    "Blame Culture vs. Root-Cause Isolation",
+  "blame culture": "Blame Culture vs. Root-Cause Isolation",
+  blameless_postmortem_gap: "Blame Culture vs. Root-Cause Isolation",
+  "blame-iso": "Blame Culture vs. Root-Cause Isolation",
+  "technical & institutional debt": "Technical & Institutional Debt",
+  "institutional debt": "Technical & Institutional Debt",
+  capacity_exhaustion: "Technical & Institutional Debt",
+  "inst-debt": "Technical & Institutional Debt",
+  "structural friction": "Structural Friction",
+  structural_friction: "Structural Friction",
+};
+
+export function stripRawFailureShortCodes(
+  text: string | null | undefined
+): string {
+  if (!text || typeof text !== "string") return "";
+  return text
+    .replace(
+      /\s*(?:\(|\[)(?:CFG-DRIFT|CASCADE-01|SIG-LOSS|SPOF-FAIL|BLAME-ISO|INST-DEBT)(?:\)|\])/gi,
+      ""
+    )
+    .replace(
+      /\b(?:CFG-DRIFT|CASCADE-01|SIG-LOSS|SPOF-FAIL|BLAME-ISO|INST-DEBT)\b/gi,
+      ""
+    )
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+export function mapWorkingToolToCraftLexicon(
+  rawTool: string | null | undefined
+): WorkingToolId {
+  if (!rawTool || typeof rawTool !== "string") {
+    return DEFAULT_CRAFT_WORKING_TOOL;
+  }
+  const normalized = stripRawFailureShortCodes(rawTool).toLowerCase();
+  return WORKING_TOOL_ALIAS_MAP[normalized] || DEFAULT_CRAFT_WORKING_TOOL;
+}
+
+export function mapFailureModeToCraftLexicon(
+  rawMode: string | null | undefined
+): SreFailureModeId {
+  if (!rawMode || typeof rawMode !== "string") {
+    return DEFAULT_CRAFT_FAILURE_MODE;
+  }
+  const cleaned = stripRawFailureShortCodes(rawMode).toLowerCase();
+  if (FAILURE_MODE_ALIAS_MAP[cleaned]) {
+    return FAILURE_MODE_ALIAS_MAP[cleaned];
+  }
+  const rawLower = rawMode.trim().toLowerCase();
+  return FAILURE_MODE_ALIAS_MAP[rawLower] || DEFAULT_CRAFT_FAILURE_MODE;
+}
+
+export function formatCraftLedgerEntry(
+  rawCode: string | null | undefined
+): string {
+  if (!rawCode || typeof rawCode !== "string") {
+    return "LEDGER ENTRY No. CAB-0000";
+  }
+  const stripped = rawCode
+    .trim()
+    .replace(/^(?:DISPATCH\s+FOLIO|INCIDENT\s+ID|LEDGER\s+ENTRY\s+No\.?)\s*:?\s*/i, "")
+    .replace(/^#/, "")
+    .trim();
+  return `LEDGER ENTRY No. ${stripped || "CAB-0000"}`;
+}
+
+export function getWorkingToolSpec(id: string | null | undefined): WorkingToolSpec {
+  const mapped = mapWorkingToolToCraftLexicon(id);
   return (
-    WORKING_TOOLS.find((t) => t.id === id) || WORKING_TOOLS[3] // Default to The Square
+    WORKING_TOOLS.find((t) => t.id === mapped) || WORKING_TOOLS[3] // Default to The Square
   );
 }
 
-export function getSreFailureModeSpec(id: string): SreFailureModeSpec {
+export function getSreFailureModeSpec(
+  id: string | null | undefined
+): SreFailureModeSpec {
+  const mapped = mapFailureModeToCraftLexicon(id);
   return (
-    SRE_FAILURE_MODES.find((f) => f.id === id) || SRE_FAILURE_MODES[0]
+    SRE_FAILURE_MODES.find((f) => f.id === mapped) ||
+    STRUCTURAL_FRICTION_FALLBACK_SPEC
   );
 }
+

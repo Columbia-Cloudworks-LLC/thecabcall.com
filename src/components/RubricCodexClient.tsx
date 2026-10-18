@@ -156,23 +156,23 @@ export function RubricCodexClient() {
             </div>
           </div>
 
-          {/* Exact Diagnostic Rubric & Paired Failure Mode */}
+          {/* Paired Failure Mode & Editorial Inquiry Standard */}
           <div className="p-5 bg-[#0B0E14] border border-[#8A6D3B]/50 space-y-3">
             <div className="flex items-center justify-between font-mono text-xs text-[#C5A059]">
               <span className="inline-flex items-center gap-2 uppercase">
-                <Terminal className="w-4 h-4" />
-                <span>Diagnostic Classification Rubric Payload</span>
+                <HelpCircle className="w-4 h-4" />
+                <span>Paired Diagnostic Standard &amp; Failure Axis</span>
               </span>
-              <span className="text-[#10B981]">MUTUALLY EXCLUSIVE RUBRIC</span>
+              <span className="text-[#C5A059]">MUTUALLY EXCLUSIVE RUBRIC</span>
             </div>
-            <pre className="font-mono text-xs text-[#F3EFE6]/90 whitespace-pre-wrap bg-[#111726] p-3.5 border border-[#8A6D3B]/40">
-              {`{
-  "tool_id": "${activeTool.id}",
-  "paired_sre_failure": "${pairedFailure.id} (${pairedFailure.shortCode})",
-  "criteria": "${activeTool.jevClassifierCriteria}",
-  "socratic_probe": "${activeTool.diagnosticQuestionPattern}"
-}`}
-            </pre>
+            <div className="p-4 bg-[#111726] border border-[#8A6D3B]/40 space-y-2.5">
+              <div className="font-display text-sm text-[#F3EFE6]">
+                Paired Failure Axis: {pairedFailure.id}
+              </div>
+              <p className="font-serif text-sm text-[#94A3B8] leading-relaxed">
+                {activeTool.jevClassifierCriteria}
+              </p>
+            </div>
           </div>
         </div>
       </div>
@@ -213,7 +213,7 @@ export function RubricCodexClient() {
         </table>
       </div>
 
-      <BrassSectionDivider label="AXIS 2 // THE SIX SRE FAILURE MODES" />
+      <BrassSectionDivider label="AXIS 2 // THE SIX STRUCTURAL FAILURE MODES" />
 
       {/* SRE Failure Modes Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -224,8 +224,8 @@ export function RubricCodexClient() {
           >
             <div className="space-y-2">
               <div className="flex items-center justify-between font-mono text-xs">
-                <span className="text-[#F59E0B] font-semibold">
-                  [{mode.shortCode}]
+                <span className="text-[#F59E0B] font-semibold uppercase">
+                  Structural Failure Mode
                 </span>
                 <span className="text-[#94A3B8]">
                   Paired: {mode.defaultPairedTool}
@@ -250,7 +250,7 @@ export function RubricCodexClient() {
               className="inline-flex items-center gap-1.5 font-mono text-xs text-[#C5A059] hover:underline pt-2"
             >
               <BookOpen className="w-3.5 h-3.5" />
-              <span>Filter Archive by {mode.shortCode} →</span>
+              <span>Filter Archive by {mode.id} →</span>
             </Link>
           </div>
         ))}

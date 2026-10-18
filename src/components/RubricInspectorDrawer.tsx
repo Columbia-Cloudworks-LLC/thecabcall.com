@@ -137,7 +137,7 @@ export function RubricInspectorDrawer() {
           <div className="mt-6 pt-6 border-t border-[#8A6D3B]/40 space-y-4">
             <div className="flex items-center justify-between">
               <span className="font-mono text-xs uppercase tracking-wider text-[#F59E0B]">
-                PAIRED SRE FAILURE MODE // {failureSpec.shortCode}
+                PAIRED STRUCTURAL FAILURE MODE
               </span>
               <span className="font-mono text-[11px] uppercase px-2 py-0.5 border border-[#F59E0B]/50 text-[#F59E0B]">
                 Severity: {failureSpec.severity}
@@ -170,7 +170,7 @@ export function RubricInspectorDrawer() {
               onClick={closeRubricInspector}
               className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-wider px-3.5 py-2 border border-[#C5A059]/60 text-[#C5A059] hover:bg-[#C5A059]/10 transition-colors"
             >
-              <span>Filter Knowledge Graph by {failureSpec.shortCode}</span>
+              <span>Filter Archive by {failureSpec.id}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>

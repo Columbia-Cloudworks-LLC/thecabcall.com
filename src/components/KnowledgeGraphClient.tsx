@@ -15,6 +15,12 @@ import {
   SRE_FAILURE_MODES,
   WORKING_TOOLS,
 } from "@/lib/taxonomy";
+import {
+  formatCraftLedgerEntry,
+  isRenderablePublicIncident,
+  mapDtoToCraftLexicon,
+  PublicIncidentDto,
+} from "@/lib/dto";
 import { IncidentArticle } from "@/lib/types";
 import { IncidentCard } from "./IncidentCard";
 import { BrassSectionDivider } from "./MasonicEngravings";
@@ -23,7 +29,7 @@ import { useTelemetry } from "./TelemetryContext";
 export function KnowledgeGraphClient({
   incidents,
 }: {
-  incidents: IncidentArticle[];
+  incidents: Array<PublicIncidentDto | IncidentArticle>;
 }) {
   const searchParams = useSearchParams();
   const { openRubricInspector } = useTelemetry();
@@ -38,21 +44,24 @@ export function KnowledgeGraphClient({
     searchParams.get("sector") || "ALL"
   );
   const [searchQuery, setSearchQuery] = useState<string>("");
-  const [minConfidence, setMinConfidence] = useState<number>(75);
   const [viewMode, setViewMode] = useState<"cards" | "table">("table");
 
-  const filtered = incidents.filter((inc) => {
+  const validIncidents = incidents
+    .map((inc) => mapDtoToCraftLexicon(inc))
+    .filter((inc) => isRenderablePublicIncident(inc));
+
+  const filtered = validIncidents.filter((inc) => {
     if (selectedTool !== "ALL" && inc.primaryTool !== selectedTool) return false;
     if (selectedFailure !== "ALL" && inc.sreFailureMode !== selectedFailure)
       return false;
     if (selectedSector !== "ALL" && inc.domainSector !== selectedSector)
       return false;
-    if (Math.round(inc.jevConfidence * 100) < minConfidence) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const match =
         inc.title.toLowerCase().includes(q) ||
         inc.incidentCode.toLowerCase().includes(q) ||
+        formatCraftLedgerEntry(inc.incidentCode).toLowerCase().includes(q) ||
         inc.executiveSummary.toLowerCase().includes(q) ||
         inc.sourceFeed.toLowerCase().includes(q);
       if (!match) return false;
@@ -62,7 +71,7 @@ export function KnowledgeGraphClient({
 
   // Compute 6x6 Matrix counts (X = Working Tools, Y = SRE Failure Modes)
   const getCellCount = (toolId: string, failureId: string) =>
-    incidents.filter(
+    validIncidents.filter(
       (i) => i.primaryTool === toolId && i.sreFailureMode === failureId
     ).length;
 
@@ -76,10 +85,10 @@ export function KnowledgeGraphClient({
               THE KNOWLEDGE GRAPH // DUAL-AXIS TAXONOMY EXPLORER
             </span>
             <h1 className="font-display text-2xl sm:text-3xl text-[#F3EFE6] mt-1">
-              Moral Working Tools × SRE Failure Modes Matrix
+              Moral Working Tools × Structural Failure Modes Matrix
             </h1>
             <p className="font-serif text-sm sm:text-base text-[#94A3B8] mt-1 max-w-3xl">
-              Cross-reference historical and live telemetry across Axis 1 (The Six Working Tools of Freemasonry), Axis 2 (SRE Systems Failure Modes), and Axis 3 (Domain Sectors).
+              Cross-reference historical and active cases on the Trestleboard across Axis 1 (The Six Working Tools of Freemasonry), Axis 2 (Structural Failure Modes), and Axis 3 (Domain Sectors).
             </p>
           </div>
 
@@ -107,7 +116,7 @@ export function KnowledgeGraphClient({
               }`}
             >
               <LayoutGrid className="w-3.5 h-3.5" />
-              <span>Incident Cards</span>
+              <span>Case Cards</span>
             </button>
           </div>
         </div>
@@ -129,7 +138,6 @@ export function KnowledgeGraphClient({
                   setSelectedFailure("ALL");
                   setSelectedSector("ALL");
                   setSearchQuery("");
-                  setMinConfidence(75);
                 }}
                 className="inline-flex items-center gap-1 text-[#C5A059] hover:underline cursor-pointer"
               >
@@ -143,7 +151,7 @@ export function KnowledgeGraphClient({
             <thead>
               <tr>
                 <th className="p-2.5 bg-[#0B0E14] border border-[#8A6D3B]/40 text-left text-[10px] uppercase text-[#94A3B8]">
-                  Y: SRE Failure \ X: Working Tool
+                  Y: Failure Mode \ X: Working Tool
                 </th>
                 {WORKING_TOOLS.map((tool) => {
                   const isToolSelected = selectedTool === tool.id;
@@ -183,9 +191,6 @@ export function KnowledgeGraphClient({
                           : "bg-[#0B0E14] text-[#F3EFE6] hover:bg-[#111726]"
                       }`}
                     >
-                      <span className="text-[#F59E0B] mr-1.5">
-                        [{failure.shortCode}]
-                      </span>
                       <span>{failure.id}</span>
                     </td>
                     {WORKING_TOOLS.map((tool) => {
@@ -213,7 +218,7 @@ export function KnowledgeGraphClient({
                               : "bg-[#0B0E14]/50 text-[#94A3B8]/40 hover:bg-[#111726]"
                           }`}
                         >
-                          {count > 0 ? `${count} INC` : "—"}
+                          {count > 0 ? `${count} CASES` : "—"}
                         </td>
                       );
                     })}
@@ -224,8 +229,8 @@ export function KnowledgeGraphClient({
           </table>
         </div>
 
-        {/* Search, Sector & Confidence Threshold Bar */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 pt-5 border-t border-[#8A6D3B]/35">
+        {/* Search & Domain Sector Filter Bar */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6 pt-5 border-t border-[#8A6D3B]/35">
           {/* Search Input */}
           <div className="flex items-center gap-2 bg-[#0B0E14] border border-[#8A6D3B]/50 px-3 py-2">
             <Search className="w-4 h-4 text-[#C5A059] shrink-0" />
@@ -233,7 +238,7 @@ export function KnowledgeGraphClient({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search incident ID, headline, source..."
+              placeholder="Search ledger entry, headline, source..."
               className="bg-transparent font-mono text-xs text-[#F3EFE6] placeholder-[#94A3B8]/60 focus:outline-none w-full"
             />
           </div>
@@ -256,28 +261,11 @@ export function KnowledgeGraphClient({
               ))}
             </select>
           </div>
-
-          {/* Signal Alignment Gate Slider */}
-          <div className="flex items-center justify-between gap-3 bg-[#0B0E14] border border-[#8A6D3B]/50 px-3 py-2 font-mono text-xs">
-            <span className="text-[#94A3B8] shrink-0">
-              Min Signal Alignment:{" "}
-              <strong className="text-[#C5A059]">{minConfidence}%</strong>
-            </span>
-            <input
-              type="range"
-              min={70}
-              max={95}
-              step={1}
-              value={minConfidence}
-              onChange={(e) => setMinConfidence(Number(e.target.value))}
-              className="accent-[#C5A059] w-28 cursor-pointer"
-            />
-          </div>
         </div>
       </div>
 
       <BrassSectionDivider
-        label={`MATCHING TELEMETRY RECORDS (${filtered.length} OF ${incidents.length})`}
+        label={`MATCHING CASES ON THE TRESTLEBOARD (${filtered.length} OF ${validIncidents.length})`}
       />
 
       {/* Results Display: High-Density Table vs. Card Grid */}
@@ -293,7 +281,6 @@ export function KnowledgeGraphClient({
               setSelectedFailure("ALL");
               setSelectedSector("ALL");
               setSearchQuery("");
-              setMinConfidence(75);
             }}
             className="px-4 py-2 bg-[#C5A059] text-[#0B0E14] font-mono text-xs font-bold uppercase cursor-pointer"
           >
@@ -305,13 +292,13 @@ export function KnowledgeGraphClient({
           <table className="w-full border-collapse text-left min-w-[880px]">
             <thead>
               <tr className="border-b border-[#8A6D3B]/50 bg-[#0B0E14] font-mono text-[11px] uppercase text-[#C5A059]">
-                <th className="p-3.5">Incident ID</th>
+                <th className="p-3.5">Case Ledger</th>
                 <th className="p-3.5">Source / Date</th>
                 <th className="p-3.5">Event Headline</th>
                 <th className="p-3.5">Primary Working Tool</th>
-                <th className="p-3.5">SRE Failure Mode</th>
-                <th className="p-3.5 text-right">Alignment</th>
-                <th className="p-3.5 text-right">PIR</th>
+                <th className="p-3.5">Secondary Tool</th>
+                <th className="p-3.5">Structural Failure Mode</th>
+                <th className="p-3.5 text-right">STRUCTURAL INSPECTION</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#8A6D3B]/30 font-mono text-xs">
@@ -320,8 +307,8 @@ export function KnowledgeGraphClient({
                   key={inc.id}
                   className="hover:bg-[#0B0E14]/70 transition-colors"
                 >
-                  <td className="p-3.5 text-[#C5A059] font-semibold whitespace-nowrap">
-                    {inc.incidentCode}
+                  <td className="p-3.5 text-[#94A3B8] text-[11px] whitespace-nowrap">
+                    {formatCraftLedgerEntry(inc.incidentCode)}
                   </td>
                   <td className="p-3.5 whitespace-nowrap">
                     <div className="text-[#F3EFE6]">{inc.sourceFeed}</div>
@@ -351,6 +338,9 @@ export function KnowledgeGraphClient({
                       {inc.primaryTool} [?]
                     </button>
                   </td>
+                  <td className="p-3.5 whitespace-nowrap text-[#94A3B8]">
+                    {inc.secondaryTool}
+                  </td>
                   <td className="p-3.5 whitespace-nowrap">
                     <button
                       type="button"
@@ -363,9 +353,6 @@ export function KnowledgeGraphClient({
                     >
                       {inc.sreFailureMode}
                     </button>
-                  </td>
-                  <td className="p-3.5 text-right text-[#10B981] font-semibold whitespace-nowrap">
-                    {Math.round(inc.jevConfidence * 100)}%
                   </td>
                   <td className="p-3.5 text-right whitespace-nowrap">
                     <Link

@@ -1,16 +1,21 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
+  isRenderablePublicEpisode,
+  isRenderablePublicIncident,
+  PublicEpisodeDto,
+  PublicIncidentDto,
+} from "./dto";
+import {
   buildOrSanitizeArticleDiagnostics,
-  joinClauseWithTransition,
   sanitizeStringConcatenation,
   SummaryValidationResult,
   validateAndNormalizeIncidentSummary,
 } from "./sanitize";
 import {
   DomainSectorId,
-  getSreFailureModeSpec,
-  getWorkingToolSpec,
+  mapFailureModeToCraftLexicon,
+  mapWorkingToolToCraftLexicon,
   SreFailureModeId,
   WorkingToolId,
 } from "./taxonomy";
@@ -28,7 +33,12 @@ import {
   runD1IngestPipeline,
 } from "@/pipeline/ingest";
 import { JevSreFailureModeKey, JevWorkingToolKey } from "@/pipeline/jev";
-import { R2BucketLike, R2ObjectLike } from "@/pipeline/rollup";
+import {
+  EpisodePublishStatus,
+  R2BucketLike,
+  R2ObjectLike,
+  R2ObjectMetaLike,
+} from "@/pipeline/rollup";
 import {
   runSynthesizePipeline,
   TelemetryArticleRow,
@@ -56,17 +66,13 @@ export const JEV_TO_FRONTEND_FAILURE_MODE: Record<
 };
 
 export function mapJevToolToWorkingToolId(rawTool?: string | null): WorkingToolId {
-  if (!rawTool) return "The Square";
-  const key = rawTool.trim().toLowerCase() as JevWorkingToolKey;
-  return JEV_TO_FRONTEND_TOOL[key] || "The Square";
+  return mapWorkingToolToCraftLexicon(rawTool);
 }
 
 export function mapJevFailureToSreFailureModeId(
   rawFailure?: string | null
 ): SreFailureModeId {
-  if (!rawFailure) return "Configuration Drift";
-  const key = rawFailure.trim().toLowerCase() as JevSreFailureModeKey;
-  return JEV_TO_FRONTEND_FAILURE_MODE[key] || "Configuration Drift";
+  return mapFailureModeToCraftLexicon(rawFailure);
 }
 
 export function inferDomainSector(
@@ -177,7 +183,7 @@ export function extractStoredQuestionsPayload(questionsJson: string | null): {
 export function mapD1RowToIncidentArticle(
   row: TelemetryArticleRow,
   prevalidated?: SummaryValidationResult
-): IncidentArticle {
+): IncidentArticle | null {
   const primaryTool = mapJevToolToWorkingToolId(row.primary_tool);
   const secondaryTool = mapJevToolToWorkingToolId(
     row.secondary_tool || "twenty_four_inch_gauge"
@@ -210,7 +216,7 @@ export function mapD1RowToIncidentArticle(
       (Object.keys(JEV_TO_FRONTEND_TOOL) as JevWorkingToolKey[]).forEach(
         (jevKey) => {
           const frontendKey = JEV_TO_FRONTEND_TOOL[jevKey];
-          if (typeof rawProbs[jevKey] === "number") {
+          if (typeof rawProbs[jevKey] === "number" && Number.isFinite(rawProbs[jevKey])) {
             defaultProbs[frontendKey] =
               Math.round(rawProbs[jevKey] * 100) / 100;
           }
@@ -220,9 +226,6 @@ export function mapD1RowToIncidentArticle(
   } catch {
     // Use default fallback probabilities
   }
-
-  const primarySpec = getWorkingToolSpec(primaryTool);
-  const failureSpec = getSreFailureModeSpec(sreFailureMode);
 
   const storedPayload = extractStoredQuestionsPayload(row.questions_json);
 
@@ -237,6 +240,10 @@ export function mapD1RowToIncidentArticle(
       socraticBrief: row.socratic_brief,
       logWarnings: false,
     });
+
+  if (!validation.valid) {
+    return null;
+  }
 
   const executiveSummary =
     validation.executiveSummary ||
@@ -257,16 +264,13 @@ export function mapD1RowToIncidentArticle(
     existingQuestions: storedPayload.questions,
   });
 
-  const diagnosticApplication = sanitizeStringConcatenation(
-    `${primarySpec.sreDefinition} ${joinClauseWithTransition(
-      "Concurrently",
-      failureSpec.summary
-    )} Applying ${primaryTool} alongside ${secondaryTool} anchors the review in verifiable operational state rather than speculative commentary.`
-  );
+  if (!diagnostics.valid || diagnostics.questions.length < 2) {
+    return null;
+  }
 
   const incidentNumber = 2000 + row.id;
 
-  return {
+  const candidate: IncidentArticle = {
     id: `d1-inc-${row.id}`,
     incidentCode: `#CAB-2026-${incidentNumber}`,
     slug: makeIncidentSlug(row.title, row.id),
@@ -286,16 +290,22 @@ export function mapD1RowToIncidentArticle(
     toolProbabilities: defaultProbs,
     executiveSummary,
     socraticBrief,
-    diagnosticApplication,
+    diagnosticApplication: socraticBrief,
     proportionalityCheck: {
       noiseOverblown: diagnostics.noiseOverblown,
       structuralSignal: diagnostics.structuralSignal,
     },
-    questions: diagnostics.questions,
+    questions: [diagnostics.questions[0], diagnostics.questions[1]],
     classifierLatencyMs: 112 + (row.id % 37),
     isLeadPostMortem: storedPayload.isLeadPostMortem,
     leadPostMortemAnalysis: storedPayload.leadPostMortemAnalysis || undefined,
   };
+
+  if (!isRenderablePublicIncident(candidate)) {
+    return null;
+  }
+
+  return candidate;
 }
 
 export interface D1EpisodeRow {
@@ -309,6 +319,7 @@ export interface D1EpisodeRow {
   duration_seconds: number;
   file_size_bytes: number;
   published_at: string;
+  status?: EpisodePublishStatus;
 }
 
 function sanitizeEpisodeProse(text: string): string {
@@ -665,6 +676,126 @@ function emptyD1Snapshot(sqlitePath: string | null = null): LocalD1Snapshot {
 
 const loggedQuarantineHashes = new Set<string>();
 
+const TELEMETRY_ARTICLES_SNAPSHOT_COLUMNS = `
+  id,
+  url_hash,
+  source_feed,
+  title,
+  source_url,
+  raw_excerpt,
+  published_at,
+  ingested_at,
+  is_systemic_prob,
+  jev_confidence,
+  primary_tool,
+  secondary_tool,
+  sre_failure_mode,
+  jev_raw_json,
+  socratic_brief,
+  questions_json,
+  status
+`;
+
+const EPISODES_SNAPSHOT_COLUMNS = `
+  id,
+  episode_number,
+  slug,
+  title,
+  summary,
+  transcript,
+  audio_url,
+  duration_seconds,
+  file_size_bytes,
+  published_at,
+  status
+`;
+
+const PIPELINE_RUNS_SNAPSHOT_COLUMNS = `
+  id,
+  run_type,
+  started_at,
+  completed_at,
+  items_evaluated,
+  items_accepted,
+  items_rejected_noise,
+  avg_latency_ms,
+  status,
+  notes
+`;
+
+function mapPublicIncidentDtoToIncidentArticle(
+  dto: PublicIncidentDto
+): IncidentArticle | null {
+  if (!isRenderablePublicIncident(dto)) {
+    return null;
+  }
+  const defaultProbs: ToolProbabilityDistribution = {
+    "24-Inch Gauge": 0.12,
+    "Common Gavel": 0.12,
+    "The Plumb": 0.12,
+    "The Square": 0.12,
+    "The Level": 0.12,
+    "The Trowel": 0.12,
+  };
+  defaultProbs[dto.primaryTool] = 0.44;
+  defaultProbs[dto.secondaryTool] = 0.24;
+
+  return {
+    id: dto.id,
+    incidentCode: dto.incidentCode,
+    slug: dto.slug,
+    urlHash: dto.slug,
+    sourceFeed: dto.sourceFeed,
+    title: dto.title,
+    sourceUrl: dto.sourceUrl,
+    publishedAt: dto.publishedAt,
+    ingestedAt: dto.publishedAt,
+    domainSector: dto.domainSector,
+    jevConfidence: 0.9,
+    primaryTool: dto.primaryTool,
+    secondaryTool: dto.secondaryTool,
+    sreFailureMode: dto.sreFailureMode,
+    toolProbabilities: defaultProbs,
+    executiveSummary: dto.executiveSummary,
+    socraticBrief: dto.socraticBrief,
+    diagnosticApplication: dto.socraticBrief,
+    proportionalityCheck: {
+      noiseOverblown: dto.proportionalityCheck.noiseOverblown,
+      structuralSignal: dto.proportionalityCheck.structuralSignal,
+    },
+    questions: [dto.questions[0], dto.questions[1]],
+    classifierLatencyMs: 118,
+    isLeadPostMortem: dto.isLeadPostMortem,
+    leadPostMortemAnalysis: dto.leadPostMortemAnalysis,
+  };
+}
+
+function mapPublicEpisodeDtoToPodcastEpisode(
+  dto: PublicEpisodeDto
+): PodcastEpisode | null {
+  if (!isRenderablePublicEpisode(dto)) {
+    return null;
+  }
+  return {
+    id: dto.id,
+    slug: dto.slug,
+    episodeNumber: dto.episodeNumber,
+    series: dto.series,
+    title: dto.title,
+    summary: dto.summary,
+    transcript: dto.transcript,
+    transcriptSections: dto.transcriptSections,
+    audioUrl: dto.audioUrl,
+    durationSeconds: dto.durationSeconds,
+    durationFormatted: dto.durationFormatted,
+    fileSizeBytes: dto.fileSizeBytes,
+    publishedAt: dto.publishedAt,
+    dominantTool: dto.dominantTool,
+    dominantFailureMode: dto.dominantFailureMode,
+    incidentMarkers: dto.incidentMarkers || [],
+  };
+}
+
 function buildSnapshotFromRows(
   allArticleRows: TelemetryArticleRow[],
   episodeRows: D1EpisodeRow[],
@@ -682,8 +813,9 @@ function buildSnapshotFromRows(
     (r) => r.status === "dropped"
   ).length;
 
+  // Strictly filter out QUARANTINED, PENDING_RETRY, dropped, and un-synthesized rows
   const visibleRows = allArticleRows.filter(
-    (r) => r.status === "synthesized" || r.status === "triaged"
+    (r) => r.status === "synthesized"
   );
   const incidents: IncidentArticle[] = [];
 
@@ -705,12 +837,21 @@ function buildSnapshotFromRows(
       continue;
     }
 
-    incidents.push(mapD1RowToIncidentArticle(row, validation));
+    const mapped = mapD1RowToIncidentArticle(row, validation);
+    if (!mapped) {
+      loggedQuarantineHashes.add(row.url_hash);
+      continue;
+    }
+
+    incidents.push(mapped);
   }
 
-  const episodes = episodeRows.map((ep) =>
-    mapD1RowToPodcastEpisode(ep, incidents)
+  const publishedEpisodeRows = episodeRows.filter(
+    (ep) => !ep.status || ep.status === "PUBLISHED"
   );
+  const episodes = publishedEpisodeRows
+    .map((ep) => mapD1RowToPodcastEpisode(ep, incidents))
+    .filter((ep) => isRenderablePublicEpisode(ep));
   const pipelineRuns = runRows.map(mapD1RowToPipelineRun);
 
   return {
@@ -727,9 +868,37 @@ function buildSnapshotFromRows(
   };
 }
 
+let localSchemaHardened = false;
+
+function ensureLocalSqliteHardenedSchema(db: {
+  exec(sql: string): void;
+}): void {
+  if (localSchemaHardened) return;
+  try {
+    db.exec(
+      "ALTER TABLE episodes ADD COLUMN status TEXT NOT NULL DEFAULT 'PUBLISHED';"
+    );
+  } catch {
+    // Column already exists
+  }
+  try {
+    db.exec(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_telemetry_articles_canonical_hash ON telemetry_articles(url_hash);
+      CREATE INDEX IF NOT EXISTS idx_telemetry_articles_status_only ON telemetry_articles(status);
+      CREATE INDEX IF NOT EXISTS idx_telemetry_articles_status_published ON telemetry_articles(status, published_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_telemetry_articles_published_desc ON telemetry_articles(published_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_episodes_published_desc ON episodes(published_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_episodes_status_published ON episodes(status, published_at DESC);
+    `);
+    localSchemaHardened = true;
+  } catch {
+    // Ignore on read-only or uninitialized DB
+  }
+}
+
 /**
  * Synchronously reads live `telemetry_articles`, `episodes`, and `pipeline_runs` from the local Wrangler D1 SQLite database
- * using Node's built-in `node:sqlite` (`DatabaseSync`), mapping rows to frontend types.
+ * using Node's built-in `node:sqlite` (`DatabaseSync`), mapping rows to frontend types using explicit column selection.
  */
 export function readLocalSqliteSnapshot(): LocalD1Snapshot {
   const sqlitePath = findLocalWranglerD1SqlitePath();
@@ -744,9 +913,12 @@ export function readLocalSqliteSnapshot(): LocalD1Snapshot {
     const db = new DatabaseSync(sqlitePath, { open: true });
 
     try {
+      ensureLocalSqliteHardenedSchema(db);
+
       const allArticleRows = db
         .prepare(
-          `SELECT * FROM telemetry_articles
+          `SELECT ${TELEMETRY_ARTICLES_SNAPSHOT_COLUMNS}
+           FROM telemetry_articles
            ORDER BY
              CASE WHEN status = 'synthesized' THEN 0 WHEN status = 'triaged' THEN 1 ELSE 2 END,
              published_at DESC,
@@ -757,7 +929,12 @@ export function readLocalSqliteSnapshot(): LocalD1Snapshot {
       let episodeRows: D1EpisodeRow[] = [];
       try {
         episodeRows = db
-          .prepare("SELECT * FROM episodes ORDER BY published_at DESC, id DESC")
+          .prepare(
+            `SELECT ${EPISODES_SNAPSHOT_COLUMNS}
+             FROM episodes
+             WHERE status = 'PUBLISHED'
+             ORDER BY published_at DESC, id DESC`
+          )
           .all() as D1EpisodeRow[];
       } catch {
         episodeRows = [];
@@ -767,7 +944,10 @@ export function readLocalSqliteSnapshot(): LocalD1Snapshot {
       try {
         runRows = db
           .prepare(
-            "SELECT * FROM pipeline_runs ORDER BY started_at DESC, id DESC LIMIT 50"
+            `SELECT ${PIPELINE_RUNS_SNAPSHOT_COLUMNS}
+             FROM pipeline_runs
+             ORDER BY started_at DESC, id DESC
+             LIMIT 50`
           )
           .all() as D1PipelineRunRow[];
       } catch {
@@ -838,18 +1018,48 @@ export async function fetchRemoteWorkerSnapshot(
 
       const data = (await response.json()) as {
         ok?: boolean;
+        incidents?: PublicIncidentDto[];
         articles?: TelemetryArticleRow[];
-        episodes?: D1EpisodeRow[];
+        episodes?: Array<PublicEpisodeDto & D1EpisodeRow>;
         pipelineRuns?: D1PipelineRunRow[];
       };
 
-      if (!data || !Array.isArray(data.articles)) {
+      if (!data) {
+        return cachedRemoteSnapshot;
+      }
+
+      if (Array.isArray(data.incidents)) {
+        const incidents = data.incidents
+          .map(mapPublicIncidentDtoToIncidentArticle)
+          .filter((inc): inc is IncidentArticle => inc !== null);
+        const episodes = (Array.isArray(data.episodes) ? data.episodes : [])
+          .map((ep) => mapPublicEpisodeDtoToPodcastEpisode(ep as PublicEpisodeDto))
+          .filter((ep): ep is PodcastEpisode => ep !== null);
+
+        const snap: LocalD1Snapshot = {
+          available: true,
+          source: "remote-worker",
+          sqlitePath: null,
+          synthesizedCount: incidents.length,
+          triagedCount: 0,
+          droppedCount: 0,
+          totalEvaluated: incidents.length,
+          incidents,
+          episodes,
+          pipelineRuns: [],
+        };
+        cachedRemoteSnapshot = snap;
+        cachedRemoteSnapshotAtMs = Date.now();
+        return snap;
+      }
+
+      if (!Array.isArray(data.articles)) {
         return cachedRemoteSnapshot;
       }
 
       const snap = buildSnapshotFromRows(
         data.articles,
-        Array.isArray(data.episodes) ? data.episodes : [],
+        Array.isArray(data.episodes) ? (data.episodes as D1EpisodeRow[]) : [],
         Array.isArray(data.pipelineRuns) ? data.pipelineRuns : [],
         `${workerUrl}/api/snapshot`,
         "remote-worker"
@@ -1129,7 +1339,7 @@ export async function fetchRemoteWorkerAudioBytes(
 
 /**
  * Provides a local filesystem R2 adapter under `.wrangler/state/v3/r2/cabcall-audio-blobs`
- * so Next.js routes can persist and stream episode MP3 binaries identically to the Worker.
+ * so Next.js routes can persist, verify via `head()`, and stream episode MP3 binaries identically to the Worker.
  */
 export function createLocalR2AudioAdapter(): R2BucketLike {
   const audioDir = path.join(
@@ -1140,9 +1350,39 @@ export function createLocalR2AudioAdapter(): R2BucketLike {
     "r2",
     "cabcall-audio-blobs"
   );
+  const publicAudioDir = path.join(process.cwd(), "public", "audio");
+
+  function resolveMetaAndPath(key: string): {
+    safeKey: string;
+    filePath: string | null;
+    contentType: string;
+  } {
+    const safeKey = path.basename(key);
+    const r2Path = path.join(audioDir, safeKey);
+    const metaPath = `${r2Path}.meta.json`;
+    let contentType = "audio/mpeg";
+    if (fs.existsSync(metaPath)) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(metaPath, "utf8"));
+        if (typeof parsed?.contentType === "string") {
+          contentType = parsed.contentType;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    if (fs.existsSync(r2Path)) {
+      return { safeKey, filePath: r2Path, contentType };
+    }
+    const pubPath = path.join(publicAudioDir, safeKey);
+    if (fs.existsSync(pubPath)) {
+      return { safeKey, filePath: pubPath, contentType: "audio/mpeg" };
+    }
+    return { safeKey, filePath: null, contentType };
+  }
 
   return {
-    async put(key, value) {
+    async put(key, value, options) {
       try {
         fs.mkdirSync(audioDir, { recursive: true });
         const safeKey = path.basename(key);
@@ -1154,22 +1394,44 @@ export function createLocalR2AudioAdapter(): R2BucketLike {
         } else if (typeof value === "string") {
           fs.writeFileSync(filePath, value, "utf8");
         }
+        const metaPath = `${filePath}.meta.json`;
+        fs.writeFileSync(
+          metaPath,
+          JSON.stringify({
+            contentType: options?.httpMetadata?.contentType ?? "audio/mpeg",
+            customMetadata: options?.customMetadata ?? {},
+          }),
+          "utf8"
+        );
       } catch (err) {
         console.warn("[R2 Bridge] Failed to write local audio file:", err);
       }
       return {};
     },
+    async head(key): Promise<R2ObjectMetaLike | null> {
+      try {
+        const { safeKey, filePath, contentType } = resolveMetaAndPath(key);
+        if (!filePath) return null;
+        const stat = fs.statSync(filePath);
+        return {
+          key: safeKey,
+          size: stat.size,
+          httpMetadata: { contentType },
+        };
+      } catch {
+        return null;
+      }
+    },
     async get(key): Promise<R2ObjectLike | null> {
       try {
-        const safeKey = path.basename(key);
-        const filePath = path.join(audioDir, safeKey);
-        if (!fs.existsSync(filePath)) return null;
+        const { safeKey, filePath, contentType } = resolveMetaAndPath(key);
+        if (!filePath) return null;
         const buf = fs.readFileSync(filePath);
         const u8 = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
         return {
           key: safeKey,
           size: u8.byteLength,
-          httpMetadata: { contentType: "audio/mpeg" },
+          httpMetadata: { contentType },
           async arrayBuffer() {
             return u8.buffer.slice(
               u8.byteOffset,
@@ -1187,8 +1449,12 @@ export function createLocalR2AudioAdapter(): R2BucketLike {
         for (const k of keys) {
           const safeKey = path.basename(k);
           const filePath = path.join(audioDir, safeKey);
+          const metaPath = `${filePath}.meta.json`;
           if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
+          }
+          if (fs.existsSync(metaPath)) {
+            fs.unlinkSync(metaPath);
           }
         }
       } catch (err) {
@@ -1198,9 +1464,14 @@ export function createLocalR2AudioAdapter(): R2BucketLike {
   };
 }
 
+interface InternalSqlitePreparedStatement extends D1PreparedStatementLike {
+  __query: string;
+  __getBoundValues(): unknown[];
+}
+
 /**
  * Provides a `D1DatabaseLike` wrapper backed by the local `.wrangler` SQLite database
- * so Next.js server routes can also execute D1 pipeline queries directly when running locally.
+ * so Next.js server routes can also execute D1 pipeline queries (including `db.batch()`) directly when running locally.
  */
 export function createLocalSqliteD1Adapter(): D1DatabaseLike | null {
   const sqlitePath = findLocalWranglerD1SqlitePath();
@@ -1210,7 +1481,11 @@ export function createLocalSqliteD1Adapter(): D1DatabaseLike | null {
     prepare(query: string): D1PreparedStatementLike {
       let boundValues: unknown[] = [];
 
-      const statement: D1PreparedStatementLike = {
+      const statement: InternalSqlitePreparedStatement = {
+        __query: query,
+        __getBoundValues() {
+          return boundValues;
+        },
         bind(...values: unknown[]) {
           boundValues = values;
           return statement;
@@ -1222,6 +1497,7 @@ export function createLocalSqliteD1Adapter(): D1DatabaseLike | null {
           const { DatabaseSync } = require("node:sqlite");
           const db = new DatabaseSync(sqlitePath, { open: true });
           try {
+            ensureLocalSqliteHardenedSchema(db);
             const stmt = db.prepare(query);
             const row = stmt.get(...boundValues) as
               | Record<string, unknown>
@@ -1238,6 +1514,7 @@ export function createLocalSqliteD1Adapter(): D1DatabaseLike | null {
           const { DatabaseSync } = require("node:sqlite");
           const db = new DatabaseSync(sqlitePath, { open: true });
           try {
+            ensureLocalSqliteHardenedSchema(db);
             const stmt = db.prepare(query);
             return stmt.run(...boundValues) as T;
           } finally {
@@ -1249,6 +1526,7 @@ export function createLocalSqliteD1Adapter(): D1DatabaseLike | null {
           const { DatabaseSync } = require("node:sqlite");
           const db = new DatabaseSync(sqlitePath, { open: true });
           try {
+            ensureLocalSqliteHardenedSchema(db);
             const stmt = db.prepare(query);
             const results = (stmt.all(...boundValues) || []) as T[];
             return { results };
@@ -1259,6 +1537,46 @@ export function createLocalSqliteD1Adapter(): D1DatabaseLike | null {
       };
 
       return statement;
+    },
+    async batch<T = unknown>(
+      statements: D1PreparedStatementLike[]
+    ): Promise<T[]> {
+      if (!statements || statements.length === 0) return [];
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { DatabaseSync } = require("node:sqlite");
+      const db = new DatabaseSync(sqlitePath, { open: true });
+      const results: T[] = [];
+      try {
+        ensureLocalSqliteHardenedSchema(db);
+        db.exec("BEGIN IMMEDIATE");
+        try {
+          for (const stmt of statements) {
+            const internal = stmt as Partial<InternalSqlitePreparedStatement>;
+            if (
+              internal.__query &&
+              typeof internal.__getBoundValues === "function"
+            ) {
+              const prepared = db.prepare(internal.__query);
+              results.push(
+                prepared.run(...internal.__getBoundValues()) as T
+              );
+            } else {
+              results.push(await stmt.run<T>());
+            }
+          }
+          db.exec("COMMIT");
+        } catch (err) {
+          try {
+            db.exec("ROLLBACK");
+          } catch {
+            // ignore rollback error
+          }
+          throw err;
+        }
+        return results;
+      } finally {
+        db.close();
+      }
     },
   };
 }

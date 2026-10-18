@@ -3,41 +3,64 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import {
-  Cpu,
+  BookOpen,
   Play,
   Radio,
   RefreshCw,
+  Rss,
   Sparkles,
   ArrowUpRight,
 } from "lucide-react";
 import {
-  IncidentArticle,
-  PipelineRunRecord,
-  PodcastEpisode,
-  SystemPostureSummary,
-} from "@/lib/types";
+  formatCraftLedgerEntry,
+  isRenderablePublicEpisode,
+  isRenderablePublicIncident,
+  mapDtoToCraftLexicon,
+  PublicEpisodeDto,
+  PublicIncidentDto,
+} from "@/lib/dto";
 import { useTelemetry } from "./TelemetryContext";
 import { BrassSectionDivider } from "./MasonicEngravings";
 
-export function SystemStatusClient({
-  initialRuns,
-  posture,
-}: {
-  initialRuns: PipelineRunRecord[];
-  posture: SystemPostureSummary;
-}) {
+const SYNDICATED_SOURCED_FEEDS = [
+  {
+    name: "NPR News",
+    category: "National & Civic Infrastructure",
+    cadence: "Concurrent Scheduled Poll",
+  },
+  {
+    name: "PBS NewsHour",
+    category: "Public Policy & Institutional Governance",
+    cadence: "Concurrent Scheduled Poll",
+  },
+  {
+    name: "New York Times",
+    category: "National & Global Dispatches",
+    cadence: "Concurrent Scheduled Poll",
+  },
+  {
+    name: "Wall Street Journal",
+    category: "Markets, Supply Chain & Enterprise Operations",
+    cadence: "Concurrent Scheduled Poll",
+  },
+  {
+    name: "Ars Technica",
+    category: "Systems Engineering, Cloud & Security",
+    cadence: "Concurrent Scheduled Poll",
+  },
+];
+
+export function SystemStatusClient() {
   const { playEpisode, refreshTelemetry } = useTelemetry();
 
-  const [runs, setRuns] = useState<PipelineRunRecord[]>(initialRuns);
-  const [livePosture, setLivePosture] = useState<SystemPostureSummary>(posture);
   const [isRunningSweep, setIsRunningSweep] = useState(false);
   const [isRunningSynthesize, setIsRunningSynthesize] = useState(false);
   const [isRunningRollup, setIsRunningRollup] = useState(false);
   const [statusBanner, setStatusBanner] = useState<string | null>(null);
   const [createdIncident, setCreatedIncident] =
-    useState<IncidentArticle | null>(null);
+    useState<PublicIncidentDto | null>(null);
   const [createdRollupEpisode, setCreatedRollupEpisode] =
-    useState<PodcastEpisode | null>(null);
+    useState<PublicEpisodeDto | null>(null);
 
   const [customTitle, setCustomTitle] = useState(
     "Cloud Provider Regional Control Plane Outage Traced to Unreviewed Automated BGP Policy Push"
@@ -47,24 +70,6 @@ export function SystemStatusClient({
   );
   const [customSource, setCustomSource] = useState("REUTERS // INFRASTRUCTURE");
   const [isSimulatingCustom, setIsSimulatingCustom] = useState(false);
-
-  const syncFromTelemetryEndpoint = async () => {
-    try {
-      const res = await fetch("/api/telemetry", { cache: "no-store" });
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data.pipelineRuns)) {
-          setRuns(data.pipelineRuns);
-        }
-        if (data.posture) {
-          setLivePosture(data.posture);
-        }
-      }
-      await refreshTelemetry();
-    } catch {
-      // ignore
-    }
-  };
 
   const handleTriggerRssCron = async () => {
     setIsRunningSweep(true);
@@ -77,23 +82,15 @@ export function SystemStatusClient({
       });
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data.runs)) {
-          setRuns(data.runs);
-        } else if (data.run) {
-          setRuns((prev) => [data.run, ...prev]);
-        }
-        if (data.posture) {
-          setLivePosture(data.posture);
-        }
-        if (data.createdIncidents?.[0]) {
-          setCreatedIncident(data.createdIncidents[0]);
+        const candidate = data.createdIncidents?.[0];
+        if (candidate && isRenderablePublicIncident(candidate)) {
+          setCreatedIncident(mapDtoToCraftLexicon(candidate));
         }
         setStatusBanner(
-          data.run?.notes ||
-            "Completed Stage 1–2 Ingest + Jev (jev-1.14.0) Triage against local D1."
+          "Completed concurrent source sweep and diagnostic classification."
         );
       }
-      await syncFromTelemetryEndpoint();
+      await refreshTelemetry();
     } finally {
       setIsRunningSweep(false);
     }
@@ -110,23 +107,15 @@ export function SystemStatusClient({
       });
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data.runs)) {
-          setRuns(data.runs);
-        } else if (data.run) {
-          setRuns((prev) => [data.run, ...prev]);
-        }
-        if (data.posture) {
-          setLivePosture(data.posture);
-        }
-        if (data.createdIncidents?.[0]) {
-          setCreatedIncident(data.createdIncidents[0]);
+        const candidate = data.createdIncidents?.[0];
+        if (candidate && isRenderablePublicIncident(candidate)) {
+          setCreatedIncident(mapDtoToCraftLexicon(candidate));
         }
         setStatusBanner(
-          data.run?.notes ||
-            "Completed Stage 4 System-2 Gemini Socratic Synthesis on D1 queue."
+          "Completed Socratic editorial synthesis for triaged dispatches."
         );
       }
-      await syncFromTelemetryEndpoint();
+      await refreshTelemetry();
     } finally {
       setIsRunningSynthesize(false);
     }
@@ -141,23 +130,14 @@ export function SystemStatusClient({
       });
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data.runs)) {
-          setRuns(data.runs);
-        } else if (data.run) {
-          setRuns((prev) => [data.run, ...prev]);
-        }
-        if (data.posture) {
-          setLivePosture(data.posture);
-        }
-        if (data.episode) {
-          setCreatedRollupEpisode(data.episode);
+        if (data.episode && isRenderablePublicEpisode(data.episode)) {
+          setCreatedRollupEpisode(mapDtoToCraftLexicon(data.episode));
         }
         setStatusBanner(
-          data.run?.notes ||
-            `Generated Friday CAB Weekly Brief #${data.episode?.episodeNumber || 43} in D1 & R2.`
+          `Prepared Friday CAB Weekly Brief #${data.episode?.episodeNumber || 43}.`
         );
       }
-      await syncFromTelemetryEndpoint();
+      await refreshTelemetry();
     } finally {
       setIsRunningRollup(false);
     }
@@ -183,23 +163,15 @@ export function SystemStatusClient({
       });
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data.runs)) {
-          setRuns(data.runs);
-        } else if (data.run) {
-          setRuns((prev) => [data.run, ...prev]);
-        }
-        if (data.posture) {
-          setLivePosture(data.posture);
-        }
-        if (data.createdIncidents?.[0]) {
-          setCreatedIncident(data.createdIncidents[0]);
+        const candidate = data.createdIncidents?.[0];
+        if (candidate && isRenderablePublicIncident(candidate)) {
+          setCreatedIncident(mapDtoToCraftLexicon(candidate));
         }
         setStatusBanner(
-          data.run?.notes ||
-            "Classified custom event with Jev and synthesized Socratic brief in D1."
+          "Synthesized and verified Structural Inspection for custom case."
         );
       }
-      await syncFromTelemetryEndpoint();
+      await refreshTelemetry();
     } finally {
       setIsSimulatingCustom(false);
     }
@@ -207,93 +179,76 @@ export function SystemStatusClient({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-      {/* Masthead & Overall Pipeline Health */}
+      {/* Masthead & Editorial Colophon */}
       <div className="tracing-board-frame p-6 sm:p-8 mb-8">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 border-b border-[#8A6D3B]/40">
           <div>
             <span className="font-mono text-xs uppercase tracking-[0.2em] text-[#C5A059]">
-              SYSTEM STATUS &amp; PIPELINE ARCHITECTURE // COLOPHON &amp; TRANSPARENCY
+              ABOUT &amp; FEEDS // EDITORIAL CHARTER &amp; SYNDICATION LEDGER
             </span>
             <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl text-[#F3EFE6] mt-1">
-              System 1 + System 2 Telemetry Observability
+              Editorial Governance &amp; Syndicated Dispatches
             </h1>
+            <p className="font-serif text-sm sm:text-base text-[#94A3B8] mt-2 max-w-3xl leading-relaxed">
+              The Change Advisory Board examines current events as active civic and institutional cases awaiting complete structural inspection—pairing Site Reliability Engineering failure analysis with the Six Working Tools of Freemasonry.
+            </p>
           </div>
 
-          <div className="flex items-center gap-3">
-            <span className="inline-flex items-center gap-2 px-3.5 py-2 bg-[#10B981]/15 border border-[#10B981]/50 font-mono text-xs text-[#10B981] font-semibold">
-              <span className="w-2.5 h-2.5 rounded-full bg-[#10B981] animate-pulse" />
-              ALL PIPELINE STAGES NOMINAL (99.98% SLO)
-            </span>
+          <div className="flex items-center gap-3 shrink-0">
+            <a
+              href="/feed.xml"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#0B0E14] border border-[#C5A059] font-mono text-xs text-[#C5A059] hover:bg-[#C5A059] hover:text-[#0B0E14] transition-colors"
+            >
+              <Rss className="w-3.5 h-3.5" />
+              <span>Subscribe via RSS (/feed.xml)</span>
+            </a>
           </div>
         </div>
 
-        {/* 4 Telemetry Health Gauges */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-6 font-mono">
-          <div className="p-4 bg-[#0B0E14] border border-[#8A6D3B]/45">
-            <span className="text-[11px] text-[#94A3B8] uppercase">
-              RSS Items Evaluated (7D)
-            </span>
-            <div className="text-2xl font-bold text-[#F3EFE6] mt-1">
-              {livePosture.totalEvaluatedWindow}
-            </div>
-            <span className="text-[11px] text-[#10B981]">
-              {livePosture.totalIncidentsWindow} High-Signal Synthesized in D1
-            </span>
+        {/* Inbound Syndicated Sources Grid */}
+        <div className="mt-6">
+          <div className="font-mono text-xs uppercase tracking-wider text-[#C5A059] mb-3">
+            Primary Sourced Publications (Concurrent Scheduled Polling)
           </div>
-
-          <div className="p-4 bg-[#0B0E14] border border-[#8A6D3B]/45">
-            <span className="text-[11px] text-[#94A3B8] uppercase">
-              System-1 Noise Rejection
-            </span>
-            <div className="text-2xl font-bold text-[#10B981] mt-1">
-              {livePosture.noiseRejectionRate}%
-            </div>
-            <span className="text-[11px] text-[#94A3B8]">
-              Gate: Jev Systemic &ge; 0.60
-            </span>
-          </div>
-
-          <div className="p-4 bg-[#0B0E14] border border-[#8A6D3B]/45">
-            <span className="text-[11px] text-[#94A3B8] uppercase">
-              Avg Classifier Latency
-            </span>
-            <div className="text-2xl font-bold text-[#C5A059] mt-1">
-              {livePosture.avgClassifierLatencyMs}ms
-            </div>
-            <span className="text-[11px] text-[#94A3B8]">
-              Single Forward Pass (70–500ms SLO)
-            </span>
-          </div>
-
-          <div className="p-4 bg-[#0B0E14] border border-[#8A6D3B]/45">
-            <span className="text-[11px] text-[#94A3B8] uppercase">
-              Monthly Pipeline Run Cost
-            </span>
-            <div className="text-2xl font-bold text-[#F3EFE6] mt-1">
-              ~$0.04/mo
-            </div>
-            <span className="text-[11px] text-[#C5A059]">
-              $0.042 / 1M Jev Input Tokens
-            </span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+            {SYNDICATED_SOURCED_FEEDS.map((feed) => (
+              <div
+                key={feed.name}
+                className="p-4 bg-[#0B0E14] border border-[#8A6D3B]/45 flex flex-col justify-between space-y-2"
+              >
+                <div>
+                  <div className="font-display text-base text-[#F3EFE6]">
+                    {feed.name}
+                  </div>
+                  <p className="font-serif text-xs text-[#94A3B8] mt-1 leading-relaxed">
+                    {feed.category}
+                  </p>
+                </div>
+                <span className="font-mono text-[10px] uppercase tracking-wider text-[#C5A059] pt-2 border-t border-[#8A6D3B]/30">
+                  {feed.cadence}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* Interactive 4-Stage Pipeline Explorer & Live Trigger */}
+      {/* Editorial Workflow & Dispatch Desk */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
-        {/* Left: 4-Stage Architecture Diagram (7 cols) */}
+        {/* Left: Four-Stage Editorial Methodology (7 cols) */}
         <div className="lg:col-span-7 tracing-board-frame p-6 sm:p-7 space-y-5">
           <div className="flex flex-col gap-3 border-b border-[#8A6D3B]/35 pb-4">
             <div>
               <span className="font-mono text-xs text-[#C5A059] uppercase">
-                PIPELINE ARCHITECTURE // SYSTEM 1 TRIAGE + SYSTEM 2 SYNTHESIS
+                EDITORIAL METHODOLOGY // SOURCED TRIAGE &amp; SOCRATIC REVIEW
               </span>
               <h2 className="font-display text-xl text-[#F3EFE6] mt-0.5">
-                Four-Stage Automated PIR Workflow
+                Four-Stage Structural Inspection Discipline
               </h2>
             </div>
 
-            {/* 3 Live Pipeline Trigger Buttons */}
             <div className="flex flex-wrap items-center gap-2.5 pt-1">
               <button
                 type="button"
@@ -309,7 +264,7 @@ export function SystemStatusClient({
                   }`}
                 />
                 <span>
-                  {isRunningSweep ? "Running Jev Triage..." : "Ingest + Jev Triage"}
+                  {isRunningSweep ? "Polling Sourced Publications..." : "Poll Sourced Publications"}
                 </span>
               </button>
 
@@ -319,17 +274,17 @@ export function SystemStatusClient({
                 disabled={
                   isRunningSweep || isRunningSynthesize || isRunningRollup
                 }
-                className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#111726] border border-[#10B981]/75 text-[#10B981] font-mono text-[11px] font-bold uppercase hover:bg-[#10B981]/15 transition-colors cursor-pointer disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#111726] border border-[#C5A059]/75 text-[#F3EFE6] font-mono text-[11px] font-bold uppercase hover:bg-[#C5A059]/15 transition-colors cursor-pointer disabled:opacity-50"
               >
-                <Cpu
+                <BookOpen
                   className={`w-3.5 h-3.5 ${
-                    isRunningSynthesize ? "animate-spin" : ""
+                    isRunningSynthesize ? "animate-pulse" : ""
                   }`}
                 />
                 <span>
                   {isRunningSynthesize
-                    ? "Synthesizing D1 Queue..."
-                    : "System-2 Gemini Synthesis"}
+                    ? "Drafting Craftsman's Briefs..."
+                    : "Draft Craftsman's Briefs"}
                 </span>
               </button>
 
@@ -348,15 +303,15 @@ export function SystemStatusClient({
                 />
                 <span>
                   {isRunningRollup
-                    ? "Generating Weekly Brief..."
+                    ? "Preparing Friday CAB Brief..."
                     : "Friday Weekly Rollup"}
                 </span>
               </button>
             </div>
 
             {statusBanner && (
-              <div className="p-3 bg-[#0B0E14] border border-[#10B981]/50 font-mono text-xs text-[#10B981] flex items-center justify-between gap-3">
-                <span>✓ {statusBanner}</span>
+              <div className="p-3 bg-[#0B0E14] border border-[#C5A059]/50 font-serif text-sm text-[#F3EFE6] flex items-center justify-between gap-3">
+                <span>{statusBanner}</span>
               </div>
             )}
 
@@ -364,7 +319,7 @@ export function SystemStatusClient({
               <div className="p-3.5 bg-[#0B0E14] border border-[#C5A059]/65 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="space-y-0.5">
                   <div className="font-mono text-[11px] text-[#C5A059]">
-                    NEW D1 ROLLUP EPISODE #{createdRollupEpisode.episodeNumber} READY
+                    WEEKLY BRIEF EPISODE #{createdRollupEpisode.episodeNumber}
                   </div>
                   <div className="font-display text-sm text-[#F3EFE6]">
                     {createdRollupEpisode.title}
@@ -376,7 +331,7 @@ export function SystemStatusClient({
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#C5A059] text-[#0B0E14] font-mono text-xs font-bold uppercase cursor-pointer shrink-0"
                 >
                   <Play className="w-3.5 h-3.5" />
-                  <span>Play Rollup</span>
+                  <span>Listen Now</span>
                 </button>
               </div>
             )}
@@ -385,80 +340,80 @@ export function SystemStatusClient({
           <div className="space-y-4">
             <div className="p-4 bg-[#0B0E14] border border-[#8A6D3B]/50 flex gap-4">
               <div className="font-mono text-xs font-bold px-2.5 py-1 bg-[#111726] border border-[#C5A059] text-[#C5A059] h-fit">
-                STAGE 1
+                I
               </div>
               <div>
                 <h3 className="font-display text-base text-[#F3EFE6]">
-                  Ingestion &amp; Deterministic De-duplication (`/api/cron/ingest`)
+                  Concurrent Sourced Ingestion &amp; Canonical De-duplication
                 </h3>
-                <p className="text-xs text-[#94A3B8] mt-1 leading-relaxed">
-                  Scheduled Cron pulls target RSS feeds (Reuters, AP, Ars Technica, Hacker News), strips HTML to clean plain text, and hashes URLs (`url_hash`) so only net-new articles enter classification.
+                <p className="font-serif text-sm text-[#94A3B8] mt-1 leading-relaxed">
+                  Target dispatches are polled concurrently under strict byte and timeout bounds, stripped of unsafe markup and tracking parameters, and fingerprinted via canonical URL and GUID hashing.
                 </p>
               </div>
             </div>
 
             <div className="p-4 bg-[#0B0E14] border border-[#C5A059]/60 flex gap-4">
               <div className="font-mono text-xs font-bold px-2.5 py-1 bg-[#111726] border border-[#C5A059] text-[#C5A059] h-fit">
-                STAGE 2
+                II
               </div>
               <div>
                 <h3 className="font-display text-base text-[#F3EFE6]">
-                  The &ldquo;System 1&rdquo; Triage Gate (Jev / Zero-Shot NLI)
+                  Dual-Axis Structural Triage
                 </h3>
-                <p className="text-xs text-[#94A3B8] mt-1 leading-relaxed">
-                  Evaluates raw article text in a single forward pass (~120ms): scores Signal vs. Noise (drops items below 0.75 confidence before spending generation tokens), computes the 6-Tool probability vector, and assigns the primary SRE Failure Mode.
+                <p className="font-serif text-sm text-[#94A3B8] mt-1 leading-relaxed">
+                  Each candidate dispatch is evaluated for structural signal versus transient commentary and paired with its primary Masonic Working Tool and Structural Failure Mode.
                 </p>
               </div>
             </div>
 
             <div className="p-4 bg-[#0B0E14] border border-[#8A6D3B]/50 flex gap-4">
               <div className="font-mono text-xs font-bold px-2.5 py-1 bg-[#111726] border border-[#C5A059] text-[#C5A059] h-fit">
-                STAGE 3
+                III
               </div>
               <div>
                 <h3 className="font-display text-base text-[#F3EFE6]">
-                  Structured Telemetry Ledger (`telemetry_articles`)
+                  Bounded Socratic Structural Inspection
                 </h3>
-                <p className="text-xs text-[#94A3B8] mt-1 leading-relaxed">
-                  Stores source metadata, the complete Jev probability distribution across all six Working Tools, confidence score, and SRE failure tag in indexed structured storage.
+                <p className="font-serif text-sm text-[#94A3B8] mt-1 leading-relaxed">
+                  Synthesizes unvarnished factual summaries, separates partisan heat and spin from the actual structural foundation, and poses open Socratic verification questions.
                 </p>
               </div>
             </div>
 
-            <div className="p-4 bg-[#0B0E14] border border-[#10B981]/50 flex gap-4">
-              <div className="font-mono text-xs font-bold px-2.5 py-1 bg-[#111726] border border-[#10B981] text-[#10B981] h-fit">
-                STAGE 4
+            <div className="p-4 bg-[#0B0E14] border border-[#8A6D3B]/50 flex gap-4">
+              <div className="font-mono text-xs font-bold px-2.5 py-1 bg-[#111726] border border-[#C5A059] text-[#C5A059] h-fit">
+                IV
               </div>
               <div>
                 <h3 className="font-display text-base text-[#F3EFE6]">
-                  The &ldquo;System 2&rdquo; Bounded Socratic Synthesis
+                  The Friday CAB Weekly Brief
                 </h3>
-                <p className="text-xs text-[#94A3B8] mt-1 leading-relaxed">
-                  Strictly bound by the Stage-2 database record (forbidden from inventing angles). Writes the neutral Socratic Brief, the Diagnostic Lens breakdown, the Proportionality Check, and 3–4 Socratic Inquiry questions.
+                <p className="font-serif text-sm text-[#94A3B8] mt-1 leading-relaxed">
+                  Every Friday, the week&rsquo;s anchor dispatches are distilled into a 5-minute spoken retrospective and syndicated via the public RSS 2.0 podcast feed.
                 </p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Right: Interactive Live Classifier & PIR Simulator (5 cols) */}
+        {/* Right: Editorial Dispatch Desk (5 cols) */}
         <div className="lg:col-span-5 tracing-board-frame p-6 sm:p-7 space-y-4">
           <div className="border-b border-[#8A6D3B]/35 pb-3">
-            <span className="font-mono text-xs text-[#10B981] uppercase">
-              LIVE TELEMETRY SANDBOX // TEST SYSTEM 1 + SYSTEM 2
+            <span className="font-mono text-xs text-[#C5A059] uppercase">
+              THE CRAFTSMAN&apos;S BRIEF // CUSTOM CASE SUBMISSION
             </span>
             <h2 className="font-display text-xl text-[#F3EFE6] mt-0.5">
-              Ingest &amp; Classify Custom Event
+              Submit Event for Structural Inspection
             </h2>
-            <p className="text-xs text-[#94A3B8] mt-1">
-              Submit any headline and summary below to run the real-time classifier and publish a new Incident Brief to the live Trestleboard.
+            <p className="font-serif text-sm text-[#94A3B8] mt-1">
+              Submit a sourced headline and factual summary below to draft and verify a new Craftsman&apos;s Brief for the Trestleboard.
             </p>
           </div>
 
           <form onSubmit={handleRunCustomClassification} className="space-y-3.5">
             <div>
               <label className="font-mono text-[11px] uppercase text-[#C5A059] block mb-1">
-                Source Tag
+                Source Attribution
               </label>
               <input
                 type="text"
@@ -482,7 +437,7 @@ export function SystemStatusClient({
 
             <div>
               <label className="font-mono text-[11px] uppercase text-[#C5A059] block mb-1">
-                Raw Event Telemetry / Summary
+                Factual Event Summary
               </label>
               <textarea
                 rows={4}
@@ -500,32 +455,32 @@ export function SystemStatusClient({
               <Sparkles className="w-4 h-4" />
               <span>
                 {isSimulatingCustom
-                  ? "Running System-1 Jev + System-2 Synthesis..."
-                  : "Classify & Publish Incident Brief"}
+                  ? "Drafting Structural Inspection..."
+                  : "Draft & Publish Craftsman's Brief"}
               </span>
             </button>
           </form>
 
-          {createdIncident && (
-            <div className="p-4 bg-[#0B0E14] border border-[#10B981] space-y-2 mt-4">
-              <div className="flex items-center justify-between font-mono text-xs text-[#10B981]">
-                <span>✓ PUBLISHED: {createdIncident.incidentCode}</span>
-                <span>
-                  CONFIDENCE: {Math.round(createdIncident.jevConfidence * 100)}%
+          {createdIncident && isRenderablePublicIncident(createdIncident) && (
+            <div className="p-4 bg-[#0B0E14] border border-[#C5A059] space-y-2 mt-4">
+              <div className="flex items-center justify-between font-mono text-xs text-[#C5A059]">
+                <span>{createdIncident.primaryTool}</span>
+                <span className="text-[11px] text-[#94A3B8]">
+                  {formatCraftLedgerEntry(createdIncident.incidentCode)}
                 </span>
               </div>
               <p className="font-display text-sm text-[#F3EFE6]">
                 {createdIncident.title}
               </p>
               <div className="flex items-center justify-between font-mono text-xs pt-1">
-                <span className="text-[#C5A059]">
-                  Tool: {createdIncident.primaryTool}
+                <span className="text-[#94A3B8]">
+                  {createdIncident.sreFailureMode}
                 </span>
                 <Link
                   href={`/incidents/${createdIncident.slug}`}
-                  className="inline-flex items-center gap-1 text-[#10B981] hover:underline"
+                  className="inline-flex items-center gap-1 text-[#C5A059] hover:underline"
                 >
-                  <span>Inspect Generated PIR</span>
+                  <span>Read Full Brief</span>
                   <ArrowUpRight className="w-3.5 h-3.5" />
                 </Link>
               </div>
@@ -534,10 +489,10 @@ export function SystemStatusClient({
         </div>
       </div>
 
-      <BrassSectionDivider label="EPISTEMIC HUMILITY & ZERO AI SLOP GOVERNANCE CHARTER" />
+      <BrassSectionDivider label="EDITORIAL GOVERNANCE CHARTER" />
 
       {/* Governance Charter */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="tracing-board-frame p-6 space-y-3">
           <div className="font-mono text-xs text-[#C5A059] uppercase">
             CHARTER RULE 01 // ZERO DEFINITIONS
@@ -551,19 +506,19 @@ export function SystemStatusClient({
         </div>
 
         <div className="tracing-board-frame p-6 space-y-3">
-          <div className="font-mono text-xs text-[#10B981] uppercase">
+          <div className="font-mono text-xs text-[#C5A059] uppercase">
             CHARTER RULE 02 // EPISTEMIC HUMILITY
           </div>
           <h3 className="font-display text-lg text-[#F3EFE6]">
             The &ldquo;Pending Post-Mortem&rdquo; Rule
           </h3>
           <p className="font-serif text-sm text-[#94A3B8] leading-relaxed">
-            The pipeline never declares a partisan villain or predicts catastrophic outcomes. Ongoing stories are framed as active incidents with incomplete telemetry—highlighting what data is missing and what Socratic questions will prove whether the system is recovering.
+            The board never declares a partisan villain or predicts catastrophic outcomes. Ongoing stories are framed as active incidents with incomplete telemetry—highlighting what data is missing and what Socratic questions will prove whether the system is recovering.
           </p>
         </div>
 
         <div className="tracing-board-frame p-6 space-y-3">
-          <div className="font-mono text-xs text-[#F59E0B] uppercase">
+          <div className="font-mono text-xs text-[#C5A059] uppercase">
             CHARTER RULE 03 // PROPORTIONALITY CHECK
           </div>
           <h3 className="font-display text-lg text-[#F3EFE6]">
@@ -573,50 +528,6 @@ export function SystemStatusClient({
             Every synthesized brief must explicitly separate one sensationalized detail the news cycle is overblowing (alert noise/jitter) from the underlying structural or architectural constraint (signal/capacity).
           </p>
         </div>
-      </div>
-
-      <BrassSectionDivider label="RECENT PIPELINE EXECUTION LOGS & CRON TELEMETRY" />
-
-      {/* Pipeline Runs Table */}
-      <div className="tracing-board-frame overflow-x-auto">
-        <table className="w-full border-collapse text-left min-w-[780px]">
-          <thead>
-            <tr className="bg-[#0B0E14] border-b border-[#C5A059]/50 font-mono text-xs uppercase text-[#C5A059]">
-              <th className="p-3.5">Run ID</th>
-              <th className="p-3.5">Job Type</th>
-              <th className="p-3.5">Timestamp (UTC)</th>
-              <th className="p-3.5">Evaluated</th>
-              <th className="p-3.5">Accepted</th>
-              <th className="p-3.5">Noise Dropped</th>
-              <th className="p-3.5">Avg Latency</th>
-              <th className="p-3.5">Notes</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#8A6D3B]/30 font-mono text-xs">
-            {runs.map((run) => (
-              <tr key={run.id} className="hover:bg-[#0B0E14]/60">
-                <td className="p-3.5 text-[#C5A059]">{run.id}</td>
-                <td className="p-3.5">
-                  <span className="px-2 py-0.5 bg-[#0B0E14] border border-[#8A6D3B]/50 text-[#F3EFE6]">
-                    {run.runType}
-                  </span>
-                </td>
-                <td className="p-3.5 text-[#94A3B8]">
-                  {run.startedAt.slice(0, 19).replace("T", " ")}
-                </td>
-                <td className="p-3.5 text-[#F3EFE6]">{run.itemsEvaluated}</td>
-                <td className="p-3.5 text-[#10B981] font-bold">
-                  +{run.itemsAccepted}
-                </td>
-                <td className="p-3.5 text-[#F59E0B]">{run.itemsRejectedNoise}</td>
-                <td className="p-3.5 text-[#C5A059]">
-                  {run.avgClassifierLatencyMs}ms
-                </td>
-                <td className="p-3.5 text-[#94A3B8] max-w-md">{run.notes}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
     </div>
   );

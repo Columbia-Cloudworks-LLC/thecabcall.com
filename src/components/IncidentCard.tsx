@@ -2,6 +2,11 @@
 
 import React from "react";
 import Link from "next/link";
+import {
+  isRenderablePublicIncident,
+  mapDtoToCraftLexicon,
+  PublicIncidentDto,
+} from "@/lib/dto";
 import { IncidentArticle } from "@/lib/types";
 import { SreFailureModeId } from "@/lib/taxonomy";
 import { useTelemetry } from "./TelemetryContext";
@@ -13,6 +18,7 @@ const SHORT_FAILURE_LABELS: Record<SreFailureModeId, string> = {
   "Single Point of Failure (SPOF) / Untested Failover": "Untested Failover",
   "Blame Culture vs. Root-Cause Isolation": "Blame Culture",
   "Technical & Institutional Debt": "Institutional Debt",
+  "Structural Friction": "Structural Friction",
 };
 
 function formatBroadsheetDateline(isoDate: string): string {
@@ -36,12 +42,23 @@ function formatBroadsheetDateline(isoDate: string): string {
   return `${month} ${day}`;
 }
 
-export function IncidentCard({ incident }: { incident: IncidentArticle }) {
+export function IncidentCard({
+  incident: rawIncident,
+}: {
+  incident: PublicIncidentDto | IncidentArticle;
+}) {
   const { openRubricInspector } = useTelemetry();
+
+  const incident = mapDtoToCraftLexicon(rawIncident);
+
+  // Defensive rendering gate: suppress rendering if editorial copy or attribution is incomplete
+  if (!isRenderablePublicIncident(incident)) {
+    return null;
+  }
 
   const datelinePrefix = formatBroadsheetDateline(incident.publishedAt);
   const shortFailureLabel =
-    SHORT_FAILURE_LABELS[incident.sreFailureMode] || incident.sreFailureMode;
+    SHORT_FAILURE_LABELS[incident.sreFailureMode] || "Structural Friction";
 
   return (
     <article className="group relative bg-[#111726]/90 border border-[#8A6D3B]/45 p-6 sm:p-7 transition-all duration-300 hover:border-[#C5A059]/80 hover:shadow-[0_12px_36px_rgba(0,0,0,0.65)] flex flex-col justify-between">

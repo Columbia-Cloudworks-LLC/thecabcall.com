@@ -44,6 +44,15 @@
 - [ ] **Issue #11 ([GitHub Issue #11](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/11)): Editorial Pipeline & Incident Studio — De-Alarmist Title Rewriting, Image Attachment Pipeline & Brief Overrides (`/admin/incidents` & `/admin/transforms`)**
 - [ ] **Issue #12 ([GitHub Issue #12](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/12)): Outbound Published Feeds & Syndication Studio — Customize Podcast RSS & Publish De-Alarmed Incident Feeds (`/admin/publishing`, `/feed.xml` & `/feeds/incidents.*`)**
 
+### Krug Usability ('Don't Make Me Think') & Craft Lexicon Overhaul Epic ([GitHub Issue #20](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/20) — Issues #13 to #19)
+- [x] **Issue #13 ([GitHub Issue #13](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/13)): [Lexicon] Replace 'Tech Bro / NASA Terminal' UI Labels with Plain-Spoken Craft Terminology (`mapDtoToCraftLexicon`)**
+- [ ] **Issue #14 ([GitHub Issue #14](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/14)): [Lexicon] Translate SRE Failure Modes into Accessible Shop-Floor & Operative Craft Concepts**
+- [ ] **Issue #15 ([GitHub Issue #15](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/15)): [Prose & Templates] Eliminate Broken Headline Interpolation & Corporate Compliance Jargon**
+- [ ] **Issue #16 ([GitHub Issue #16](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/16)): [Defensive Rendering] Prevent Verbatim Sentence Duplication Across Sections I & II**
+- [ ] **Issue #17 ([GitHub Issue #17](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/17)): [Usability / Krug] Remove Mystery-Meat `[?]` Badges and Clarify Action Button Labels**
+- [ ] **Issue #18 ([GitHub Issue #18](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/18)): [Navigation / Krug] Implement 'You Are Here' Street Signs & Sidebar Visual Hierarchy**
+- [ ] **Issue #19 ([GitHub Issue #19](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/19)): [Verification] Add a 'Banned Jargon & Krug Usability Gate' to the PowerShell Test Harness**
+
 ---
 
 # Epic #1: Repository Baseline, Clean Build & Git Synchronization

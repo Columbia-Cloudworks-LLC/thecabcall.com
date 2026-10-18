@@ -7,6 +7,13 @@ import {
   WorkingToolId,
 } from "@/lib/taxonomy";
 import {
+  isRenderablePublicEpisode,
+  isRenderablePublicIncident,
+  mapDtoToCraftLexicon,
+  PublicEpisodeDto,
+  PublicIncidentDto,
+} from "@/lib/dto";
+import {
   IncidentArticle,
   PodcastEpisode,
   WeeklyTrestleboardState,
@@ -19,9 +26,9 @@ import {
 } from "./MasonicEngravings";
 
 interface TrestleboardClientProps {
-  initialIncidents: IncidentArticle[];
+  initialIncidents: Array<PublicIncidentDto | IncidentArticle>;
   weeklyState: WeeklyTrestleboardState;
-  pinnedEpisode: PodcastEpisode;
+  pinnedEpisode: PublicEpisodeDto | PodcastEpisode;
 }
 
 const WORKING_TOOL_OPTIONS: { value: WorkingToolId; label: string }[] = [
@@ -58,6 +65,7 @@ const SHORT_FAILURE_LABELS: Record<SreFailureModeId, string> = {
   "Single Point of Failure (SPOF) / Untested Failover": "Untested Failover",
   "Blame Culture vs. Root-Cause Isolation": "Blame Culture",
   "Technical & Institutional Debt": "Institutional Debt",
+  "Structural Friction": "Structural Friction",
 };
 
 function formatLeadDateline(isoDate: string): string {
@@ -85,7 +93,7 @@ function formatLeadDateline(isoDate: string): string {
 export function TrestleboardClient({
   initialIncidents,
   weeklyState,
-  pinnedEpisode,
+  pinnedEpisode: rawPinnedEpisode,
 }: TrestleboardClientProps) {
   const {
     activeEpisode,
@@ -98,9 +106,15 @@ export function TrestleboardClient({
   const [selectedTool, setSelectedTool] = useState<string>("ALL");
   const [selectedFailure, setSelectedFailure] = useState<string>("ALL");
 
+  const pinnedEpisode = mapDtoToCraftLexicon(rawPinnedEpisode);
   const isPinnedActive = activeEpisode.id === pinnedEpisode.id;
+  const isPinnedEpisodeRenderable = isRenderablePublicEpisode(pinnedEpisode);
 
-  const filteredIncidents = initialIncidents.filter((inc) => {
+  const validIncidents = initialIncidents
+    .map((inc) => mapDtoToCraftLexicon(inc))
+    .filter((inc) => isRenderablePublicIncident(inc));
+
+  const filteredIncidents = validIncidents.filter((inc) => {
     if (selectedTool !== "ALL" && inc.primaryTool !== selectedTool) return false;
     if (selectedFailure !== "ALL" && inc.sreFailureMode !== selectedFailure)
       return false;
@@ -161,7 +175,7 @@ export function TrestleboardClient({
                 {weeklyState.heroTitle}
               </h2>
 
-              {/* Synchronized Status Badges from Immutable weeklyState */}
+              {/* Synchronized Editorial Lenses from Weekly Trestleboard State */}
               <div className="flex flex-wrap items-center gap-2.5 pt-1 font-mono text-xs">
                 <button
                   type="button"
@@ -170,8 +184,7 @@ export function TrestleboardClient({
                   }
                   className="px-2.5 py-1 bg-[#0B0E14] border border-[#C5A059]/75 text-[#C5A059] hover:bg-[#C5A059]/15 transition-colors cursor-pointer"
                 >
-                  DOMINANT TOOL: {weeklyState.dominantTool.toUpperCase()} (
-                  {weeklyState.dominantToolPercentage}%)
+                  DOMINANT TOOL: {weeklyState.dominantTool.toUpperCase()}
                 </button>
                 <button
                   type="button"
@@ -188,9 +201,6 @@ export function TrestleboardClient({
                     weeklyState.primaryFailureMode
                   ).toUpperCase()}
                 </button>
-                <span className="px-2.5 py-1 bg-[#0B0E14]/80 border border-[#10B981]/45 text-[#10B981]">
-                  {weeklyState.activeIncidentCount} ACTIVE INCIDENTS
-                </span>
               </div>
 
               <p className="font-serif text-base sm:text-[17px] text-[#F3EFE6]/90 leading-relaxed pt-1">
@@ -239,35 +249,37 @@ export function TrestleboardClient({
             </div>
 
             <div className="pt-5 mt-5 border-t border-[#8A6D3B]/35 space-y-3.5">
-              <button
-                type="button"
-                onClick={() => {
-                  if (isPinnedActive) {
-                    togglePlayPause();
-                  } else {
-                    playEpisode(pinnedEpisode, 0);
-                  }
-                }}
-                className="w-full py-3.5 px-5 bg-[#C5A059] text-[#0B0E14] font-display text-xs sm:text-sm font-bold tracking-wider uppercase hover:bg-[#d4b26a] transition-colors cursor-pointer shadow-[0_4px_20px_rgba(197,160,89,0.25)]"
-              >
-                {isPinnedActive && isPlaying ? (
-                  <span>
-                    ⏸ Pause Weekly Brief (
-                    <span className="font-mono font-semibold">
-                      {weeklyState.durationFormatted}
+              {isPinnedEpisodeRenderable && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isPinnedActive) {
+                      togglePlayPause();
+                    } else {
+                      playEpisode(pinnedEpisode as PodcastEpisode, 0);
+                    }
+                  }}
+                  className="w-full py-3.5 px-5 bg-[#C5A059] text-[#0B0E14] font-display text-xs sm:text-sm font-bold tracking-wider uppercase hover:bg-[#d4b26a] transition-colors cursor-pointer shadow-[0_4px_20px_rgba(197,160,89,0.25)]"
+                >
+                  {isPinnedActive && isPlaying ? (
+                    <span>
+                      ⏸ Pause Weekly Brief (
+                      <span className="font-mono font-semibold">
+                        {weeklyState.durationFormatted}
+                      </span>
+                      )
                     </span>
-                    )
-                  </span>
-                ) : (
-                  <span>
-                    ▶ Listen to Weekly Brief (
-                    <span className="font-mono font-semibold">
-                      {weeklyState.durationFormatted}
+                  ) : (
+                    <span>
+                      ▶ Listen to Weekly Brief (
+                      <span className="font-mono font-semibold">
+                        {weeklyState.durationFormatted}
+                      </span>
+                      )
                     </span>
-                    )
-                  </span>
-                )}
-              </button>
+                  )}
+                </button>
+              )}
 
               <div className="flex items-center justify-between gap-3 pt-1 text-xs">
                 <Link
