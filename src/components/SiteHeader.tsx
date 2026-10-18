@@ -27,6 +27,14 @@ export function isNavItemActive(itemHref: string, pathname: string): boolean {
       normalizedPath.startsWith("/incidents/")
     );
   }
+  if (itemHref === "/status") {
+    return (
+      normalizedPath === "/status" ||
+      normalizedPath.startsWith("/status/") ||
+      normalizedPath === "/feeds" ||
+      normalizedPath.startsWith("/feeds/")
+    );
+  }
   return (
     normalizedPath === itemHref || normalizedPath.startsWith(`${itemHref}/`)
   );

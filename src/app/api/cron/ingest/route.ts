@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireAdminRequestActor } from "@/lib/auth";
 import {
   createLocalSqliteD1Adapter,
   ensureD1Snapshot,
@@ -14,6 +15,34 @@ import { runD1IngestPipeline } from "@/pipeline/ingest";
 import { runSynthesizePipeline } from "@/pipeline/synthesize";
 
 export const dynamic = "force-dynamic";
+
+async function isAuthorizedCronOrAdmin(req: NextRequest): Promise<{
+  authorized: boolean;
+  status: number;
+  error?: string;
+}> {
+  const cronSecret = process.env.CRON_SECRET?.trim();
+  const authHeader = req.headers.get("authorization")?.trim();
+  if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
+    return { authorized: true, status: 200 };
+  }
+
+  const adminAuth = await requireAdminRequestActor(req, [
+    "owner",
+    "admin",
+    "editor",
+  ]);
+  if (adminAuth.authorized) {
+    return { authorized: true, status: 200 };
+  }
+
+  return {
+    authorized: false,
+    status: adminAuth.status || 401,
+    error:
+      "Unauthorized: Feed ingestion and brief synthesis are restricted to Administrators.",
+  };
+}
 
 async function executeD1CronWorkflow(body: {
   stage?: "ingest" | "synthesize" | "both";
@@ -201,12 +230,21 @@ async function executeD1CronWorkflow(body: {
   };
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = await isAuthorizedCronOrAdmin(req);
+  if (!auth.authorized) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
   const result = await executeD1CronWorkflow({ stage: "both" });
   return NextResponse.json(result);
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await isAuthorizedCronOrAdmin(req);
+  if (!auth.authorized) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
   let body: {
     stage?: "ingest" | "synthesize" | "both";
     limit?: number;

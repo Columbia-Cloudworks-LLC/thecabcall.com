@@ -83,12 +83,20 @@ export function SiteFooter() {
                 </a>
               </li>
               <li className="font-mono">
-                <Link
-                  href="/incidents/municipal-water-scada-patch-deferral-audit"
-                  className="hover:text-[#F3EFE6] transition-colors"
+                <a
+                  href="/feeds/incidents.xml"
+                  className="text-[#C5A059] hover:underline"
                 >
-                  Lead Brief: SCADA Segmentation Audit
-                </Link>
+                  Case Briefs RSS (/feeds/incidents.xml)
+                </a>
+              </li>
+              <li className="font-mono">
+                <a
+                  href="/feeds/incidents.json"
+                  className="text-[#C5A059] hover:underline"
+                >
+                  Case Ledger JSON (/feeds/incidents.json)
+                </a>
               </li>
               <li className="pt-2 font-serif text-[#94A3B8]/85 leading-relaxed">
                 Crafted in Deep Obsidian &amp; Burnished Brass with authentic 18th-century copperplate vector engravings of the Working Tools (strictly zero AI-generated art).

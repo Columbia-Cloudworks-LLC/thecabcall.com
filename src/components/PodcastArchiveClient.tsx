@@ -50,7 +50,6 @@ export function PodcastArchiveClient({
     Record<string, boolean>
   >({ [initialEpisodes[0]?.id || ""]: true });
   const [copiedFeed, setCopiedFeed] = useState(false);
-  const [isSynthesizing, setIsSynthesizing] = useState(false);
 
   const feedUrl = "https://thecabcall.com/feed.xml";
 
@@ -59,31 +58,6 @@ export function PodcastArchiveClient({
       navigator.clipboard.writeText(feedUrl);
       setCopiedFeed(true);
       setTimeout(() => setCopiedFeed(false), 2500);
-    }
-  };
-
-  const handleGenerateRollup = async () => {
-    setIsSynthesizing(true);
-    try {
-      const res = await fetch("/api/cron/weekly-rollup", {
-        method: "POST",
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.episode && isRenderablePublicEpisode(data.episode)) {
-          const mappedEp = mapDtoToCraftLexicon(data.episode);
-          setEpisodes((prev) => [
-            mappedEp,
-            ...prev.filter((e) => e.id !== mappedEp.id),
-          ]);
-          setExpandedTranscripts((prev) => ({
-            ...prev,
-            [mappedEp.id]: true,
-          }));
-        }
-      }
-    } finally {
-      setIsSynthesizing(false);
     }
   };
 
@@ -110,22 +84,6 @@ export function PodcastArchiveClient({
               retrospectives (~750 words, strictly governed by the Zero Definitions and Epistemic Humility rules) and the original full-length{" "}
               <strong className="text-[#F3EFE6]">Legacy Deep-Dive Archive</strong>.
             </p>
-
-            <div className="pt-2 flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={handleGenerateRollup}
-                disabled={isSynthesizing}
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#C5A059] text-[#0B0E14] font-mono text-xs font-bold uppercase tracking-wider hover:bg-[#d6b36a] transition-colors cursor-pointer disabled:opacity-50"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>
-                  {isSynthesizing
-                    ? "Synthesizing 750-Word Rollup..."
-                    : "Synthesize New Friday 5-Min CAB Brief"}
-                </span>
-              </button>
-            </div>
           </div>
 
           {/* Direct RSS Subscription Block */}

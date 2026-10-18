@@ -1752,6 +1752,14 @@ async function runVerificationSuite() {
       regex: /\((?:CFG-DRIFT|CASCADE-01|SIG-LOSS|SPOF-FAIL|BLAME-ISO|INST-DEBT)\)/,
     },
     { label: "Mystery-meat [?] badge", regex: /\[\?\]/ },
+    {
+      label: "Public feed mutation endpoint call (/api/cron/ingest or /api/cron/weekly-rollup)",
+      regex: /\/api\/cron\/(?:ingest|weekly-rollup)/i,
+    },
+    {
+      label: "Public feed mutation trigger button (Poll Sourced Publications / Submit Event for Structural Inspection)",
+      regex: /Poll Sourced Publications|Submit Event for Structural Inspection|Synthesize New Friday 5-Min CAB Brief/i,
+    },
   ];
 
   for (const relPath of publicFilesToAudit) {
@@ -1763,6 +1771,25 @@ async function runVerificationSuite() {
         `Public file ${relPath} must have zero occurrences of banned UI string "${label}"`
       );
     }
+  }
+
+  // Verify About & Feeds page (SystemStatusClient.tsx) is strictly read-only and documents all published feeds + site philosophy
+  const statusClientSource = fs.readFileSync(
+    path.join(process.cwd(), "src/components/SystemStatusClient.tsx"),
+    "utf8"
+  );
+  for (const requiredFeedLandmark of [
+    "/feed.xml",
+    "/feeds/incidents.xml",
+    "/feeds/incidents.json",
+    "The Six Working Tools as Civic Instruments",
+    "Blameless Inspection Over Partisan Scapegoating",
+    "Anatomy of a Craftsman&apos;s Brief",
+  ]) {
+    assert.ok(
+      statusClientSource.includes(requiredFeedLandmark),
+      `SystemStatusClient.tsx must include published feed / philosophy landmark: ${requiredFeedLandmark}`
+    );
   }
 
   // Render deterministic HTML for `/` and `/incidents/[slug]` across all incidents and assert:

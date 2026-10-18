@@ -41,7 +41,9 @@ function Test-PublicLexiconAndUsability {
         @{ Label = "Raw Enum Code (SPOF-FAIL)"; Pattern = "\(SPOF-FAIL\)" },
         @{ Label = "Raw Enum Code (BLAME-ISO)"; Pattern = "\(BLAME-ISO\)" },
         @{ Label = "Raw Enum Code (INST-DEBT)"; Pattern = "\(INST-DEBT\)" },
-        @{ Label = "Mystery-Meat [?] Badge"; Pattern = "\[\?\]" }
+        @{ Label = "Mystery-Meat [?] Badge"; Pattern = "\[\?\]" },
+        @{ Label = "Public Feed Mutation Call (/api/cron/*)"; Pattern = "/api/cron/(?:ingest|weekly-rollup)" },
+        @{ Label = "Public Feed Mutation Button"; Pattern = "Poll Sourced Publications|Submit Event for Structural Inspection|Synthesize New Friday 5-Min CAB Brief" }
     )
 
     foreach ($rule in $bannedPublicUiPatterns) {

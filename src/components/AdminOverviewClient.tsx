@@ -58,13 +58,20 @@ export function AdminOverviewClient({
   // Quick-action state
   const [chainSynthesizeOnIngest, setChainSynthesizeOnIngest] = useState(true);
   const [runningAction, setRunningAction] = useState<
-    "ingest" | "synthesize" | "rollup" | "verify" | null
+    "ingest" | "synthesize" | "rollup" | "verify" | "custom" | null
   >(null);
   const [actionBanner, setActionBanner] = useState<{
     type: "success" | "error";
     title: string;
     detail: string;
   } | null>(null);
+
+  // Admin-only custom case submission state
+  const [showCustomCaseForm, setShowCustomCaseForm] = useState(false);
+  const [customSource, setCustomSource] = useState("REUTERS // INFRASTRUCTURE");
+  const [customTitle, setCustomTitle] = useState("");
+  const [customDesc, setCustomDesc] = useState("");
+  const [customUrl, setCustomUrl] = useState("");
 
   const canRunPipelines =
     actor.role === "owner" ||
@@ -288,6 +295,63 @@ export function AdminOverviewClient({
     }
   }
 
+  async function handleSubmitCustomCase(e: React.FormEvent) {
+    e.preventDefault();
+    if (!canRunPipelines || !customTitle.trim() || !customDesc.trim()) return;
+    setRunningAction("custom");
+    setActionBanner(null);
+    try {
+      const res = await fetch("/api/run-ingest?synthesize=true", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          synthesize: true,
+          synthesizeLimit: 1,
+          customArticle: {
+            title: customTitle.trim(),
+            description: customDesc.trim(),
+            sourceFeed: customSource.trim() || "EDITORIAL DISPATCH",
+            link:
+              customUrl.trim() ||
+              `https://thecabcall.com/editorial-case/${Date.now()}`,
+          },
+        }),
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        ingestedCount?: number;
+        triagedCount?: number;
+      };
+      if (!res.ok || data.ok === false) {
+        setActionBanner({
+          type: "error",
+          title: "Custom Case Submission Failed",
+          detail: data.error || `HTTP ${res.status}`,
+        });
+      } else {
+        setActionBanner({
+          type: "success",
+          title: "Custom Craftsman's Brief Drafted & Audited",
+          detail: `Evaluated and synthesized "${customTitle.trim()}" under ${actor.email}.`,
+        });
+        setCustomTitle("");
+        setCustomDesc("");
+        setCustomUrl("");
+        setShowCustomCaseForm(false);
+        await refreshAuditTelemetry();
+      }
+    } catch (err) {
+      setActionBanner({
+        type: "error",
+        title: "Custom Case Submission Error",
+        detail: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setRunningAction(null);
+    }
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       {/* Command Center Overview Hero */}
@@ -370,15 +434,28 @@ export function AdminOverviewClient({
             </p>
           </div>
 
-          <label className="inline-flex items-center gap-2 text-xs font-mono text-[#D6D1C7] cursor-pointer">
-            <input
-              type="checkbox"
-              checked={chainSynthesizeOnIngest}
-              onChange={(e) => setChainSynthesizeOnIngest(e.target.checked)}
-              className="rounded border-[#263147] bg-[#0B0E14] text-[#C5A059]"
-            />
-            <span>Chain System-2 Synthesis on Ingest</span>
-          </label>
+          <div className="flex flex-wrap items-center gap-4">
+            <label className="inline-flex items-center gap-2 text-xs font-mono text-[#D6D1C7] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={chainSynthesizeOnIngest}
+                onChange={(e) => setChainSynthesizeOnIngest(e.target.checked)}
+                className="rounded border-[#263147] bg-[#0B0E14] text-[#C5A059]"
+              />
+              <span>Chain System-2 Synthesis on Ingest</span>
+            </label>
+            {canRunPipelines && (
+              <button
+                type="button"
+                onClick={() => setShowCustomCaseForm((prev) => !prev)}
+                className="px-3 py-1.5 rounded border border-[#C5A059]/60 bg-[#161E2E] hover:bg-[#1C263B] font-mono text-xs text-[#C5A059] transition-colors cursor-pointer"
+              >
+                {showCustomCaseForm
+                  ? "Hide Custom Case Form"
+                  : "+ Submit Custom Event for Inspection"}
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -482,6 +559,95 @@ export function AdminOverviewClient({
             </div>
           </button>
         </div>
+
+        {showCustomCaseForm && canRunPipelines && (
+          <form
+            onSubmit={handleSubmitCustomCase}
+            className="mt-4 pt-4 border-t border-[#263147] space-y-3 bg-[#0D111A] p-4 rounded-md"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="font-mono text-[10px] uppercase tracking-wider text-[#C5A059]">
+                  ADMIN EDITORIAL DISPATCH DESK // CUSTOM CASE SUBMISSION
+                </div>
+                <h3 className="font-cinzel text-base font-bold text-[#F3EFE6]">
+                  Submit Sourced Event for Structural Inspection
+                </h3>
+              </div>
+              <span className="font-mono text-[11px] text-[#8E9BAE]">
+                Audited under {actor.email}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="font-mono text-[11px] uppercase text-[#C5A059] block mb-1">
+                  Source Attribution
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={customSource}
+                  onChange={(e) => setCustomSource(e.target.value)}
+                  placeholder="e.g. REUTERS // INFRASTRUCTURE"
+                  className="w-full bg-[#111622] border border-[#263147] rounded px-3 py-2 font-mono text-xs text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="font-mono text-[11px] uppercase text-[#C5A059] block mb-1">
+                  Source Article URL (Optional)
+                </label>
+                <input
+                  type="url"
+                  value={customUrl}
+                  onChange={(e) => setCustomUrl(e.target.value)}
+                  placeholder="https://..."
+                  className="w-full bg-[#111622] border border-[#263147] rounded px-3 py-2 font-mono text-xs text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="font-mono text-[11px] uppercase text-[#C5A059] block mb-1">
+                Event Headline
+              </label>
+              <input
+                type="text"
+                required
+                value={customTitle}
+                onChange={(e) => setCustomTitle(e.target.value)}
+                placeholder="Enter sourced event headline..."
+                className="w-full bg-[#111622] border border-[#263147] rounded px-3 py-2 text-xs text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="font-mono text-[11px] uppercase text-[#C5A059] block mb-1">
+                Factual Event Summary (2+ Sentences)
+              </label>
+              <textarea
+                rows={3}
+                required
+                value={customDesc}
+                onChange={(e) => setCustomDesc(e.target.value)}
+                placeholder="Provide a multi-sentence factual summary of the event..."
+                className="w-full bg-[#111622] border border-[#263147] rounded p-3 text-xs text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
+              />
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={runningAction !== null}
+                className="px-4 py-2 rounded bg-[#C5A059] hover:bg-[#d4b26a] text-[#0B0E14] font-mono text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {runningAction === "custom"
+                  ? "Drafting & Auditing Brief…"
+                  : "Draft & Publish Craftsman's Brief"}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
 
       {/* Telemetry & Governance KPI Grid */}

@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { requireAdminRequestActor } from "@/lib/auth";
 import {
   createLocalR2AudioAdapter,
   createLocalSqliteD1Adapter,
@@ -13,6 +14,34 @@ import { getLatestWeeklyRollup } from "@/lib/store";
 import { runWeeklyRollupPipeline } from "@/pipeline/rollup";
 
 export const dynamic = "force-dynamic";
+
+async function isAuthorizedCronOrAdmin(req: NextRequest): Promise<{
+  authorized: boolean;
+  status: number;
+  error?: string;
+}> {
+  const cronSecret = process.env.CRON_SECRET?.trim();
+  const authHeader = req.headers.get("authorization")?.trim();
+  if (cronSecret && authHeader === `Bearer ${cronSecret}`) {
+    return { authorized: true, status: 200 };
+  }
+
+  const adminAuth = await requireAdminRequestActor(req, [
+    "owner",
+    "admin",
+    "editor",
+  ]);
+  if (adminAuth.authorized) {
+    return { authorized: true, status: 200 };
+  }
+
+  return {
+    authorized: false,
+    status: adminAuth.status || 401,
+    error:
+      "Unauthorized: Podcast rollup generation is restricted to Administrators.",
+  };
+}
 
 async function executeD1WeeklyRollup() {
   if (shouldUseRemoteWorker()) {
@@ -58,12 +87,20 @@ async function executeD1WeeklyRollup() {
   };
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const auth = await isAuthorizedCronOrAdmin(req);
+  if (!auth.authorized) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
   const result = await executeD1WeeklyRollup();
   return NextResponse.json(result);
 }
 
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const auth = await isAuthorizedCronOrAdmin(req);
+  if (!auth.authorized) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
   const result = await executeD1WeeklyRollup();
   return NextResponse.json(result);
 }
