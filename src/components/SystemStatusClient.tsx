@@ -170,7 +170,7 @@ export function SystemStatusClient({
             </div>
 
             <p className="font-serif italic text-sm text-[#C5A059] leading-relaxed">
-              &ldquo;Tried by the Plumb, Proved by the Square, Leveled by Accountability.&rdquo;
+              &ldquo;Meet on the Level. Act by the Plumb. Part upon the Square.&rdquo;
             </p>
 
             <div className="space-y-2.5 pt-1 text-xs font-serif text-[#94A3B8]">

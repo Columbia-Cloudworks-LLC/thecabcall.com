@@ -110,7 +110,7 @@ export function SiteFooter() {
             © {new Date().getFullYear()} Change Advisory Board (thecabcall.com). All rights reserved.
           </span>
           <span className="font-serif italic text-sm text-[#C5A059]">
-            &ldquo;Tried by the Plumb, Proved by the Square, Leveled by Accountability.&rdquo;
+            &ldquo;Meet on the Level. Act by the Plumb. Part upon the Square.&rdquo;
           </span>
         </div>
       </div>
