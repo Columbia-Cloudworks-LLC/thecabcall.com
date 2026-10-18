@@ -103,6 +103,21 @@ export function TelemetryProvider({
     refreshTelemetry();
   }, [refreshTelemetry]);
 
+  // Determine whether an episode has a real recorded audio stream (.m4a or >25KB .mp3)
+  // vs. a tiny synthetic MPEG-framed stub requiring Web Speech fallback.
+  const isRealAudioRecording = useCallback(
+    (episode: PublicEpisodeDto | PodcastEpisode): boolean => {
+      if (!episode?.audioUrl) return false;
+      if (episode.audioUrl.toLowerCase().endsWith(".m4a")) return true;
+      if (episode.series === "legacy_archive") return true;
+      if (typeof episode.fileSizeBytes === "number" && episode.fileSizeBytes > 25000) {
+        return true;
+      }
+      return false;
+    },
+    []
+  );
+
   // Stop Web Speech synthesis helper
   const stopSpeech = useCallback(() => {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
@@ -121,43 +136,7 @@ export function TelemetryProvider({
     }
   }, []);
 
-  // Start or sync HTML5 <audio> element from offset
-  const playAudioElement = useCallback(
-    (
-      episode: PublicEpisodeDto | PodcastEpisode,
-      seconds: number,
-      rate: number
-    ) => {
-      const el = audioRef.current;
-      if (!el) return;
-      try {
-        if (
-          episode.audioUrl &&
-          !el.src.endsWith(episode.audioUrl) &&
-          el.src !== episode.audioUrl
-        ) {
-          el.src = episode.audioUrl;
-        }
-        el.playbackRate = rate;
-        if (Number.isFinite(el.duration) && el.duration > 0) {
-          el.currentTime = seconds % el.duration;
-        } else if (seconds === 0) {
-          el.currentTime = 0;
-        }
-        const playPromise = el.play();
-        if (playPromise && typeof playPromise.catch === "function") {
-          playPromise.catch(() => {
-            // Browser autoplay policy or external stream fallback; Web Speech narration continues seamlessly
-          });
-        }
-      } catch {
-        // ignore audio element error
-      }
-    },
-    []
-  );
-
-  // Start Web Speech narration from the transcript corresponding to currentTime
+  // Start Web Speech narration from the transcript corresponding to currentTime (fallback only for synthetic stubs)
   const startSpeechFromOffset = useCallback(
     (
       episode: PublicEpisodeDto | PodcastEpisode,
@@ -168,6 +147,9 @@ export function TelemetryProvider({
         return;
       }
       window.speechSynthesis.cancel();
+      if (isRealAudioRecording(episode)) {
+        return;
+      }
       const cleanText = episode.transcript.replace(/\[.*?\]/g, "").trim();
       const ratio = Math.min(
         0.95,
@@ -182,11 +164,93 @@ export function TelemetryProvider({
       utterance.pitch = 0.92;
       window.speechSynthesis.speak(utterance);
     },
+    [isRealAudioRecording]
+  );
+
+  // Start or sync HTML5 <audio> element from offset
+  const playAudioElement = useCallback(
+    (
+      episode: PublicEpisodeDto | PodcastEpisode,
+      seconds: number,
+      rate: number
+    ) => {
+      const el = audioRef.current;
+      if (!el || !episode.audioUrl) return;
+      try {
+        const currentEpId = el.getAttribute("data-episode-id");
+        const isNewSource =
+          currentEpId !== episode.id ||
+          (!el.src.endsWith(episode.audioUrl) && el.src !== episode.audioUrl);
+
+        if (isNewSource) {
+          el.setAttribute("data-episode-id", episode.id);
+          el.src = episode.audioUrl;
+          el.load();
+        }
+
+        el.playbackRate = rate;
+
+        const applySeekAndPlay = () => {
+          try {
+            el.playbackRate = rate;
+            if (seconds > 0) {
+              el.currentTime = seconds;
+            } else if (isNewSource) {
+              el.currentTime = 0;
+            }
+          } catch {
+            // ignore seek before ready
+          }
+          const playPromise = el.play();
+          if (playPromise && typeof playPromise.catch === "function") {
+            playPromise.catch((err) => {
+              console.warn("[Audio Player] HTML5 audio playback error:", err);
+            });
+          }
+        };
+
+        if (isNewSource && seconds > 0 && el.readyState < 1) {
+          el.addEventListener("loadedmetadata", applySeekAndPlay, {
+            once: true,
+          });
+        } else {
+          applySeekAndPlay();
+        }
+      } catch {
+        // ignore audio element error
+      }
+    },
     []
   );
 
+  // Sync HTML5 <audio> timeupdate and ended events for real audio recordings
   useEffect(() => {
-    if (isPlaying) {
+    const el = audioRef.current;
+    if (!el) return;
+
+    const handleTimeUpdate = () => {
+      if (isRealAudioRecording(activeEpisode) && !el.paused) {
+        setCurrentTime(Math.floor(el.currentTime));
+      }
+    };
+
+    const handleEnded = () => {
+      if (isRealAudioRecording(activeEpisode)) {
+        setIsPlaying(false);
+        setCurrentTime(0);
+      }
+    };
+
+    el.addEventListener("timeupdate", handleTimeUpdate);
+    el.addEventListener("ended", handleEnded);
+    return () => {
+      el.removeEventListener("timeupdate", handleTimeUpdate);
+      el.removeEventListener("ended", handleEnded);
+    };
+  }, [activeEpisode, isRealAudioRecording]);
+
+  useEffect(() => {
+    if (isPlaying && !isRealAudioRecording(activeEpisode)) {
       timerRef.current = setInterval(() => {
         setCurrentTime((prev) => {
           if (prev + 1 >= activeEpisode.durationSeconds) {
@@ -208,7 +272,8 @@ export function TelemetryProvider({
   }, [
     isPlaying,
     playbackRate,
-    activeEpisode.durationSeconds,
+    activeEpisode,
+    isRealAudioRecording,
     stopSpeech,
     pauseAudioElement,
   ]);
@@ -218,14 +283,23 @@ export function TelemetryProvider({
       if (!isRenderablePublicEpisode(episode)) {
         return;
       }
+      stopSpeech();
       setActiveEpisode(episode);
       setCurrentTime(startSeconds);
       setIsDockVisible(true);
       setIsPlaying(true);
       playAudioElement(episode, startSeconds, playbackRate);
-      startSpeechFromOffset(episode, startSeconds, playbackRate);
+      if (!isRealAudioRecording(episode)) {
+        startSpeechFromOffset(episode, startSeconds, playbackRate);
+      }
     },
-    [playbackRate, playAudioElement, startSpeechFromOffset]
+    [
+      playbackRate,
+      playAudioElement,
+      startSpeechFromOffset,
+      stopSpeech,
+      isRealAudioRecording,
+    ]
   );
 
   const togglePlayPause = useCallback(() => {
@@ -233,8 +307,11 @@ export function TelemetryProvider({
     setIsPlaying((prev) => {
       const next = !prev;
       if (next) {
+        stopSpeech();
         playAudioElement(activeEpisode, currentTime, playbackRate);
-        startSpeechFromOffset(activeEpisode, currentTime, playbackRate);
+        if (!isRealAudioRecording(activeEpisode)) {
+          startSpeechFromOffset(activeEpisode, currentTime, playbackRate);
+        }
       } else {
         pauseAudioElement();
         stopSpeech();
@@ -249,6 +326,7 @@ export function TelemetryProvider({
     pauseAudioElement,
     startSpeechFromOffset,
     stopSpeech,
+    isRealAudioRecording,
   ]);
 
   const seekTo = useCallback(
@@ -260,18 +338,22 @@ export function TelemetryProvider({
       setCurrentTime(clamped);
       if (audioRef.current) {
         try {
-          const dur = audioRef.current.duration;
-          audioRef.current.currentTime =
-            Number.isFinite(dur) && dur > 0 ? clamped % dur : clamped;
+          audioRef.current.currentTime = clamped;
         } catch {
           // ignore seek error on unloaded metadata
         }
       }
-      if (isPlaying) {
+      if (isPlaying && !isRealAudioRecording(activeEpisode)) {
         startSpeechFromOffset(activeEpisode, clamped, playbackRate);
       }
     },
-    [activeEpisode, isPlaying, playbackRate, startSpeechFromOffset]
+    [
+      activeEpisode,
+      isPlaying,
+      playbackRate,
+      startSpeechFromOffset,
+      isRealAudioRecording,
+    ]
   );
 
   const cyclePlaybackRate = useCallback(() => {
@@ -280,12 +362,18 @@ export function TelemetryProvider({
       if (audioRef.current) {
         audioRef.current.playbackRate = next;
       }
-      if (isPlaying) {
+      if (isPlaying && !isRealAudioRecording(activeEpisode)) {
         startSpeechFromOffset(activeEpisode, currentTime, next);
       }
       return next;
     });
-  }, [activeEpisode, currentTime, isPlaying, startSpeechFromOffset]);
+  }, [
+    activeEpisode,
+    currentTime,
+    isPlaying,
+    startSpeechFromOffset,
+    isRealAudioRecording,
+  ]);
 
   const closeDock = useCallback(() => {
     setIsPlaying(false);

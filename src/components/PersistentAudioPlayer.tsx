@@ -50,9 +50,7 @@ export function PersistentAudioPlayer() {
       {/* Persistent HTML5 <audio> element for byte-range streaming from /audio/:filename */}
       <audio
         ref={audioRef}
-        src={activeEpisode.audioUrl}
         preload="metadata"
-        loop
         className="hidden"
         aria-hidden="true"
       />
