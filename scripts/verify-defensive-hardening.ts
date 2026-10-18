@@ -4,10 +4,16 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import {
+  buildOrSanitizeArticleDiagnostics,
   cleanRssText,
+  containsInterpolatedHeadline,
+  isTemplatedOrMalformedCopy,
   normalizeCanonicalUrl,
+  normalizeStoredQuestionsPayload,
   stripUnsafeHtmlAndCdata,
 } from "../src/lib/sanitize.ts";
+import { extractStoredQuestionsPayload } from "../src/lib/d1-bridge.ts";
+import { INITIAL_INCIDENTS } from "../src/lib/seed-data.ts";
 import {
   validateJevEvaluationOutput,
   evaluateArticleWithJev,
@@ -1088,8 +1094,233 @@ async function runVerificationSuite() {
   console.log(
     "  ✓ Craft Lexicon mapper, shop-floor Failure Mode translations, 'Structural Friction' safe fallback, and plain-spoken UI labels verified."
   );
+
+  // -------------------------------------------------------------------------
+  // 7. OBJECTIVE 7 (ISSUE #15): ZERO HEADLINE INTERPOLATION & PLAIN WORKSHOP PROSE
+  // -------------------------------------------------------------------------
   console.log(
-    "\n=== ALL 6 DEFENSIVE HARDENING & CRAFT LEXICON OBJECTIVES PASSED (100%) ==="
+    "\n[7/7] Verifying Objective 7 (Issue #15): Zero Headline Interpolation & Plain Workshop Prose..."
+  );
+
+  const sampleHeadline =
+    "Trump gives update on health of George W. Bush after former president reveals cancer diagnosis";
+  const brokenNoise =
+    "Public commentary around Trump gives update on health of George W. Bush after former president reveals cancer diagnosis focuses on immediate political reaction rather than the underlying institutional mechanics.";
+  const brokenSignal =
+    "The structural signal in Trump gives update on health of George W. Bush after former president reveals cancer diagnosis is Configuration Drift evaluated under The Plumb: Donald Trump said Saturday that former President George W. Bush is doing well, though the episode highlights where live operational practice to diverge from the stated legal or institutional charter.";
+  const brokenQ1 =
+    "In Trump gives update on health of George W. Bush, which specific check under The Plumb allowed live operational practice to diverge from the stated legal or institutional charter without triggering an earlier corrective audit?";
+  const brokenQ2 =
+    "How should 24-Inch Gauge be applied to ensure the response to Trump gives update on health of George W. Bush addresses the underlying Configuration Drift rather than merely managing immediate public fallout?";
+
+  assert.equal(
+    containsInterpolatedHeadline(brokenNoise, sampleHeadline),
+    true,
+    "containsInterpolatedHeadline must detect full headline interpolation in Noise"
+  );
+  assert.equal(
+    containsInterpolatedHeadline(brokenSignal, sampleHeadline),
+    true,
+    "containsInterpolatedHeadline must detect full headline interpolation in Signal"
+  );
+  assert.equal(
+    containsInterpolatedHeadline(brokenQ1, sampleHeadline),
+    true,
+    "containsInterpolatedHeadline must detect >= 5-word headline prefix interpolation in Question 1"
+  );
+  assert.equal(
+    containsInterpolatedHeadline(brokenQ2, sampleHeadline),
+    true,
+    "containsInterpolatedHeadline must detect >= 5-word headline prefix interpolation in Question 2"
+  );
+  assert.equal(
+    isTemplatedOrMalformedCopy(brokenQ1, sampleHeadline),
+    true,
+    "isTemplatedOrMalformedCopy must flag corporate compliance jargon and headline interpolation"
+  );
+
+  // Test legacy `proportionality` (`noise` / `signal`) JSON shape from `editorial-sanitization-v2`
+  const legacyV2Json = JSON.stringify({
+    executive_summary:
+      "Donald Trump shared a public update Saturday regarding former President George W. Bush after Bush disclosed a recent cancer diagnosis. Statements from both offices emphasized recovery protocols and cross-administration institutional courtesy.",
+    proportionality: {
+      noise: brokenNoise,
+      signal: brokenSignal,
+    },
+    questions: [brokenQ1, brokenQ2],
+    synthesized_by: "editorial-sanitization-v2",
+  });
+
+  const normalizedLegacy = extractStoredQuestionsPayload(legacyV2Json, {
+    title: sampleHeadline,
+    sourceFeed: "NPR News",
+    factualSummary:
+      "Donald Trump shared a public update Saturday regarding former President George W. Bush after Bush disclosed a recent cancer diagnosis. Statements from both offices emphasized recovery protocols and cross-administration institutional courtesy.",
+    primaryTool: "The Plumb",
+    secondaryTool: "24-Inch Gauge",
+    sreFailureMode: "Configuration Drift",
+  });
+
+  assert.ok(
+    normalizedLegacy.noiseOverblown && normalizedLegacy.noiseOverblown.length >= 40,
+    "Normalized legacy proportionality.noise must produce a complete plain-spoken Noise diagnostic"
+  );
+  assert.ok(
+    normalizedLegacy.structuralSignal && normalizedLegacy.structuralSignal.length >= 40,
+    "Normalized legacy proportionality.signal must produce a complete plain-spoken Signal diagnostic"
+  );
+  assert.equal(
+    containsInterpolatedHeadline(normalizedLegacy.noiseOverblown!, sampleHeadline),
+    false,
+    "Sanitized Noise must NOT contain the interpolated headline"
+  );
+  assert.equal(
+    containsInterpolatedHeadline(normalizedLegacy.structuralSignal!, sampleHeadline),
+    false,
+    "Sanitized Signal must NOT contain the interpolated headline"
+  );
+  assert.equal(
+    containsInterpolatedHeadline(normalizedLegacy.questions[0], sampleHeadline),
+    false,
+    "Sanitized Question 1 must NOT contain the interpolated headline"
+  );
+  assert.equal(
+    containsInterpolatedHeadline(normalizedLegacy.questions[1], sampleHeadline),
+    false,
+    "Sanitized Question 2 must NOT contain the interpolated headline"
+  );
+  assert.ok(
+    !/live operational practice to diverge from the stated legal or institutional charter/i.test(
+      `${normalizedLegacy.noiseOverblown} ${normalizedLegacy.structuralSignal} ${normalizedLegacy.questions.join(" ")}`
+    ),
+    "Sanitized diagnostics and questions must be free of corporate compliance legalese"
+  );
+  assert.ok(
+    /\bthis (case|decision|action|breakdown)\b/i.test(
+      `${normalizedLegacy.noiseOverblown} ${normalizedLegacy.structuralSignal} ${normalizedLegacy.questions.join(" ")}`
+    ),
+    "Plain workshop diagnostics and questions must refer naturally to 'this case', 'this decision', 'this action', or 'this breakdown'"
+  );
+
+  // Verify Worker /api/snapshot also repairs a row stored with legacy `proportionality` (`noise` / `signal`) and interpolated headline
+  await db
+    .prepare(
+      `INSERT INTO telemetry_articles (
+        url_hash, source_feed, title, source_url, raw_excerpt, published_at,
+        is_systemic_prob, jev_confidence, primary_tool, secondary_tool, sre_failure_mode,
+        jev_raw_json, socratic_brief, questions_json, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synthesized')`
+    )
+    .bind(
+      "hash-legacy-v2-bush-update",
+      "NPR News",
+      sampleHeadline,
+      "https://example.com/npr-bush-update",
+      "Donald Trump shared a public update Saturday regarding former President George W. Bush after Bush disclosed a recent cancer diagnosis. Statements from both offices emphasized recovery protocols and cross-administration institutional courtesy.",
+      "2026-10-18T10:00:00Z",
+      0.86,
+      0.88,
+      "plumb",
+      "twenty_four_inch_gauge",
+      "configuration_drift",
+      JSON.stringify({ model: "jev-1.14.0" }),
+      "Donald Trump shared a public update Saturday regarding former President George W. Bush after Bush disclosed a recent cancer diagnosis. Statements from both offices emphasized recovery protocols and cross-administration institutional courtesy.",
+      legacyV2Json
+    )
+    .run();
+
+  const snapshotAfterLegacyRes = await worker.fetch(
+    new Request("https://thecabcall.thecabcall.workers.dev/api/snapshot"),
+    workerEnv,
+    mockExecutionContext
+  );
+  assert.equal(snapshotAfterLegacyRes.status, 200);
+  const snapshotAfterLegacy = (await snapshotAfterLegacyRes.json()) as {
+    ok: boolean;
+    incidents: Array<{
+      title: string;
+      socraticBrief: string;
+      proportionalityCheck: { noiseOverblown: string; structuralSignal: string };
+      questions: [string, string];
+    }>;
+  };
+
+  const bushIncident = snapshotAfterLegacy.incidents.find(
+    (inc) => inc.title === sampleHeadline
+  );
+  assert.ok(
+    bushIncident,
+    "Worker /api/snapshot must normalize and render legacy editorial-sanitization-v2 rows cleanly"
+  );
+  assert.equal(
+    containsInterpolatedHeadline(
+      bushIncident.proportionalityCheck.noiseOverblown,
+      bushIncident.title
+    ),
+    false,
+    "Worker DTO noiseOverblown must have zero headline interpolation"
+  );
+  assert.equal(
+    containsInterpolatedHeadline(
+      bushIncident.proportionalityCheck.structuralSignal,
+      bushIncident.title
+    ),
+    false,
+    "Worker DTO structuralSignal must have zero headline interpolation"
+  );
+  assert.equal(
+    containsInterpolatedHeadline(bushIncident.questions[0], bushIncident.title),
+    false,
+    "Worker DTO Question 1 must have zero headline interpolation"
+  );
+  assert.equal(
+    containsInterpolatedHeadline(bushIncident.questions[1], bushIncident.title),
+    false,
+    "Worker DTO Question 2 must have zero headline interpolation"
+  );
+
+  // Verify all seed INITIAL_INCIDENTS and all snapshot incidents have zero headline interpolation in Sections II or III
+  for (const inc of [...INITIAL_INCIDENTS, ...snapshotAfterLegacy.incidents]) {
+    assert.equal(
+      containsInterpolatedHeadline(
+        inc.proportionalityCheck.noiseOverblown,
+        inc.title
+      ),
+      false,
+      `Incident "${inc.title}" has interpolated headline in Section II Noise`
+    );
+    assert.equal(
+      containsInterpolatedHeadline(
+        inc.proportionalityCheck.structuralSignal,
+        inc.title
+      ),
+      false,
+      `Incident "${inc.title}" has interpolated headline in Section II Signal`
+    );
+    assert.equal(
+      containsInterpolatedHeadline(inc.questions[0], inc.title),
+      false,
+      `Incident "${inc.title}" has interpolated headline in Section III Question 1`
+    );
+    assert.equal(
+      containsInterpolatedHeadline(inc.questions[1], inc.title),
+      false,
+      `Incident "${inc.title}" has interpolated headline in Section III Question 2`
+    );
+  }
+
+  const finalBleedAudit = assertZeroTelemetryBleed(snapshotAfterLegacy);
+  assert.equal(
+    finalBleedAudit.clean,
+    true,
+    `Final /api/snapshot bleed & headline-interpolation check failed: ${finalBleedAudit.violations.join("; ")}`
+  );
+
+  console.log(
+    "  ✓ Issue #15 headline-interpolation detector, legacy proportionality normalization, and plain workshop prose verified across all incidents."
+  );
+  console.log(
+    "\n=== ALL 7 DEFENSIVE HARDENING & CRAFT PROSE OBJECTIVES PASSED (100%) ==="
   );
 }
 

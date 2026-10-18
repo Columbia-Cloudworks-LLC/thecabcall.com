@@ -8,6 +8,8 @@ import {
 } from "./dto";
 import {
   buildOrSanitizeArticleDiagnostics,
+  NormalizedQuestionsPayload,
+  normalizeStoredQuestionsPayload,
   sanitizeStringConcatenation,
   SummaryValidationResult,
   validateAndNormalizeIncidentSummary,
@@ -107,77 +109,20 @@ export function makeIncidentSlug(title: string, id: number): string {
   return `${base || "incident"}-d1-${id}`;
 }
 
-export function extractStoredQuestionsPayload(questionsJson: string | null): {
-  executiveSummary: string | null;
-  noiseOverblown: string | null;
-  structuralSignal: string | null;
-  questions: string[];
-  isLeadPostMortem: boolean;
-  leadPostMortemAnalysis: string | null;
-} {
-  if (!questionsJson) {
-    return {
-      executiveSummary: null,
-      noiseOverblown: null,
-      structuralSignal: null,
-      questions: [],
-      isLeadPostMortem: false,
-      leadPostMortemAnalysis: null,
-    };
-  }
-
-  try {
-    const parsedQ = JSON.parse(questionsJson);
-    if (Array.isArray(parsedQ)) {
-      return {
-        executiveSummary: null,
-        noiseOverblown: null,
-        structuralSignal: null,
-        questions: parsedQ.map((q) => String(q)),
-        isLeadPostMortem: false,
-        leadPostMortemAnalysis: null,
-      };
-    }
-    if (parsedQ && typeof parsedQ === "object") {
-      return {
-        executiveSummary:
-          typeof parsedQ.executive_summary === "string" &&
-          parsedQ.executive_summary.trim()
-            ? parsedQ.executive_summary.trim()
-            : null,
-        noiseOverblown:
-          parsedQ.proportionality_check &&
-          typeof parsedQ.proportionality_check.noise_overblown === "string"
-            ? parsedQ.proportionality_check.noise_overblown.trim()
-            : null,
-        structuralSignal:
-          parsedQ.proportionality_check &&
-          typeof parsedQ.proportionality_check.structural_signal === "string"
-            ? parsedQ.proportionality_check.structural_signal.trim()
-            : null,
-        questions: Array.isArray(parsedQ.questions)
-          ? parsedQ.questions.map((q: unknown) => String(q))
-          : [],
-        isLeadPostMortem: Boolean(parsedQ.is_lead_post_mortem),
-        leadPostMortemAnalysis:
-          typeof parsedQ.lead_post_mortem_analysis === "string" &&
-          parsedQ.lead_post_mortem_analysis.trim()
-            ? parsedQ.lead_post_mortem_analysis.trim()
-            : null,
-      };
-    }
-  } catch {
-    // Ignore malformed questions_json
-  }
-
-  return {
-    executiveSummary: null,
-    noiseOverblown: null,
-    structuralSignal: null,
-    questions: [],
-    isLeadPostMortem: false,
-    leadPostMortemAnalysis: null,
-  };
+export function extractStoredQuestionsPayload(
+  questionsJson: string | null,
+  options?:
+    | {
+        title?: string;
+        sourceFeed?: string;
+        factualSummary?: string;
+        primaryTool?: WorkingToolId;
+        secondaryTool?: WorkingToolId;
+        sreFailureMode?: SreFailureModeId;
+      }
+    | string
+): NormalizedQuestionsPayload {
+  return normalizeStoredQuestionsPayload(questionsJson, options);
 }
 
 export function mapD1RowToIncidentArticle(
@@ -227,7 +172,14 @@ export function mapD1RowToIncidentArticle(
     // Use default fallback probabilities
   }
 
-  const storedPayload = extractStoredQuestionsPayload(row.questions_json);
+  const storedPayload = extractStoredQuestionsPayload(row.questions_json, {
+    title: row.title,
+    sourceFeed: row.source_feed,
+    factualSummary: row.socratic_brief || row.raw_excerpt,
+    primaryTool,
+    secondaryTool,
+    sreFailureMode,
+  });
 
   const validation =
     prevalidated ||
@@ -318,7 +270,7 @@ export function mapD1RowToIncidentArticle(
     toolProbabilities: defaultProbs,
     executiveSummary,
     socraticBrief,
-    diagnosticApplication: socraticBrief,
+    diagnosticApplication: diagnostics.structuralSignal,
     proportionalityCheck: {
       noiseOverblown: diagnostics.noiseOverblown,
       structuralSignal: diagnostics.structuralSignal,
@@ -809,7 +761,7 @@ function mapPublicIncidentDtoToIncidentArticle(
     toolProbabilities: defaultProbs,
     executiveSummary: dto.executiveSummary,
     socraticBrief: dto.socraticBrief,
-    diagnosticApplication: dto.socraticBrief,
+    diagnosticApplication: dto.proportionalityCheck.structuralSignal,
     proportionalityCheck: {
       noiseOverblown: dto.proportionalityCheck.noiseOverblown,
       structuralSignal: dto.proportionalityCheck.structuralSignal,
@@ -880,7 +832,16 @@ function buildSnapshotFromRows(
   const incidents: IncidentArticle[] = [];
 
   for (const row of visibleRows) {
-    const stored = extractStoredQuestionsPayload(row.questions_json);
+    const stored = extractStoredQuestionsPayload(row.questions_json, {
+      title: row.title,
+      sourceFeed: row.source_feed,
+      factualSummary: row.socratic_brief || row.raw_excerpt,
+      primaryTool: mapJevToolToWorkingToolId(row.primary_tool),
+      secondaryTool: mapJevToolToWorkingToolId(
+        row.secondary_tool || "twenty_four_inch_gauge"
+      ),
+      sreFailureMode: mapJevFailureToSreFailureModeId(row.sre_failure_mode),
+    });
     const shouldLog = !loggedQuarantineHashes.has(row.url_hash);
     const validation = validateAndNormalizeIncidentSummary({
       id: row.id,

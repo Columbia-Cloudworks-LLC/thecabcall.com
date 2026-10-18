@@ -1,4 +1,7 @@
-import { isTemplatedOrMalformedCopy } from "./sanitize";
+import {
+  containsInterpolatedHeadline,
+  isTemplatedOrMalformedCopy,
+} from "./sanitize";
 import {
   DEFAULT_CRAFT_FAILURE_MODE,
   DEFAULT_CRAFT_WORKING_TOOL,
@@ -284,8 +287,8 @@ export function isRenderablePublicIncident(
     isTemplatedOrMalformedCopy(title) ||
     isTemplatedOrMalformedCopy(executiveSummary) ||
     isTemplatedOrMalformedCopy(socraticBrief) ||
-    isTemplatedOrMalformedCopy(noiseOverblown) ||
-    isTemplatedOrMalformedCopy(structuralSignal)
+    isTemplatedOrMalformedCopy(noiseOverblown, title) ||
+    isTemplatedOrMalformedCopy(structuralSignal, title)
   ) {
     return false;
   }
@@ -310,8 +313,8 @@ export function isRenderablePublicIncident(
     q2.length < 20 ||
     !q1.endsWith("?") ||
     !q2.endsWith("?") ||
-    isTemplatedOrMalformedCopy(q1) ||
-    isTemplatedOrMalformedCopy(q2) ||
+    isTemplatedOrMalformedCopy(q1, title) ||
+    isTemplatedOrMalformedCopy(q2, title) ||
     FORBIDDEN_PUBLIC_TELEMETRY_TEXT.test(q1) ||
     FORBIDDEN_PUBLIC_TELEMETRY_TEXT.test(q2)
   ) {
@@ -606,7 +609,43 @@ export function assertZeroTelemetryBleed(payload: unknown): {
       return;
     }
     if (typeof node === "object") {
-      for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+      const obj = node as Record<string, unknown>;
+      if (
+        typeof obj.title === "string" &&
+        obj.proportionalityCheck &&
+        typeof obj.proportionalityCheck === "object"
+      ) {
+        const pc = obj.proportionalityCheck as Record<string, unknown>;
+        if (
+          typeof pc.noiseOverblown === "string" &&
+          containsInterpolatedHeadline(pc.noiseOverblown, obj.title)
+        ) {
+          violations.push(
+            `${pathPrefix}.proportionalityCheck.noiseOverblown: contains interpolated headline`
+          );
+        }
+        if (
+          typeof pc.structuralSignal === "string" &&
+          containsInterpolatedHeadline(pc.structuralSignal, obj.title)
+        ) {
+          violations.push(
+            `${pathPrefix}.proportionalityCheck.structuralSignal: contains interpolated headline`
+          );
+        }
+        if (Array.isArray(obj.questions)) {
+          obj.questions.forEach((q, idx) => {
+            if (
+              typeof q === "string" &&
+              containsInterpolatedHeadline(q, obj.title as string)
+            ) {
+              violations.push(
+                `${pathPrefix}.questions[${idx}]: contains interpolated headline`
+              );
+            }
+          });
+        }
+      }
+      for (const [k, v] of Object.entries(obj)) {
         const currentPath = pathPrefix ? `${pathPrefix}.${k}` : k;
         if (FORBIDDEN_PUBLIC_JSON_KEYS.has(k)) {
           violations.push(`${currentPath}: forbidden telemetry key "${k}"`);

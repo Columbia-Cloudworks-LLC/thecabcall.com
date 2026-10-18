@@ -264,9 +264,10 @@ HARD GOVERNANCE CONSTRAINTS (NON-NEGOTIABLE):
    - SRE Failure Mode: ${sreDisplay} — Criteria: ${JEV_SRE_FAILURE_MODE_CRITERIA[row.sre_failure_mode]}
    - 6-Tool Probability Vector: ${JSON.stringify(toolProbs)}
 
-2. ZERO PIPELINE JARGON & ZERO DEFINITIONS RULE:
+2. ZERO PIPELINE JARGON, ZERO HEADLINE INTERPOLATION & ZERO DEFINITIONS RULE:
    - NEVER mention internal classifier names ("Jev", "TypeSafe Jev", "jev-1.14.0", "System-1", "ingestion gate") or raw decimal weights ("0.61 primary weight") anywhere in your output.
-   - NEVER use Mad-Libs templates like "{Source} reports on '{Headline}', exposing an active operational friction point...".
+   - NEVER paste or interpolate the article headline string into "noise_overblown", "structural_signal", or "questions" (e.g. never write "Public commentary around {Headline} focuses on..." or "In {Headline}, which specific check..."). Instead, refer naturally in plain workshop English to "this case", "this decision", "this action", or "this breakdown" and name the specific actors or systems involved.
+   - NEVER use corporate compliance legalese like "live operational practice to diverge from the stated legal or institutional charter" or "without triggering an earlier corrective audit". Write in plain, direct workshop English.
    - Do NOT recite dictionary or monitorial definitions of what a Square, Plumb, Level, Gauge, Gavel, or Trowel is.
    - Zero partisan punditry, zero moralizing conclusions, zero AI clichés ("delve", "testament", "stark reminder", "wake-up call", "underscores").${directiveBlock}`;
 
@@ -290,8 +291,8 @@ CLASSIFICATION LENS:
 Return ONLY valid JSON matching the required schema with:
 1. "executive_summary": 2 plain-English factual sentences summarizing what happened in the news event based on the source excerpt. No classifier names or percentages.
 2. "socratic_brief": 1 concise, unvarnished factual paragraph (2 to 3 plain-English sentences) stating the facts of the incident. Do not include a second or third paragraph reciting tool weights or telemetry caveats.
-3. "proportionality_check": { "noise_overblown": "...", "structural_signal": "..." } where "structural_signal" explains how the structural constraint (${sreDisplay} under ${primaryDisplay}) applies specifically to the facts of this article rather than repeating a generic rubric definition.
-4. "questions": Exactly 2 high-impact Socratic diagnostic questions in standard sentence case anchored to ${primaryDisplay} and ${secondaryDisplay}.`;
+3. "proportionality_check": { "noise_overblown": "...", "structural_signal": "..." } written in plain, direct workshop English referring naturally to "this case", "this decision", "this action", or "this breakdown" (never interpolating the raw headline string or repeating sentences from socratic_brief).
+4. "questions": Exactly 2 direct, plain-spoken Socratic questions in standard sentence case anchored to ${primaryDisplay} and ${secondaryDisplay} that refer naturally to "this case", "this decision", or the specific institutions involved without pasting the headline string.`;
 
   return { systemInstruction, userPrompt };
 }
@@ -320,11 +321,17 @@ export function validateSynthesizedBriefOutput(
     return { valid: false, reason: "Synthesis payload is not an object" };
   }
   const obj = parsed as Record<string, any>;
+  const propObj =
+    obj.proportionality_check && typeof obj.proportionality_check === "object"
+      ? obj.proportionality_check
+      : obj.proportionality && typeof obj.proportionality === "object"
+        ? obj.proportionality
+        : null;
+
   if (
     typeof obj.executive_summary !== "string" ||
     typeof obj.socratic_brief !== "string" ||
-    !obj.proportionality_check ||
-    typeof obj.proportionality_check !== "object" ||
+    !propObj ||
     !Array.isArray(obj.questions) ||
     obj.questions.length < 2
   ) {
@@ -334,11 +341,24 @@ export function validateSynthesizedBriefOutput(
     };
   }
 
+  const rawNoise = String(propObj.noise_overblown ?? propObj.noise ?? "").trim();
+  const rawSignal = String(propObj.structural_signal ?? propObj.signal ?? "").trim();
+
+  if (rawNoise.length < 25 || rawSignal.length < 25) {
+    return {
+      valid: false,
+      reason: "Synthesis proportionality_check fields are missing or too short",
+    };
+  }
+
   if (
-    isTemplatedOrMalformedCopy(obj.executive_summary) ||
-    isTemplatedOrMalformedCopy(obj.socratic_brief) ||
-    isTemplatedOrMalformedCopy(obj.proportionality_check.noise_overblown) ||
-    isTemplatedOrMalformedCopy(obj.proportionality_check.structural_signal)
+    isTemplatedOrMalformedCopy(obj.executive_summary, row.title) ||
+    isTemplatedOrMalformedCopy(obj.socratic_brief, row.title) ||
+    isTemplatedOrMalformedCopy(rawNoise, row.title) ||
+    isTemplatedOrMalformedCopy(rawSignal, row.title) ||
+    obj.questions.some((q: unknown) =>
+      isTemplatedOrMalformedCopy(String(q || ""), row.title)
+    )
   ) {
     return {
       valid: false,
@@ -385,10 +405,10 @@ export function validateSynthesizedBriefOutput(
     primaryTool,
     secondaryTool,
     sreFailureMode,
-    existingNoise: obj.proportionality_check.noise_overblown,
-    existingSignal: obj.proportionality_check.structural_signal,
+    existingNoise: rawNoise,
+    existingSignal: rawSignal,
     existingQuestions: obj.questions.map((q: unknown) =>
-      normalizeQuestionSentenceCase(String(q || ""))
+      normalizeQuestionSentenceCase(String(q || ""), row.title)
     ),
   });
 

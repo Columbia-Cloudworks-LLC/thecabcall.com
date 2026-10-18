@@ -7,7 +7,9 @@ import { D1DatabaseLike, executeD1Batch, stripHtmlAndCdata } from "./ingest";
 import { JevSreFailureModeKey, JevWorkingToolKey } from "./jev";
 import { R2BucketLike } from "./rollup";
 import {
+  buildOrSanitizeArticleDiagnostics,
   normalizeQuestionSentenceCase,
+  normalizeStoredQuestionsPayload,
   sanitizeStringConcatenation,
 } from "../lib/sanitize";
 import {
@@ -1280,56 +1282,43 @@ export function mapAdminIncidentRowToRecord(
   const secondaryTool = mapWorkingToolToCraftLexicon(secondaryToolKey);
   const sreFailureMode = mapFailureModeToCraftLexicon(sreFailureModeKey);
 
-  let executiveSummary = "";
-  let noiseOverblown = "";
-  let structuralSignal = "";
-  let questions: [string, string] = [
-    `Where did operational practice diverge from the governing standard under ${primaryTool}?`,
-    `How should ${secondaryTool} be applied to prevent a recurrence of ${sreFailureMode}?`,
-  ];
-  let isLeadPostMortem = false;
-  let leadPostMortemAnalysis: string | null = null;
-
-  if (row.questions_json) {
-    try {
-      const parsed = JSON.parse(row.questions_json);
-      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        if (typeof parsed.executive_summary === "string") {
-          executiveSummary = parsed.executive_summary.trim();
-        }
-        if (
-          parsed.proportionality_check &&
-          typeof parsed.proportionality_check === "object"
-        ) {
-          noiseOverblown = String(
-            parsed.proportionality_check.noise_overblown || ""
-          ).trim();
-          structuralSignal = String(
-            parsed.proportionality_check.structural_signal || ""
-          ).trim();
-        }
-        if (Array.isArray(parsed.questions) && parsed.questions.length >= 2) {
-          questions = [
-            normalizeQuestionSentenceCase(String(parsed.questions[0] || "")),
-            normalizeQuestionSentenceCase(String(parsed.questions[1] || "")),
-          ];
-        }
-        isLeadPostMortem = Boolean(parsed.is_lead_post_mortem);
-        if (typeof parsed.lead_post_mortem_analysis === "string") {
-          leadPostMortemAnalysis = parsed.lead_post_mortem_analysis.trim() || null;
-        }
-      }
-    } catch {
-      // ignore malformed questions_json
-    }
-  }
-
   const socraticBrief = sanitizeStringConcatenation(
     (row.socratic_brief || row.raw_excerpt || "").trim()
   );
-  if (!executiveSummary) {
-    executiveSummary = socraticBrief;
-  }
+
+  const storedPayload = normalizeStoredQuestionsPayload(row.questions_json, {
+    title: row.title,
+    sourceFeed: row.source_feed,
+    factualSummary: socraticBrief,
+    primaryTool,
+    secondaryTool,
+    sreFailureMode,
+  });
+
+  const diagnostics = buildOrSanitizeArticleDiagnostics({
+    title: row.title,
+    sourceFeed: row.source_feed,
+    factualSummary: socraticBrief,
+    primaryTool,
+    secondaryTool,
+    sreFailureMode,
+    existingNoise: storedPayload.noiseOverblown,
+    existingSignal: storedPayload.structuralSignal,
+    existingQuestions: storedPayload.questions,
+  });
+
+  const executiveSummary =
+    storedPayload.executiveSummary || socraticBrief;
+  const noiseOverblown = diagnostics.noiseOverblown;
+  const structuralSignal = diagnostics.structuralSignal;
+  const questions: [string, string] = [
+    diagnostics.questions[0] ||
+      `In this case, which specific rule or operating standard failed to hold under ${primaryTool}?`,
+    diagnostics.questions[1] ||
+      `How should ${secondaryTool} be applied in this case to keep ${sreFailureMode} from recurring?`,
+  ];
+  const isLeadPostMortem = storedPayload.isLeadPostMortem;
+  const leadPostMortemAnalysis = storedPayload.leadPostMortemAnalysis;
 
   const slugBase = (row.title || "incident")
     .toLowerCase()

@@ -67,7 +67,7 @@ export function IncidentBriefClient({
   // Section III: Strictly 2 highest-impact Socratic questions in standard sentence case
   const topTwoQuestions = incident.questions
     .slice(0, 2)
-    .map(normalizeQuestionSentenceCase);
+    .map((q) => normalizeQuestionSentenceCase(q, incident.title));
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">

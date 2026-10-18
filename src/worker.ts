@@ -86,6 +86,7 @@ import {
 } from "./lib/dto";
 import {
   buildOrSanitizeArticleDiagnostics,
+  normalizeStoredQuestionsPayload,
   validateAndNormalizeIncidentSummary,
 } from "./lib/sanitize";
 import { DomainSectorId, SreFailureModeId, WorkingToolId } from "./lib/taxonomy";
@@ -176,31 +177,6 @@ function mapWorkerRowToPublicIncidentDto(
     return null;
   }
 
-  let parsedQ: Record<string, any> | null = null;
-  if (row.questions_json) {
-    try {
-      const p = JSON.parse(row.questions_json);
-      if (p && typeof p === "object" && !Array.isArray(p)) {
-        parsedQ = p;
-      }
-    } catch {
-      parsedQ = null;
-    }
-  }
-
-  const validation = validateAndNormalizeIncidentSummary({
-    id: row.id,
-    title: row.title,
-    sourceFeed: row.source_feed,
-    rawExcerpt: row.raw_excerpt,
-    executiveSummary: parsedQ?.executive_summary || null,
-    socraticBrief: row.socratic_brief,
-    logWarnings: false,
-  });
-  if (!validation.valid) {
-    return null;
-  }
-
   const primaryTool =
     WORKER_TOOL_DISPLAY[row.primary_tool] || "The Square";
   const secondaryTool =
@@ -209,6 +185,28 @@ function mapWorkerRowToPublicIncidentDto(
   const sreFailureMode =
     WORKER_FAILURE_DISPLAY[row.sre_failure_mode] || "Configuration Drift";
 
+  const storedPayload = normalizeStoredQuestionsPayload(row.questions_json, {
+    title: row.title,
+    sourceFeed: row.source_feed,
+    factualSummary: row.socratic_brief || row.raw_excerpt,
+    primaryTool,
+    secondaryTool,
+    sreFailureMode,
+  });
+
+  const validation = validateAndNormalizeIncidentSummary({
+    id: row.id,
+    title: row.title,
+    sourceFeed: row.source_feed,
+    rawExcerpt: row.raw_excerpt,
+    executiveSummary: storedPayload.executiveSummary,
+    socraticBrief: row.socratic_brief,
+    logWarnings: false,
+  });
+  if (!validation.valid) {
+    return null;
+  }
+
   const diagnostics = buildOrSanitizeArticleDiagnostics({
     title: row.title,
     sourceFeed: row.source_feed,
@@ -216,11 +214,9 @@ function mapWorkerRowToPublicIncidentDto(
     primaryTool,
     secondaryTool,
     sreFailureMode,
-    existingNoise: parsedQ?.proportionality_check?.noise_overblown || null,
-    existingSignal: parsedQ?.proportionality_check?.structural_signal || null,
-    existingQuestions: Array.isArray(parsedQ?.questions)
-      ? parsedQ.questions.map((q: unknown) => String(q))
-      : [],
+    existingNoise: storedPayload.noiseOverblown,
+    existingSignal: storedPayload.structuralSignal,
+    existingQuestions: storedPayload.questions,
   });
 
   if (!diagnostics.valid || diagnostics.questions.length < 2) {
@@ -284,11 +280,8 @@ function mapWorkerRowToPublicIncidentDto(
       structuralSignal: diagnostics.structuralSignal,
     },
     questions: [diagnostics.questions[0], diagnostics.questions[1]],
-    isLeadPostMortem: Boolean(parsedQ?.is_lead_post_mortem),
-    leadPostMortemAnalysis:
-      typeof parsedQ?.lead_post_mortem_analysis === "string"
-        ? parsedQ.lead_post_mortem_analysis
-        : undefined,
+    isLeadPostMortem: storedPayload.isLeadPostMortem,
+    leadPostMortemAnalysis: storedPayload.leadPostMortemAnalysis || undefined,
     imageUrl: effectiveImageUrl,
     imageAlt: effectiveImageAlt,
     imageCaption: effectiveImageCaption,
