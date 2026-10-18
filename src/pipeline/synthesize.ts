@@ -1,4 +1,8 @@
-import { D1DatabaseLike } from "./ingest";
+import {
+  D1DatabaseLike,
+  D1PreparedStatementLike,
+  executeD1Batch,
+} from "./ingest";
 import {
   JEV_SRE_FAILURE_MODE_CRITERIA,
   JEV_WORKING_TOOL_CRITERIA,
@@ -7,6 +11,7 @@ import {
 } from "./jev";
 import {
   buildOrSanitizeArticleDiagnostics,
+  isTemplatedOrMalformedCopy,
   normalizeQuestionSentenceCase,
   sanitizeStringConcatenation,
   validateAndNormalizeIncidentSummary,
@@ -30,7 +35,12 @@ export interface TelemetryArticleRow {
   jev_raw_json: string;
   socratic_brief: string | null;
   questions_json: string | null;
-  status: "dropped" | "triaged" | "synthesized";
+  status:
+    | "dropped"
+    | "triaged"
+    | "synthesized"
+    | "QUARANTINED"
+    | "PENDING_RETRY";
 }
 
 export interface SocraticSynthesisOutput {
@@ -64,8 +74,15 @@ export interface SynthesizeRunSummary {
   completedAt: string;
   requestedLimit: number;
   synthesizedCount: number;
+  quarantinedCount: number;
+  pendingRetryCount: number;
   articles: SynthesizedArticleResult[];
-  errors?: { id: number; title: string; error: string }[];
+  errors?: {
+    id: number;
+    title: string;
+    disposition: "QUARANTINED" | "PENDING_RETRY";
+    error: string;
+  }[];
 }
 
 export const WORKING_TOOL_DISPLAY_NAMES: Record<JevWorkingToolKey, string> = {
@@ -244,9 +261,56 @@ Return ONLY valid JSON matching the required schema with:
   return { systemInstruction, userPrompt };
 }
 
-export function buildDeterministicBoundedSynthesis(
-  row: TelemetryArticleRow
-): SocraticSynthesisOutput {
+export type SynthesisAttemptOutcome =
+  | {
+      ok: true;
+      synthesis: SocraticSynthesisOutput;
+      modelUsed: string;
+    }
+  | {
+      ok: false;
+      disposition: "QUARANTINED" | "PENDING_RETRY";
+      reason: string;
+    };
+
+/**
+ * Validates a candidate `SocraticSynthesisOutput` against strict editorial copy rules,
+ * rejecting any incomplete, truncated, or Mad-Libs templated output.
+ */
+export function validateSynthesizedBriefOutput(
+  row: TelemetryArticleRow,
+  parsed: unknown
+): { valid: true; synthesis: SocraticSynthesisOutput } | { valid: false; reason: string } {
+  if (!parsed || typeof parsed !== "object") {
+    return { valid: false, reason: "Synthesis payload is not an object" };
+  }
+  const obj = parsed as Record<string, any>;
+  if (
+    typeof obj.executive_summary !== "string" ||
+    typeof obj.socratic_brief !== "string" ||
+    !obj.proportionality_check ||
+    typeof obj.proportionality_check !== "object" ||
+    !Array.isArray(obj.questions) ||
+    obj.questions.length < 2
+  ) {
+    return {
+      valid: false,
+      reason: "Synthesis payload missing required fields or has fewer than 2 questions",
+    };
+  }
+
+  if (
+    isTemplatedOrMalformedCopy(obj.executive_summary) ||
+    isTemplatedOrMalformedCopy(obj.socratic_brief) ||
+    isTemplatedOrMalformedCopy(obj.proportionality_check.noise_overblown) ||
+    isTemplatedOrMalformedCopy(obj.proportionality_check.structural_signal)
+  ) {
+    return {
+      valid: false,
+      reason: "Synthesis output contains banned pipeline jargon or Mad-Libs template patterns",
+    };
+  }
+
   const secondaryToolKey: JevWorkingToolKey =
     row.secondary_tool || "twenty_four_inch_gauge";
   const primaryTool = JEV_TO_TAXONOMY_TOOL[row.primary_tool] || "The Square";
@@ -260,54 +324,104 @@ export function buildDeterministicBoundedSynthesis(
     title: row.title,
     sourceFeed: row.source_feed,
     rawExcerpt: row.raw_excerpt,
+    executiveSummary: obj.executive_summary,
+    socraticBrief: obj.socratic_brief,
     logWarnings: false,
   });
 
-  const executiveSummary =
+  if (!validation.valid) {
+    return {
+      valid: false,
+      reason: validation.reason || "Failed factual summary validation",
+    };
+  }
+
+  const cleanExec =
     validation.executiveSummary ||
-    sanitizeStringConcatenation(validation.cleanedDescription);
-  const factualBriefParagraph =
+    sanitizeStringConcatenation(obj.executive_summary.trim());
+  const cleanBrief =
     validation.factualBriefParagraph ||
-    sanitizeStringConcatenation(validation.cleanedDescription);
+    sanitizeStringConcatenation(obj.socratic_brief.split(/\n\s*\n/)[0].trim());
 
   const diagnostics = buildOrSanitizeArticleDiagnostics({
     title: row.title,
     sourceFeed: row.source_feed,
-    factualSummary: factualBriefParagraph,
+    factualSummary: cleanBrief,
     primaryTool,
     secondaryTool,
     sreFailureMode,
+    existingNoise: obj.proportionality_check.noise_overblown,
+    existingSignal: obj.proportionality_check.structural_signal,
+    existingQuestions: obj.questions.map((q: unknown) =>
+      normalizeQuestionSentenceCase(String(q || ""))
+    ),
   });
 
+  if (!diagnostics.valid || diagnostics.questions.length < 2) {
+    return {
+      valid: false,
+      reason:
+        diagnostics.reason ||
+        "Failed editorial diagnostics validation (incomplete or templated copy)",
+    };
+  }
+
   return {
-    executive_summary: executiveSummary,
-    socratic_brief: factualBriefParagraph,
-    proportionality_check: {
-      noise_overblown: diagnostics.noiseOverblown,
-      structural_signal: diagnostics.structuralSignal,
+    valid: true,
+    synthesis: {
+      executive_summary: cleanExec,
+      socratic_brief: cleanBrief,
+      proportionality_check: {
+        noise_overblown: diagnostics.noiseOverblown,
+        structural_signal: diagnostics.structuralSignal,
+      },
+      questions: [diagnostics.questions[0], diagnostics.questions[1]],
     },
-    questions: diagnostics.questions,
   };
 }
 
 /**
  * Calls Gemini via the REST generateContent API with `responseMimeType: "application/json"`
- * and `responseSchema`. Attempts `gemini-2.5-flash` first as specified, and transparently falls back
- * to `gemini-3.8-flash` / `gemini-flash-latest` if the API key is provisioned on newer model aliases.
+ * and `responseSchema`. Never falls back to Mad-Libs string-interpolation templates:
+ * - If API key is unconfigured or upstream fails transiently -> returns `disposition: "PENDING_RETRY"`.
+ * - If model output is malformed, incomplete, or templated -> returns `disposition: "QUARANTINED"`.
  */
 export async function callGeminiStructuredSynthesis(
   row: TelemetryArticleRow,
-  geminiApiKey?: string
-): Promise<{ synthesis: SocraticSynthesisOutput; modelUsed: string }> {
+  geminiApiKey?: string,
+  options?: {
+    fetchImpl?: typeof fetch;
+    synthesisOverride?: unknown;
+  }
+): Promise<SynthesisAttemptOutcome> {
+  if (options?.synthesisOverride !== undefined) {
+    const check = validateSynthesizedBriefOutput(row, options.synthesisOverride);
+    if (!check.valid) {
+      return {
+        ok: false,
+        disposition: "QUARANTINED",
+        reason: check.reason,
+      };
+    }
+    return {
+      ok: true,
+      synthesis: check.synthesis,
+      modelUsed: "gemini-2.5-flash",
+    };
+  }
+
   const trimmedKey = geminiApiKey?.trim() || "";
   if (!trimmedKey || trimmedKey === "your_gemini_api_key_here") {
     return {
-      synthesis: buildDeterministicBoundedSynthesis(row),
-      modelUsed: "deterministic-system2-fallback",
+      ok: false,
+      disposition: "PENDING_RETRY",
+      reason:
+        "GEMINI_API_KEY is not configured; transitioning article to PENDING_RETRY without fallback templates.",
     };
   }
 
   const { systemInstruction, userPrompt } = buildSystem2Prompt(row);
+  const fetchFn = options?.fetchImpl ?? fetch;
 
   const candidateModels = [
     "gemini-2.5-flash",
@@ -316,14 +430,18 @@ export async function callGeminiStructuredSynthesis(
   ];
 
   let lastError = "";
+  let sawMalformedOutput = false;
 
   for (const modelName of candidateModels) {
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(
       trimmedKey
     )}`;
 
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 25000);
+
     try {
-      const response = await fetch(endpoint, {
+      const response = await fetchFn(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -344,13 +462,12 @@ export async function callGeminiStructuredSynthesis(
             responseSchema: SOCRATIC_SYNTHESIS_RESPONSE_SCHEMA,
           },
         }),
-        signal: AbortSignal.timeout(25000),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
         const errText = await response.text().catch(() => "");
         lastError = `HTTP ${response.status} (${modelName}): ${errText.slice(0, 300)}`;
-        // If 404 (e.g. model retired for new keys), try next candidate model
         if (response.status === 404 || response.status === 400) {
           continue;
         }
@@ -362,99 +479,79 @@ export async function callGeminiStructuredSynthesis(
         data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
       if (!rawText) {
         lastError = `Empty response from ${modelName}`;
+        sawMalformedOutput = true;
         continue;
       }
 
-      const parsed = JSON.parse(rawText) as SocraticSynthesisOutput;
-      if (
-        parsed &&
-        typeof parsed.executive_summary === "string" &&
-        typeof parsed.socratic_brief === "string" &&
-        parsed.proportionality_check &&
-        Array.isArray(parsed.questions) &&
-        parsed.questions.length >= 2
-      ) {
-        const secondaryToolKey: JevWorkingToolKey =
-          row.secondary_tool || "twenty_four_inch_gauge";
-        const primaryTool =
-          JEV_TO_TAXONOMY_TOOL[row.primary_tool] || "The Square";
-        const secondaryTool =
-          JEV_TO_TAXONOMY_TOOL[secondaryToolKey] || "24-Inch Gauge";
-        const sreFailureMode =
-          JEV_TO_TAXONOMY_FAILURE[row.sre_failure_mode] ||
-          "Configuration Drift";
-
-        const validation = validateAndNormalizeIncidentSummary({
-          id: row.id,
-          title: row.title,
-          sourceFeed: row.source_feed,
-          rawExcerpt: row.raw_excerpt,
-          executiveSummary: parsed.executive_summary,
-          socraticBrief: parsed.socratic_brief,
-          logWarnings: false,
-        });
-
-        const cleanExec =
-          validation.executiveSummary ||
-          sanitizeStringConcatenation(parsed.executive_summary.trim());
-        const cleanBrief =
-          validation.factualBriefParagraph ||
-          sanitizeStringConcatenation(
-            parsed.socratic_brief.split(/\n\s*\n/)[0].trim()
-          );
-
-        const diagnostics = buildOrSanitizeArticleDiagnostics({
-          title: row.title,
-          sourceFeed: row.source_feed,
-          factualSummary: cleanBrief,
-          primaryTool,
-          secondaryTool,
-          sreFailureMode,
-          existingNoise: parsed.proportionality_check.noise_overblown,
-          existingSignal: parsed.proportionality_check.structural_signal,
-          existingQuestions: parsed.questions.map((q) =>
-            normalizeQuestionSentenceCase(String(q))
-          ),
-        });
-
-        return {
-          synthesis: {
-            executive_summary: cleanExec,
-            socratic_brief: cleanBrief,
-            proportionality_check: {
-              noise_overblown: diagnostics.noiseOverblown,
-              structural_signal: diagnostics.structuralSignal,
-            },
-            questions: diagnostics.questions,
-          },
-          modelUsed: modelName,
-        };
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(rawText);
+      } catch {
+        lastError = `Invalid JSON returned from ${modelName}`;
+        sawMalformedOutput = true;
+        continue;
       }
+
+      const check = validateSynthesizedBriefOutput(row, parsed);
+      if (!check.valid) {
+        lastError = check.reason;
+        sawMalformedOutput = true;
+        continue;
+      }
+
+      return {
+        ok: true,
+        synthesis: check.synthesis,
+        modelUsed: modelName,
+      };
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err);
+    } finally {
+      clearTimeout(timer);
     }
   }
 
-  // Graceful fallback if network/quota fails so pipeline remains 100% resilient
-  console.warn(
-    `[System-2 Synthesize] Falling back to deterministic synthesis after error: ${lastError}`
-  );
   return {
-    synthesis: buildDeterministicBoundedSynthesis(row),
-    modelUsed: "deterministic-system2-fallback",
+    ok: false,
+    disposition: sawMalformedOutput ? "QUARANTINED" : "PENDING_RETRY",
+    reason: lastError || "System-2 synthesis failed",
   };
 }
 
+export const TELEMETRY_ARTICLES_SYNTHESIS_COLUMNS = `
+  id,
+  url_hash,
+  source_feed,
+  title,
+  source_url,
+  raw_excerpt,
+  published_at,
+  ingested_at,
+  is_systemic_prob,
+  jev_confidence,
+  primary_tool,
+  secondary_tool,
+  sre_failure_mode,
+  jev_raw_json,
+  socratic_brief,
+  questions_json,
+  status
+`;
+
 /**
  * Queries D1 for `status = 'triaged'` rows ordered by `published_at DESC` (or specific `articleIds`),
- * runs bounded Gemini System-2 synthesis on each, updates D1 with
- * `socratic_brief`, `questions_json`, and `status = 'synthesized'`, and logs the execution in `pipeline_runs`.
+ * runs bounded Gemini System-2 synthesis on each, and batch-updates D1 via `db.batch()`:
+ * - Valid syntheses transition to `status = 'synthesized'`.
+ * - Malformed or templated syntheses transition to `status = 'QUARANTINED'`.
+ * - Transient API failures transition to `status = 'PENDING_RETRY'`.
  */
 export async function runSynthesizePipeline(options: {
   db: D1DatabaseLike;
   geminiApiKey?: string;
   limit?: number;
   articleIds?: number[];
+  fetchImpl?: typeof fetch;
+  synthesisOverride?: unknown;
 }): Promise<SynthesizeRunSummary> {
   const startMs = Date.now();
   const startedAt = new Date().toISOString();
@@ -466,7 +563,10 @@ export async function runSynthesizePipeline(options: {
     const placeholders = options.articleIds.map(() => "?").join(", ");
     const queryResult = await options.db
       .prepare(
-        `SELECT * FROM telemetry_articles WHERE id IN (${placeholders}) ORDER BY published_at DESC`
+        `SELECT ${TELEMETRY_ARTICLES_SYNTHESIS_COLUMNS}
+         FROM telemetry_articles
+         WHERE id IN (${placeholders})
+         ORDER BY published_at DESC`
       )
       .bind(...options.articleIds)
       .all<TelemetryArticleRow>();
@@ -474,7 +574,11 @@ export async function runSynthesizePipeline(options: {
   } else {
     const queryResult = await options.db
       .prepare(
-        "SELECT * FROM telemetry_articles WHERE status = 'triaged' ORDER BY published_at DESC LIMIT ?"
+        `SELECT ${TELEMETRY_ARTICLES_SYNTHESIS_COLUMNS}
+         FROM telemetry_articles
+         WHERE status = 'triaged'
+         ORDER BY published_at DESC
+         LIMIT ?`
       )
       .bind(limit)
       .all<TelemetryArticleRow>();
@@ -482,56 +586,77 @@ export async function runSynthesizePipeline(options: {
   }
 
   const articles: SynthesizedArticleResult[] = [];
-  const errors: { id: number; title: string; error: string }[] = [];
+  const errors: {
+    id: number;
+    title: string;
+    disposition: "QUARANTINED" | "PENDING_RETRY";
+    error: string;
+  }[] = [];
+  const updateStatements: D1PreparedStatementLike[] = [];
+  let quarantinedCount = 0;
+  let pendingRetryCount = 0;
 
   const results = await Promise.all(
     rows.map(async (row) => {
-      try {
-        // Defensive validation gate: quarantine rows that lack a valid 2-to-3 sentence factual summary
-        const validation = validateAndNormalizeIncidentSummary({
-          id: row.id,
-          title: row.title,
-          sourceFeed: row.source_feed,
-          rawExcerpt: row.raw_excerpt,
-          logWarnings: true,
-        });
-        if (!validation.valid) {
-          await options.db
-            .prepare(
-              `UPDATE telemetry_articles SET status = 'dropped' WHERE id = ?`
-            )
-            .bind(row.id)
-            .run();
-          return {
-            ok: false as const,
-            error: {
-              id: row.id,
-              title: row.title,
-              error:
-                validation.reason ||
-                "Quarantined by defensive summary validation gate.",
-            },
-          };
-        }
-
-        const secondaryTool: JevWorkingToolKey =
-          row.secondary_tool || "twenty_four_inch_gauge";
-        const { synthesis, modelUsed } = await callGeminiStructuredSynthesis(
+      const validation = validateAndNormalizeIncidentSummary({
+        id: row.id,
+        title: row.title,
+        sourceFeed: row.source_feed,
+        rawExcerpt: row.raw_excerpt,
+        logWarnings: true,
+      });
+      if (!validation.valid) {
+        return {
+          ok: false as const,
           row,
-          options.geminiApiKey
-        );
+          disposition: "QUARANTINED" as const,
+          reason:
+            validation.reason ||
+            "Quarantined by defensive summary validation gate.",
+        };
+      }
 
-        // Store structured synthesis payload + questions in questions_json so the frontend
-        // can read executive_summary, proportionality_check, and questions losslessly
-        const questionsPayload = JSON.stringify({
-          executive_summary: synthesis.executive_summary,
-          proportionality_check: synthesis.proportionality_check,
-          questions: synthesis.questions,
-          model_used: modelUsed,
-          synthesized_at: new Date().toISOString(),
-        });
+      const outcome = await callGeminiStructuredSynthesis(
+        row,
+        options.geminiApiKey,
+        {
+          fetchImpl: options.fetchImpl,
+          synthesisOverride: options.synthesisOverride,
+        }
+      );
 
-        await options.db
+      if (!outcome.ok) {
+        return {
+          ok: false as const,
+          row,
+          disposition: outcome.disposition,
+          reason: outcome.reason,
+        };
+      }
+
+      return {
+        ok: true as const,
+        row,
+        synthesis: outcome.synthesis,
+        modelUsed: outcome.modelUsed,
+      };
+    })
+  );
+
+  for (const res of results) {
+    if (res.ok) {
+      const secondaryTool: JevWorkingToolKey =
+        res.row.secondary_tool || "twenty_four_inch_gauge";
+      const questionsPayload = JSON.stringify({
+        executive_summary: res.synthesis.executive_summary,
+        proportionality_check: res.synthesis.proportionality_check,
+        questions: res.synthesis.questions,
+        model_used: res.modelUsed,
+        synthesized_at: new Date().toISOString(),
+      });
+
+      updateStatements.push(
+        options.db
           .prepare(
             `UPDATE telemetry_articles
              SET socratic_brief = ?,
@@ -539,44 +664,54 @@ export async function runSynthesizePipeline(options: {
                  status = 'synthesized'
              WHERE id = ?`
           )
-          .bind(synthesis.socratic_brief, questionsPayload, row.id)
-          .run();
+          .bind(res.synthesis.socratic_brief, questionsPayload, res.row.id)
+      );
 
-        const item: SynthesizedArticleResult = {
-          id: row.id,
-          url_hash: row.url_hash,
-          source_feed: row.source_feed,
-          title: row.title,
-          source_url: row.source_url,
-          published_at: row.published_at,
-          primary_tool: row.primary_tool,
-          secondary_tool: secondaryTool,
-          sre_failure_mode: row.sre_failure_mode,
-          is_systemic_prob: row.is_systemic_prob,
-          jev_confidence: row.jev_confidence,
-          model_used: modelUsed,
-          synthesis,
-        };
-        return { ok: true as const, item };
-      } catch (err) {
-        return {
-          ok: false as const,
-          error: {
-            id: row.id,
-            title: row.title,
-            error: err instanceof Error ? err.message : String(err),
-          },
-        };
-      }
-    })
-  );
-
-  for (const res of results) {
-    if (res.ok) {
-      articles.push(res.item);
+      articles.push({
+        id: res.row.id,
+        url_hash: res.row.url_hash,
+        source_feed: res.row.source_feed,
+        title: res.row.title,
+        source_url: res.row.source_url,
+        published_at: res.row.published_at,
+        primary_tool: res.row.primary_tool,
+        secondary_tool: secondaryTool,
+        sre_failure_mode: res.row.sre_failure_mode,
+        is_systemic_prob: res.row.is_systemic_prob,
+        jev_confidence: res.row.jev_confidence,
+        model_used: res.modelUsed,
+        synthesis: res.synthesis,
+      });
     } else {
-      errors.push(res.error);
+      if (res.disposition === "QUARANTINED") {
+        quarantinedCount++;
+      } else {
+        pendingRetryCount++;
+      }
+
+      updateStatements.push(
+        options.db
+          .prepare(
+            `UPDATE telemetry_articles
+             SET status = ?,
+                 socratic_brief = NULL,
+                 questions_json = NULL
+             WHERE id = ?`
+          )
+          .bind(res.disposition, res.row.id)
+      );
+
+      errors.push({
+        id: res.row.id,
+        title: res.row.title,
+        disposition: res.disposition,
+        error: res.reason,
+      });
     }
+  }
+
+  if (updateStatements.length > 0) {
+    await executeD1Batch(options.db, updateStatements);
   }
 
   const completedAt = new Date().toISOString();
@@ -586,10 +721,10 @@ export async function runSynthesizePipeline(options: {
 
   const notes =
     articles.length > 0
-      ? `Synthesized ${articles.length} triaged D1 incident(s) (IDs: ${articles.map((a) => a.id).join(", ")}) via ${articles[0].model_used}.`
+      ? `Synthesized ${articles.length} triaged D1 incident(s) (IDs: ${articles.map((a) => a.id).join(", ")}), ${quarantinedCount} quarantined, ${pendingRetryCount} pending retry.`
       : rows.length === 0
-      ? "System-2 synthesis sweep completed: 0 pending 'triaged' rows in D1 queue (all high-signal incidents already synthesized)."
-      : `System-2 synthesis attempted ${rows.length} row(s) with ${errors.length} error(s).`;
+      ? "System-2 synthesis sweep completed: 0 pending 'triaged' rows in D1 queue."
+      : `System-2 synthesis evaluated ${rows.length} row(s): 0 synthesized, ${quarantinedCount} quarantined, ${pendingRetryCount} pending retry.`;
 
   try {
     await options.db
@@ -612,7 +747,7 @@ export async function runSynthesizePipeline(options: {
         completedAt,
         rows.length,
         articles.length,
-        errors.length,
+        quarantinedCount,
         avgLatencyMs,
         errors.length > 0 && articles.length === 0 ? "degraded" : "nominal",
         notes
@@ -627,7 +762,10 @@ export async function runSynthesizePipeline(options: {
     completedAt,
     requestedLimit: limit,
     synthesizedCount: articles.length,
+    quarantinedCount,
+    pendingRetryCount,
     articles,
     errors: errors.length > 0 ? errors : undefined,
   };
 }
+

@@ -8,19 +8,26 @@ import React, {
   useRef,
   useState,
 } from "react";
+import {
+  PublicEpisodeDto,
+  isRenderablePublicEpisode,
+} from "@/lib/dto";
 import { INITIAL_EPISODES } from "@/lib/seed-data";
 import { SreFailureModeId, WorkingToolId } from "@/lib/taxonomy";
 import { PodcastEpisode } from "@/lib/types";
 
 interface TelemetryContextValue {
   // Persistent Audio Player state
-  activeEpisode: PodcastEpisode;
+  activeEpisode: PublicEpisodeDto | PodcastEpisode;
   isPlaying: boolean;
   currentTime: number;
   playbackRate: number;
   isDockVisible: boolean;
   audioRef: React.RefObject<HTMLAudioElement | null>;
-  playEpisode: (episode: PodcastEpisode, startSeconds?: number) => void;
+  playEpisode: (
+    episode: PublicEpisodeDto | PodcastEpisode,
+    startSeconds?: number
+  ) => void;
   togglePlayPause: () => void;
   seekTo: (seconds: number) => void;
   cyclePlaybackRate: () => void;
@@ -44,11 +51,11 @@ export function TelemetryProvider({
   initialEpisode,
 }: {
   children: React.ReactNode;
-  initialEpisode?: PodcastEpisode;
+  initialEpisode?: PublicEpisodeDto | PodcastEpisode;
 }) {
-  const [activeEpisode, setActiveEpisode] = useState<PodcastEpisode>(
-    initialEpisode || INITIAL_EPISODES[0]
-  );
+  const [activeEpisode, setActiveEpisode] = useState<
+    PublicEpisodeDto | PodcastEpisode
+  >(initialEpisode || INITIAL_EPISODES[0]);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
@@ -75,7 +82,10 @@ export function TelemetryProvider({
       if (!res.ok) return;
       const data = await res.json();
       if (Array.isArray(data?.episodes) && data.episodes.length > 0) {
-        const latestEp = data.episodes[0] as PodcastEpisode;
+        const latestEp = data.episodes.find((ep: unknown) =>
+          isRenderablePublicEpisode(ep as PodcastEpisode)
+        ) as PublicEpisodeDto | undefined;
+        if (!latestEp) return;
         setActiveEpisode((prev) => {
           // If not currently playing another episode, or if prev is the seed default, switch to newest D1 episode
           if (!isPlayingRef.current || prev.id === latestEp.id) {
@@ -113,7 +123,11 @@ export function TelemetryProvider({
 
   // Start or sync HTML5 <audio> element from offset
   const playAudioElement = useCallback(
-    (episode: PodcastEpisode, seconds: number, rate: number) => {
+    (
+      episode: PublicEpisodeDto | PodcastEpisode,
+      seconds: number,
+      rate: number
+    ) => {
       const el = audioRef.current;
       if (!el) return;
       try {
@@ -145,7 +159,11 @@ export function TelemetryProvider({
 
   // Start Web Speech narration from the transcript corresponding to currentTime
   const startSpeechFromOffset = useCallback(
-    (episode: PodcastEpisode, seconds: number, rate: number) => {
+    (
+      episode: PublicEpisodeDto | PodcastEpisode,
+      seconds: number,
+      rate: number
+    ) => {
       if (typeof window === "undefined" || !("speechSynthesis" in window)) {
         return;
       }
@@ -196,7 +214,10 @@ export function TelemetryProvider({
   ]);
 
   const playEpisode = useCallback(
-    (episode: PodcastEpisode, startSeconds = 0) => {
+    (episode: PublicEpisodeDto | PodcastEpisode, startSeconds = 0) => {
+      if (!isRenderablePublicEpisode(episode)) {
+        return;
+      }
       setActiveEpisode(episode);
       setCurrentTime(startSeconds);
       setIsDockVisible(true);

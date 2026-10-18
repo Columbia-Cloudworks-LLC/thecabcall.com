@@ -537,7 +537,9 @@ export async function appendAuditEntry(
     .run();
 
   const inserted = await db
-    .prepare("SELECT * FROM audit_ledger WHERE event_id = ?")
+    .prepare(
+      `SELECT ${AUDIT_LEDGER_COLUMNS} FROM audit_ledger WHERE event_id = ?`
+    )
     .bind(eventId)
     .first<AuditLedgerRow>();
 
@@ -547,6 +549,25 @@ export async function appendAuditEntry(
 
   return mapAuditRowToEntry(inserted);
 }
+
+export const AUDIT_LEDGER_COLUMNS = `
+  id,
+  event_id,
+  timestamp,
+  actor_email,
+  actor_role,
+  auth_method,
+  actor_ip_hash,
+  action_type,
+  target_type,
+  target_id,
+  reason,
+  before_state_json,
+  after_state_json,
+  replay_command_json,
+  prev_hash,
+  entry_hash
+`;
 
 /**
  * Walks every row in `audit_ledger` from `GENESIS` to head, recomputes each SHA-256 digest,
@@ -558,7 +579,7 @@ export async function verifyAuditChainIntegrity(
   await ensureGenesisAuditRow(db);
 
   const allRes = await db
-    .prepare("SELECT * FROM audit_ledger ORDER BY id ASC")
+    .prepare(`SELECT ${AUDIT_LEDGER_COLUMNS} FROM audit_ledger ORDER BY id ASC`)
     .all<AuditLedgerRow>();
   const rows = allRes.results || [];
   const verifiedAt = new Date().toISOString();
@@ -694,7 +715,7 @@ export async function listAuditEntries(
 
   const rowsRes = await db
     .prepare(
-      `SELECT * FROM audit_ledger ${whereSql} ORDER BY id DESC LIMIT ? OFFSET ?`
+      `SELECT ${AUDIT_LEDGER_COLUMNS} FROM audit_ledger ${whereSql} ORDER BY id DESC LIMIT ? OFFSET ?`
     )
     .bind(...bindings, limit, offset)
     .all<AuditLedgerRow>();
@@ -746,7 +767,9 @@ export async function replayAuditEntry(
   await ensureGenesisAuditRow(db);
 
   const targetAuditRow = await db
-    .prepare("SELECT * FROM audit_ledger WHERE event_id = ?")
+    .prepare(
+      `SELECT ${AUDIT_LEDGER_COLUMNS} FROM audit_ledger WHERE event_id = ?`
+    )
     .bind(eventId)
     .first<AuditLedgerRow>();
 
@@ -779,6 +802,7 @@ export async function replayAuditEntry(
     const validColumns = new Set((pragmaRes.results || []).map((c) => c.name));
 
     if (validColumns.size > 0) {
+      const selectColsSql = Array.from(validColumns).join(", ");
       // Locate current row in target table
       const lookupPkValue =
         desiredState?.[primaryKey] ??
@@ -788,7 +812,7 @@ export async function replayAuditEntry(
 
       if (lookupPkValue !== undefined && lookupPkValue !== null) {
         currentRow = await db
-          .prepare(`SELECT * FROM ${table} WHERE ${primaryKey} = ?`)
+          .prepare(`SELECT ${selectColsSql} FROM ${table} WHERE ${primaryKey} = ?`)
           .bind(lookupPkValue)
           .first<Record<string, unknown>>();
       }
@@ -801,7 +825,9 @@ export async function replayAuditEntry(
           targetAuditRow.target_id;
         if (altValue !== undefined && altValue !== null) {
           currentRow = await db
-            .prepare(`SELECT * FROM ${table} WHERE ${alternateKey} = ?`)
+            .prepare(
+              `SELECT ${selectColsSql} FROM ${table} WHERE ${alternateKey} = ?`
+            )
             .bind(altValue)
             .first<Record<string, unknown>>();
         }
@@ -839,7 +865,9 @@ export async function replayAuditEntry(
             appliedOperation = "update";
           }
           restoredRow = await db
-            .prepare(`SELECT * FROM ${table} WHERE ${primaryKey} = ?`)
+            .prepare(
+              `SELECT ${selectColsSql} FROM ${table} WHERE ${primaryKey} = ?`
+            )
             .bind(currentRow[primaryKey])
             .first<Record<string, unknown>>();
         } else if (cols.length > 0) {
@@ -859,7 +887,9 @@ export async function replayAuditEntry(
               (alternateKey ? desiredState[alternateKey] : undefined);
             if (desiredState[primaryKey] !== undefined) {
               restoredRow = await db
-                .prepare(`SELECT * FROM ${table} WHERE ${primaryKey} = ?`)
+                .prepare(
+                  `SELECT ${selectColsSql} FROM ${table} WHERE ${primaryKey} = ?`
+                )
                 .bind(desiredState[primaryKey])
                 .first<Record<string, unknown>>();
             } else if (
@@ -868,7 +898,9 @@ export async function replayAuditEntry(
               validColumns.has(alternateKey)
             ) {
               restoredRow = await db
-                .prepare(`SELECT * FROM ${table} WHERE ${alternateKey} = ?`)
+                .prepare(
+                  `SELECT ${selectColsSql} FROM ${table} WHERE ${alternateKey} = ?`
+                )
                 .bind(insertedLookupVal)
                 .first<Record<string, unknown>>();
             } else {

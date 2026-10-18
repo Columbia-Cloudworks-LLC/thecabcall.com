@@ -7,12 +7,9 @@ import {
   shouldUseRemoteWorker,
   triggerRemoteWorkerRollup,
 } from "@/lib/d1-bridge";
+import { projectPublicEpisodeDto } from "@/lib/dto";
 import { generateWeeklyRollupEpisode } from "@/lib/pipeline";
-import {
-  getLatestWeeklyRollup,
-  getPipelineRuns,
-  getSystemPostureSummary,
-} from "@/lib/store";
+import { getLatestWeeklyRollup } from "@/lib/store";
 import { runWeeklyRollupPipeline } from "@/pipeline/rollup";
 
 export const dynamic = "force-dynamic";
@@ -20,20 +17,13 @@ export const dynamic = "force-dynamic";
 async function executeD1WeeklyRollup() {
   if (shouldUseRemoteWorker()) {
     try {
-      const remoteResult = await triggerRemoteWorkerRollup();
+      await triggerRemoteWorkerRollup();
       await ensureD1Snapshot(true);
-      const episode = getLatestWeeklyRollup();
-      const runs = getPipelineRuns();
-      const posture = getSystemPostureSummary();
+      const episode = projectPublicEpisodeDto(getLatestWeeklyRollup());
 
       return {
         ok: true,
-        pipeline: "Cloudflare Worker Bridge (cabcall-db + cabcall-audio)",
         episode,
-        rollupRecord: remoteResult.episode,
-        run: runs[0],
-        runs,
-        posture,
       };
     } catch (err) {
       console.warn(
@@ -45,36 +35,26 @@ async function executeD1WeeklyRollup() {
 
   const db = createLocalSqliteD1Adapter();
   if (!db) {
-    const episode = generateWeeklyRollupEpisode();
-    const runs = getPipelineRuns();
+    const episode = projectPublicEpisodeDto(generateWeeklyRollupEpisode());
     return {
       ok: true,
       episode,
-      run: runs[0],
-      runs,
-      posture: getSystemPostureSummary(),
     };
   }
 
   const envVars = loadLocalEnvVars();
   const audioBucket = createLocalR2AudioAdapter();
-  const rollupRecord = await runWeeklyRollupPipeline({
+  await runWeeklyRollupPipeline({
     db,
     audioBucket,
     geminiApiKey: envVars.GEMINI_API_KEY,
   });
 
-  const episode = getLatestWeeklyRollup();
-  const runs = getPipelineRuns();
-  const posture = getSystemPostureSummary();
+  const episode = projectPublicEpisodeDto(getLatestWeeklyRollup());
 
   return {
     ok: true,
     episode,
-    rollupRecord,
-    run: runs[0],
-    runs,
-    posture,
   };
 }
 

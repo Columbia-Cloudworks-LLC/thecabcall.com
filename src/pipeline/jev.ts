@@ -77,7 +77,12 @@ export interface JevEvaluationOptions {
   systemicProbDelta?: number;
   forcedPrimaryTool?: JevWorkingToolKey;
   appliedFilterNames?: string[];
+  timeoutMs?: number;
+  fetchImpl?: typeof fetch;
+  rawResponseOverride?: unknown;
 }
+
+export type JevDispositionStatus = "triaged" | "QUARANTINED" | "dropped";
 
 export interface JevEvaluationResult {
   isSystemicProb: number;
@@ -87,9 +92,290 @@ export interface JevEvaluationResult {
   sreFailureMode: JevSreFailureModeKey;
   workingToolProbabilities: Record<JevWorkingToolKey, number>;
   sreFailureModeProbabilities: Record<JevSreFailureModeKey, number>;
-  status: "triaged" | "dropped";
+  status: JevDispositionStatus;
+  validationValid: boolean;
+  quarantineReason?: string;
   rawJson: string;
   rawResponse: JevSystemOneResponse;
+}
+
+export interface JevBoundaryValidationResult {
+  valid: boolean;
+  quarantined: boolean;
+  status: "triaged" | "QUARANTINED";
+  reason?: string;
+}
+
+export const VALID_JEV_WORKING_TOOL_KEYS: readonly JevWorkingToolKey[] = [
+  "twenty_four_inch_gauge",
+  "common_gavel",
+  "plumb",
+  "square",
+  "level",
+  "trowel",
+] as const;
+
+export const VALID_JEV_SRE_FAILURE_MODE_KEYS: readonly JevSreFailureModeKey[] = [
+  "configuration_drift",
+  "cascading_failure",
+  "untested_failover",
+  "alert_fatigue",
+  "blameless_postmortem_gap",
+  "capacity_exhaustion",
+] as const;
+
+export const VALID_DISPLAY_WORKING_TOOLS = new Set<string>([
+  "24-Inch Gauge",
+  "Common Gavel",
+  "The Plumb",
+  "The Square",
+  "The Level",
+  "The Trowel",
+]);
+
+export const VALID_DISPLAY_SRE_FAILURE_MODES = new Set<string>([
+  "Configuration Drift",
+  "Cascading Failure",
+  "Single Point of Failure (SPOF) / Untested Failover",
+  "Alert Fatigue & Signal Loss",
+  "Blame Culture vs. Root-Cause Isolation",
+  "Technical & Institutional Debt",
+]);
+
+const JEV_TOOL_KEY_SET = new Set<string>(VALID_JEV_WORKING_TOOL_KEYS);
+const JEV_SRE_KEY_SET = new Set<string>(VALID_JEV_SRE_FAILURE_MODE_KEYS);
+
+/**
+ * Verifies that a value is a finite number strictly within [0.0, 1.0].
+ */
+export function isFiniteUnitProbability(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    !Number.isNaN(value) &&
+    value >= 0.0 &&
+    value <= 1.0
+  );
+}
+
+/**
+ * Strict runtime validator for `jev-1.14.0` evaluation outputs.
+ * Verifies valid enum mappings (SRE principles and Masonic working tools)
+ * and checks that all confidence & probability scores are finite numbers within [0.0, 1.0].
+ */
+export function validateJevEvaluationOutput(
+  candidate: unknown,
+  thresholds?: { minSystemicProb?: number; minConfidence?: number }
+): JevBoundaryValidationResult {
+  if (!candidate || typeof candidate !== "object") {
+    return {
+      valid: false,
+      quarantined: true,
+      status: "QUARANTINED",
+      reason: "Jev output is null or not an object",
+    };
+  }
+
+  const obj = candidate as Record<string, unknown>;
+  const isSystemicProb = obj.isSystemicProb;
+  const jevConfidence = obj.jevConfidence;
+
+  if (!isFiniteUnitProbability(isSystemicProb)) {
+    return {
+      valid: false,
+      quarantined: true,
+      status: "QUARANTINED",
+      reason: `Invalid isSystemicProb (${String(isSystemicProb)}): must be a finite number in [0.0, 1.0]`,
+    };
+  }
+
+  if (!isFiniteUnitProbability(jevConfidence)) {
+    return {
+      valid: false,
+      quarantined: true,
+      status: "QUARANTINED",
+      reason: `Invalid jevConfidence (${String(jevConfidence)}): must be a finite number in [0.0, 1.0]`,
+    };
+  }
+
+  const primaryTool = obj.primaryTool;
+  const secondaryTool = obj.secondaryTool;
+  const sreFailureMode = obj.sreFailureMode ?? obj.failureMode;
+
+  const isPrimaryValid =
+    typeof primaryTool === "string" &&
+    (JEV_TOOL_KEY_SET.has(primaryTool) || VALID_DISPLAY_WORKING_TOOLS.has(primaryTool));
+  if (!isPrimaryValid) {
+    return {
+      valid: false,
+      quarantined: true,
+      status: "QUARANTINED",
+      reason: `Invalid primaryTool enum value: "${String(primaryTool)}"`,
+    };
+  }
+
+  const isSecondaryValid =
+    typeof secondaryTool === "string" &&
+    (JEV_TOOL_KEY_SET.has(secondaryTool) || VALID_DISPLAY_WORKING_TOOLS.has(secondaryTool));
+  if (!isSecondaryValid) {
+    return {
+      valid: false,
+      quarantined: true,
+      status: "QUARANTINED",
+      reason: `Invalid secondaryTool enum value: "${String(secondaryTool)}"`,
+    };
+  }
+
+  if (primaryTool === secondaryTool) {
+    return {
+      valid: false,
+      quarantined: true,
+      status: "QUARANTINED",
+      reason: `primaryTool and secondaryTool must be distinct (both were "${String(primaryTool)}")`,
+    };
+  }
+
+  const isFailureModeValid =
+    typeof sreFailureMode === "string" &&
+    (JEV_SRE_KEY_SET.has(sreFailureMode) ||
+      VALID_DISPLAY_SRE_FAILURE_MODES.has(sreFailureMode));
+  if (!isFailureModeValid) {
+    return {
+      valid: false,
+      quarantined: true,
+      status: "QUARANTINED",
+      reason: `Invalid sreFailureMode enum value: "${String(sreFailureMode)}"`,
+    };
+  }
+
+  const toolProbs = (obj.workingToolProbabilities ?? obj.toolProbabilities) as
+    | Record<string, unknown>
+    | undefined;
+  if (!toolProbs || typeof toolProbs !== "object" || Array.isArray(toolProbs)) {
+    return {
+      valid: false,
+      quarantined: true,
+      status: "QUARANTINED",
+      reason: "Missing workingToolProbabilities distribution object",
+    };
+  }
+
+  const toolKeys = Object.keys(toolProbs);
+  if (toolKeys.length !== 6) {
+    return {
+      valid: false,
+      quarantined: true,
+      status: "QUARANTINED",
+      reason: `Expected 6 workingToolProbabilities entries, got ${toolKeys.length}`,
+    };
+  }
+
+  let toolProbSum = 0;
+  for (const [k, v] of Object.entries(toolProbs)) {
+    if (!JEV_TOOL_KEY_SET.has(k) && !VALID_DISPLAY_WORKING_TOOLS.has(k)) {
+      return {
+        valid: false,
+        quarantined: true,
+        status: "QUARANTINED",
+        reason: `Unknown working tool key "${k}" in probability distribution`,
+      };
+    }
+    if (!isFiniteUnitProbability(v)) {
+      return {
+        valid: false,
+        quarantined: true,
+        status: "QUARANTINED",
+        reason: `Invalid probability ${String(v)} for working tool "${k}"`,
+      };
+    }
+    toolProbSum += v;
+  }
+
+  if (toolProbSum <= 0 || toolProbSum > 1.05) {
+    return {
+      valid: false,
+      quarantined: true,
+      status: "QUARANTINED",
+      reason: `Working tool probability sum out of bounds: ${toolProbSum}`,
+    };
+  }
+
+  const sreProbs = (obj.sreFailureModeProbabilities ??
+    obj.failureModeProbabilities) as Record<string, unknown> | undefined;
+  if (sreProbs !== undefined) {
+    if (!sreProbs || typeof sreProbs !== "object" || Array.isArray(sreProbs)) {
+      return {
+        valid: false,
+        quarantined: true,
+        status: "QUARANTINED",
+        reason: "Malformed sreFailureModeProbabilities distribution object",
+      };
+    }
+    const sreKeys = Object.keys(sreProbs);
+    if (sreKeys.length !== 6) {
+      return {
+        valid: false,
+        quarantined: true,
+        status: "QUARANTINED",
+        reason: `Expected 6 sreFailureModeProbabilities entries, got ${sreKeys.length}`,
+      };
+    }
+    let sreProbSum = 0;
+    for (const [k, v] of Object.entries(sreProbs)) {
+      if (!JEV_SRE_KEY_SET.has(k) && !VALID_DISPLAY_SRE_FAILURE_MODES.has(k)) {
+        return {
+          valid: false,
+          quarantined: true,
+          status: "QUARANTINED",
+          reason: `Unknown SRE failure mode key "${k}" in probability distribution`,
+        };
+      }
+      if (!isFiniteUnitProbability(v)) {
+        return {
+          valid: false,
+          quarantined: true,
+          status: "QUARANTINED",
+          reason: `Invalid probability ${String(v)} for SRE failure mode "${k}"`,
+        };
+      }
+      sreProbSum += v;
+    }
+    if (sreProbSum <= 0 || sreProbSum > 1.05) {
+      return {
+        valid: false,
+        quarantined: true,
+        status: "QUARANTINED",
+        reason: `SRE failure mode probability sum out of bounds: ${sreProbSum}`,
+      };
+    }
+  }
+
+  const minSystemicProb = thresholds?.minSystemicProb ?? 0.7;
+  const minConfidence = thresholds?.minConfidence ?? 0.5;
+
+  if (isSystemicProb < minSystemicProb) {
+    return {
+      valid: true,
+      quarantined: true,
+      status: "QUARANTINED",
+      reason: `isSystemicProb (${isSystemicProb}) below threshold (${minSystemicProb})`,
+    };
+  }
+
+  if (jevConfidence < minConfidence) {
+    return {
+      valid: true,
+      quarantined: true,
+      status: "QUARANTINED",
+      reason: `jevConfidence (${jevConfidence}) below threshold (${minConfidence})`,
+    };
+  }
+
+  return {
+    valid: true,
+    quarantined: false,
+    status: "triaged",
+  };
 }
 
 export const JEV_WORKING_TOOL_CRITERIA: Record<JevWorkingToolKey, string> = {
@@ -332,7 +618,7 @@ function evaluateDeterministicFallback(
 }
 
 /**
- * Constructs a deterministic dropped JevEvaluationResult when an article is rejected
+ * Constructs a deterministic quarantined JevEvaluationResult when an article is rejected
  * by a pre-Jev `Drop_Keyword_Regex`, `Block_Source_Pattern`, or `Require_Keyword_Regex` filter rule.
  */
 export function buildDroppedByFilterJevResult(
@@ -354,7 +640,9 @@ export function buildDroppedByFilterJevResult(
     sreFailureMode: "alert_fatigue",
     workingToolProbabilities: fallback.answers.working_tool.probabilities,
     sreFailureModeProbabilities: fallback.answers.sre_failure_mode.probabilities,
-    status: "dropped",
+    status: "QUARANTINED",
+    validationValid: true,
+    quarantineReason: `Matched pre-ingestion triage filter(s): ${matchedFilterNames.join(", ")}`,
     rawJson: JSON.stringify(rawWithFilterMeta),
     rawResponse: fallback,
   };
@@ -363,7 +651,7 @@ export function buildDroppedByFilterJevResult(
 /**
  * Calls TypeSafe Jev (`POST https://api.typesafe.ai/v1/systemone`, model `jev-1.14.0`)
  * to evaluate `is_systemic_event`, `working_tool`, and `sre_failure_mode` in parallel,
- * applying optional dynamic filter boosts, tool overrides, and systemic probability thresholds.
+ * enforcing strict runtime boundary validation on all enum keys and [0.0, 1.0] confidence floats.
  */
 export async function evaluateArticleWithJev(
   article: JevArticleInput,
@@ -377,78 +665,112 @@ export async function evaluateArticleWithJev(
 
   let rawData: any = null;
 
-  if (hasLiveKey) {
-    const response = await fetch("https://api.typesafe.ai/v1/systemone", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${trimmedKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+  if (options?.rawResponseOverride !== undefined) {
+    rawData = options.rawResponseOverride;
+  } else if (hasLiveKey) {
+    const fetchFn = options?.fetchImpl ?? fetch;
+    const timeoutMs = options?.timeoutMs ?? 8000;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-    if (!response.ok) {
-      const errBody = await response.text().catch(() => "");
-      throw new Error(
-        `TypeSafe Jev API error (${response.status}): ${errBody || response.statusText}`
-      );
+    try {
+      const response = await fetchFn("https://api.typesafe.ai/v1/systemone", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${trimmedKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const errBody = await response.text().catch(() => "");
+        throw new Error(
+          `TypeSafe Jev API error (${response.status}): ${errBody || response.statusText}`
+        );
+      }
+
+      rawData = await response.json();
+    } finally {
+      clearTimeout(timer);
     }
-
-    rawData = await response.json();
   } else {
     rawData = evaluateDeterministicFallback(payload);
   }
 
   const answers = rawData?.answers || rawData?.results || rawData || {};
 
-  // 1. Parse is_systemic_event (noul boolean probability)
+  // 1. Extract raw is_systemic_event (noul boolean probability) without coercing invalid values
   const sysAnswer = answers.is_systemic_event;
-  let isSystemicProb = 0;
+  let rawSystemicProb: unknown = undefined;
   if (typeof sysAnswer === "number") {
-    isSystemicProb = sysAnswer;
+    rawSystemicProb = sysAnswer;
   } else if (sysAnswer && typeof sysAnswer === "object") {
-    isSystemicProb =
-      typeof sysAnswer.noul === "number"
-        ? sysAnswer.noul
-        : typeof sysAnswer.probability === "number"
-          ? sysAnswer.probability
-          : typeof sysAnswer.yes === "number"
-            ? sysAnswer.yes
-            : typeof sysAnswer.probabilities?.true === "number"
-              ? sysAnswer.probabilities.true
-              : typeof sysAnswer.probabilities?.yes === "number"
-                ? sysAnswer.probabilities.yes
-                : 0;
-  }
-
-  if (typeof options?.systemicProbDelta === "number" && options.systemicProbDelta !== 0) {
-    isSystemicProb = Math.min(
-      0.99,
-      Math.max(0.01, Math.round((isSystemicProb + options.systemicProbDelta) * 1000) / 1000)
-    );
-  }
-
-  // 2. Parse working_tool probabilities
-  const defaultToolProbs: Record<JevWorkingToolKey, number> = {
-    twenty_four_inch_gauge: 0,
-    common_gavel: 0,
-    plumb: 0,
-    square: 0,
-    level: 0,
-    trowel: 0,
-  };
-  const rawToolProbs =
-    answers.working_tool?.probabilities || answers.working_tool || {};
-  let workingToolProbabilities: Record<JevWorkingToolKey, number> = {
-    ...defaultToolProbs,
-  };
-  for (const key of Object.keys(defaultToolProbs) as JevWorkingToolKey[]) {
-    if (typeof rawToolProbs[key] === "number") {
-      workingToolProbabilities[key] = rawToolProbs[key];
+    if ("noul" in sysAnswer) rawSystemicProb = sysAnswer.noul;
+    else if ("probability" in sysAnswer) rawSystemicProb = sysAnswer.probability;
+    else if ("yes" in sysAnswer) rawSystemicProb = sysAnswer.yes;
+    else if (sysAnswer.probabilities && "true" in sysAnswer.probabilities) {
+      rawSystemicProb = sysAnswer.probabilities.true;
+    } else if (sysAnswer.probabilities && "yes" in sysAnswer.probabilities) {
+      rawSystemicProb = sysAnswer.probabilities.yes;
     }
   }
 
-  if (options?.forcedPrimaryTool && options.forcedPrimaryTool in workingToolProbabilities) {
+  let isSystemicProb: number =
+    typeof rawSystemicProb === "number" ? rawSystemicProb : Number.NaN;
+
+  if (
+    isFiniteUnitProbability(isSystemicProb) &&
+    typeof options?.systemicProbDelta === "number" &&
+    Number.isFinite(options.systemicProbDelta) &&
+    options.systemicProbDelta !== 0
+  ) {
+    isSystemicProb = Math.min(
+      0.99,
+      Math.max(
+        0.01,
+        Math.round((isSystemicProb + options.systemicProbDelta) * 1000) / 1000
+      )
+    );
+  }
+
+  // 2. Extract working_tool probabilities while preserving any invalid keys or non-finite values for boundary validation
+  const rawToolProbsObj =
+    answers.working_tool?.probabilities ??
+    (typeof answers.working_tool === "object" && !("probabilities" in answers.working_tool)
+      ? answers.working_tool
+      : null);
+
+  let workingToolProbabilities: Record<JevWorkingToolKey, number> = {
+    twenty_four_inch_gauge: Number.NaN,
+    common_gavel: Number.NaN,
+    plumb: Number.NaN,
+    square: Number.NaN,
+    level: Number.NaN,
+    trowel: Number.NaN,
+  };
+
+  let hasInvalidToolEnumOrScore = !rawToolProbsObj || typeof rawToolProbsObj !== "object";
+  if (rawToolProbsObj && typeof rawToolProbsObj === "object") {
+    for (const [k, v] of Object.entries(rawToolProbsObj)) {
+      if (!JEV_TOOL_KEY_SET.has(k)) {
+        hasInvalidToolEnumOrScore = true;
+        (workingToolProbabilities as Record<string, number>)[k] =
+          typeof v === "number" ? v : Number.NaN;
+      } else {
+        workingToolProbabilities[k as JevWorkingToolKey] =
+          typeof v === "number" ? v : Number.NaN;
+      }
+    }
+  }
+
+  if (
+    !hasInvalidToolEnumOrScore &&
+    options?.forcedPrimaryTool &&
+    JEV_TOOL_KEY_SET.has(options.forcedPrimaryTool) &&
+    Object.values(workingToolProbabilities).every(isFiniteUnitProbability)
+  ) {
     workingToolProbabilities[options.forcedPrimaryTool] = Math.max(
       workingToolProbabilities[options.forcedPrimaryTool] || 0,
       0.65
@@ -458,30 +780,47 @@ export async function evaluateArticleWithJev(
 
   const sortedTools = (
     Object.entries(workingToolProbabilities) as [JevWorkingToolKey, number][]
-  ).sort((a, b) => b[1] - a[1]);
+  ).sort((a, b) => (Number.isFinite(b[1]) ? b[1] : -1) - (Number.isFinite(a[1]) ? a[1] : -1));
 
+  const explicitPrimaryTool = answers.working_tool?.primary_tool ?? answers.primaryTool;
   const primaryTool: JevWorkingToolKey =
-    options?.forcedPrimaryTool || sortedTools[0]?.[0] || "square";
-  const secondaryTool: JevWorkingToolKey =
-    sortedTools.find(([k]) => k !== primaryTool)?.[0] || "twenty_four_inch_gauge";
+    (typeof explicitPrimaryTool === "string"
+      ? (explicitPrimaryTool as JevWorkingToolKey)
+      : undefined) ||
+    options?.forcedPrimaryTool ||
+    sortedTools[0]?.[0] ||
+    ("invalid_tool" as JevWorkingToolKey);
 
-  // 3. Parse sre_failure_mode probabilities
-  const defaultSreProbs: Record<JevSreFailureModeKey, number> = {
-    configuration_drift: 0,
-    cascading_failure: 0,
-    untested_failover: 0,
-    alert_fatigue: 0,
-    blameless_postmortem_gap: 0,
-    capacity_exhaustion: 0,
-  };
-  const rawSreProbs =
-    answers.sre_failure_mode?.probabilities || answers.sre_failure_mode || {};
+  const secondaryTool: JevWorkingToolKey =
+    sortedTools.find(([k]) => k !== primaryTool)?.[0] ||
+    ("invalid_secondary_tool" as JevWorkingToolKey);
+
+  // 3. Extract sre_failure_mode probabilities while preserving invalid keys or non-finite numbers
+  const rawSreProbsObj =
+    answers.sre_failure_mode?.probabilities ??
+    (typeof answers.sre_failure_mode === "object" &&
+    !("probabilities" in answers.sre_failure_mode)
+      ? answers.sre_failure_mode
+      : null);
+
   const sreFailureModeProbabilities: Record<JevSreFailureModeKey, number> = {
-    ...defaultSreProbs,
+    configuration_drift: Number.NaN,
+    cascading_failure: Number.NaN,
+    untested_failover: Number.NaN,
+    alert_fatigue: Number.NaN,
+    blameless_postmortem_gap: Number.NaN,
+    capacity_exhaustion: Number.NaN,
   };
-  for (const key of Object.keys(defaultSreProbs) as JevSreFailureModeKey[]) {
-    if (typeof rawSreProbs[key] === "number") {
-      sreFailureModeProbabilities[key] = rawSreProbs[key];
+
+  if (rawSreProbsObj && typeof rawSreProbsObj === "object") {
+    for (const [k, v] of Object.entries(rawSreProbsObj)) {
+      if (!JEV_SRE_KEY_SET.has(k)) {
+        (sreFailureModeProbabilities as Record<string, number>)[k] =
+          typeof v === "number" ? v : Number.NaN;
+      } else {
+        sreFailureModeProbabilities[k as JevSreFailureModeKey] =
+          typeof v === "number" ? v : Number.NaN;
+      }
     }
   }
 
@@ -490,34 +829,31 @@ export async function evaluateArticleWithJev(
       JevSreFailureModeKey,
       number,
     ][]
-  ).sort((a, b) => b[1] - a[1]);
+  ).sort((a, b) => (Number.isFinite(b[1]) ? b[1] : -1) - (Number.isFinite(a[1]) ? a[1] : -1));
 
+  const explicitFailureMode =
+    answers.sre_failure_mode?.failure_mode ?? answers.sreFailureMode;
   const sreFailureMode: JevSreFailureModeKey =
-    sortedSreModes[0]?.[0] || "configuration_drift";
+    (typeof explicitFailureMode === "string"
+      ? (explicitFailureMode as JevSreFailureModeKey)
+      : undefined) ||
+    sortedSreModes[0]?.[0] ||
+    ("invalid_failure_mode" as JevSreFailureModeKey);
 
-  const jevConfidence =
-    typeof answers.working_tool?.confidence === "number"
-      ? answers.working_tool.confidence
-      : sortedTools[0]?.[1] || isSystemicProb;
+  const rawConfidence = answers.working_tool?.confidence;
+  const jevConfidence: number =
+    rawConfidence !== undefined
+      ? typeof rawConfidence === "number"
+        ? rawConfidence
+        : Number.NaN
+      : isFiniteUnitProbability(sortedTools[0]?.[1])
+        ? sortedTools[0][1]
+        : isSystemicProb;
 
   const minSystemicProb = options?.minSystemicProb ?? 0.7;
   const minConfidence = options?.minConfidence ?? 0.5;
 
-  const status: "triaged" | "dropped" =
-    isSystemicProb >= minSystemicProb && jevConfidence >= minConfidence
-      ? "triaged"
-      : "dropped";
-
-  const enrichedRaw =
-    options?.appliedFilterNames && options.appliedFilterNames.length > 0
-      ? {
-          ...rawData,
-          applied_filters: options.appliedFilterNames,
-          adjusted_is_systemic_prob: isSystemicProb,
-        }
-      : rawData;
-
-  return {
+  const candidateResult = {
     isSystemicProb,
     jevConfidence,
     primaryTool,
@@ -525,8 +861,54 @@ export async function evaluateArticleWithJev(
     sreFailureMode,
     workingToolProbabilities,
     sreFailureModeProbabilities,
-    status,
+  };
+
+  const validation = validateJevEvaluationOutput(candidateResult, {
+    minSystemicProb,
+    minConfidence,
+  });
+
+  const safeSystemicProb = isFiniteUnitProbability(isSystemicProb)
+    ? isSystemicProb
+    : 0;
+  const safeConfidence = isFiniteUnitProbability(jevConfidence)
+    ? jevConfidence
+    : 0;
+
+  const enrichedRaw = {
+    ...(rawData && typeof rawData === "object" ? rawData : { raw: rawData }),
+    ...(options?.appliedFilterNames && options.appliedFilterNames.length > 0
+      ? {
+          applied_filters: options.appliedFilterNames,
+          adjusted_is_systemic_prob: safeSystemicProb,
+        }
+      : {}),
+    boundary_validation: {
+      valid: validation.valid,
+      quarantined: validation.quarantined,
+      status: validation.status,
+      reason: validation.reason ?? null,
+    },
+  };
+
+  return {
+    isSystemicProb: safeSystemicProb,
+    jevConfidence: safeConfidence,
+    primaryTool: JEV_TOOL_KEY_SET.has(primaryTool) ? primaryTool : "square",
+    secondaryTool:
+      JEV_TOOL_KEY_SET.has(secondaryTool) && secondaryTool !== primaryTool
+        ? secondaryTool
+        : "twenty_four_inch_gauge",
+    sreFailureMode: JEV_SRE_KEY_SET.has(sreFailureMode)
+      ? sreFailureMode
+      : "configuration_drift",
+    workingToolProbabilities,
+    sreFailureModeProbabilities,
+    status: validation.status,
+    validationValid: validation.valid,
+    quarantineReason: validation.reason,
     rawJson: JSON.stringify(enrichedRaw),
     rawResponse: rawData,
   };
 }
+

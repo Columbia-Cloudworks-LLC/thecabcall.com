@@ -6,6 +6,8 @@ import {
   Newsreader,
 } from "next/font/google";
 import "./globals.css";
+import { projectPublicEpisodeDto } from "@/lib/dto";
+import { INITIAL_EPISODES } from "@/lib/seed-data";
 import { ensureD1Snapshot, getLatestWeeklyRollup } from "@/lib/store";
 import { TelemetryProvider } from "@/components/TelemetryContext";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -60,7 +62,11 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   await ensureD1Snapshot();
-  const initialEpisode = getLatestWeeklyRollup();
+  const rawInitialEpisode = getLatestWeeklyRollup();
+  const initialEpisode =
+    projectPublicEpisodeDto(rawInitialEpisode) ||
+    projectPublicEpisodeDto(INITIAL_EPISODES[0]) ||
+    undefined;
 
   return (
     <html

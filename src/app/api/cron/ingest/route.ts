@@ -8,8 +8,8 @@ import {
   triggerRemoteWorkerIngest,
   triggerRemoteWorkerSynthesize,
 } from "@/lib/d1-bridge";
+import { projectPublicIncidentDto } from "@/lib/dto";
 import { runIngestionPipeline } from "@/lib/pipeline";
-import { getPipelineRuns, getSystemPostureSummary } from "@/lib/store";
 import { runD1IngestPipeline } from "@/pipeline/ingest";
 import { runSynthesizePipeline } from "@/pipeline/synthesize";
 
@@ -30,8 +30,6 @@ async function executeD1CronWorkflow(body: {
 
   if (shouldUseRemoteWorker()) {
     try {
-      let ingestSummary: Record<string, unknown> | undefined = undefined;
-      let synthesisSummary: Record<string, unknown> | undefined = undefined;
       const affectedHashes = new Set<string>();
       const affectedIds = new Set<number>();
 
@@ -41,8 +39,6 @@ async function executeD1CronWorkflow(body: {
           synthesizeLimit: 1,
           customArticle: body.customArticle,
         });
-        ingestSummary = res;
-        synthesisSummary = res.synthesis as Record<string, unknown> | undefined;
         const articles = (res.articles as Array<{ id?: number; url_hash?: string }>) || [];
         for (const art of articles) {
           if (art.url_hash) affectedHashes.add(art.url_hash);
@@ -52,7 +48,6 @@ async function executeD1CronWorkflow(body: {
         const res = await triggerRemoteWorkerSynthesize({
           limit: body.limit ?? 5,
         });
-        synthesisSummary = res;
         const articles = (res.articles as Array<{ id?: number; url_hash?: string }>) || [];
         for (const art of articles) {
           if (art.url_hash) affectedHashes.add(art.url_hash);
@@ -64,8 +59,6 @@ async function executeD1CronWorkflow(body: {
           synthesizeLimit: body.limit ?? 5,
           maxNetNew: body.maxNetNew ?? 10,
         });
-        ingestSummary = res;
-        synthesisSummary = res.synthesis as Record<string, unknown> | undefined;
         const articles = (res.articles as Array<{ id?: number; url_hash?: string }>) || [];
         for (const art of articles) {
           if (art.url_hash) affectedHashes.add(art.url_hash);
@@ -74,29 +67,25 @@ async function executeD1CronWorkflow(body: {
       }
 
       const snap = await ensureD1Snapshot(true);
-      const createdIncidents = snap.incidents.filter(
-        (inc) =>
-          affectedHashes.has(inc.urlHash) ||
-          Array.from(affectedIds).some((id) => inc.id === `d1-inc-${id}`)
-      );
+      const createdIncidents = snap.incidents
+        .filter(
+          (inc) =>
+            affectedHashes.has(inc.urlHash) ||
+            Array.from(affectedIds).some((id) => inc.id === `d1-inc-${id}`)
+        )
+        .map((inc) => projectPublicIncidentDto(inc))
+        .filter((inc): inc is NonNullable<typeof inc> => inc !== null);
 
-      const runs = getPipelineRuns();
-      const posture = getSystemPostureSummary();
+      const fallbackIncidents = snap.incidents
+        .slice(0, 1)
+        .map((inc) => projectPublicIncidentDto(inc))
+        .filter((inc): inc is NonNullable<typeof inc> => inc !== null);
 
       return {
         ok: true,
-        pipeline:
-          "Cloudflare Worker Bridge (cabcall-db) // System-1 Jev (jev-1.14.0) + System-2 Gemini Synthesis",
         stage: body.customArticle ? "custom_sandbox" : stage,
-        ingestSummary,
-        synthesisSummary,
-        run: runs[0],
-        runs,
-        posture,
         createdIncidents:
-          createdIncidents.length > 0
-            ? createdIncidents
-            : snap.incidents.slice(0, 1),
+          createdIncidents.length > 0 ? createdIncidents : fallbackIncidents,
       };
     } catch (err) {
       console.warn(
@@ -124,22 +113,20 @@ async function executeD1CronWorkflow(body: {
     );
     return {
       ok: true,
-      pipeline: "In-Memory Fallback Pipeline",
-      ...fallback,
-      runs: getPipelineRuns(),
-      posture: getSystemPostureSummary(),
+      stage: body.customArticle ? "custom_sandbox" : stage,
+      createdIncidents: fallback.createdIncidents
+        .map((inc) => projectPublicIncidentDto(inc))
+        .filter((inc): inc is NonNullable<typeof inc> => inc !== null),
     };
   }
 
   const envVars = loadLocalEnvVars();
 
-  let ingestSummary = undefined;
-  let synthesisSummary = undefined;
   const affectedHashes = new Set<string>();
   const affectedIds = new Set<number>();
 
   if (body.customArticle) {
-    ingestSummary = await runD1IngestPipeline({
+    const ingestSummary = await runD1IngestPipeline({
       db,
       typesafeApiKey: envVars.TYPESAFE_API_KEY,
       customArticle: body.customArticle,
@@ -150,14 +137,14 @@ async function executeD1CronWorkflow(body: {
     }
     if (insertedId) {
       affectedIds.add(insertedId);
-      synthesisSummary = await runSynthesizePipeline({
+      await runSynthesizePipeline({
         db,
         geminiApiKey: envVars.GEMINI_API_KEY,
         articleIds: [insertedId],
       });
     }
   } else if (stage === "synthesize") {
-    synthesisSummary = await runSynthesizePipeline({
+    const synthesisSummary = await runSynthesizePipeline({
       db,
       geminiApiKey: envVars.GEMINI_API_KEY,
       limit: body.limit ?? 5,
@@ -167,7 +154,7 @@ async function executeD1CronWorkflow(body: {
       affectedIds.add(art.id);
     }
   } else {
-    ingestSummary = await runD1IngestPipeline({
+    const ingestSummary = await runD1IngestPipeline({
       db,
       typesafeApiKey: envVars.TYPESAFE_API_KEY,
       maxNetNew: body.maxNetNew ?? 10,
@@ -179,7 +166,7 @@ async function executeD1CronWorkflow(body: {
     }
 
     if (stage === "both") {
-      synthesisSummary = await runSynthesizePipeline({
+      const synthesisSummary = await runSynthesizePipeline({
         db,
         geminiApiKey: envVars.GEMINI_API_KEY,
         limit: body.limit ?? 5,
@@ -192,29 +179,25 @@ async function executeD1CronWorkflow(body: {
   }
 
   const snap = readLocalD1Snapshot();
-  const createdIncidents = snap.incidents.filter(
-    (inc) =>
-      affectedHashes.has(inc.urlHash) ||
-      Array.from(affectedIds).some((id) => inc.id === `d1-inc-${id}`)
-  );
+  const createdIncidents = snap.incidents
+    .filter(
+      (inc) =>
+        affectedHashes.has(inc.urlHash) ||
+        Array.from(affectedIds).some((id) => inc.id === `d1-inc-${id}`)
+    )
+    .map((inc) => projectPublicIncidentDto(inc))
+    .filter((inc): inc is NonNullable<typeof inc> => inc !== null);
 
-  const runs = getPipelineRuns();
-  const posture = getSystemPostureSummary();
+  const fallbackIncidents = snap.incidents
+    .slice(0, 1)
+    .map((inc) => projectPublicIncidentDto(inc))
+    .filter((inc): inc is NonNullable<typeof inc> => inc !== null);
 
   return {
     ok: true,
-    pipeline:
-      "Cloudflare D1 (cabcall-db) // System-1 Jev (jev-1.14.0) + System-2 Gemini Synthesis",
     stage: body.customArticle ? "custom_sandbox" : stage,
-    ingestSummary,
-    synthesisSummary,
-    run: runs[0],
-    runs,
-    posture,
     createdIncidents:
-      createdIncidents.length > 0
-        ? createdIncidents
-        : snap.incidents.slice(0, 1),
+      createdIncidents.length > 0 ? createdIncidents : fallbackIncidents,
   };
 }
 

@@ -9,6 +9,7 @@ import {
   Volume2,
   X,
 } from "lucide-react";
+import { isRenderablePublicEpisode } from "@/lib/dto";
 import { useTelemetry } from "./TelemetryContext";
 
 function formatSeconds(sec: number): string {
@@ -30,6 +31,11 @@ export function PersistentAudioPlayer() {
     cyclePlaybackRate,
     closeDock,
   } = useTelemetry();
+
+  // Defensive rendering gate: suppress player if episode lacks verified audio or metadata
+  if (!activeEpisode || !isRenderablePublicEpisode(activeEpisode)) {
+    return null;
+  }
 
   const progressPercent = Math.min(
     100,
@@ -88,9 +94,6 @@ export function PersistentAudioPlayer() {
                 <div className="font-mono text-[10px] uppercase tracking-wider text-[#C5A059] flex items-center gap-2">
                   <span>
                     THE CAB CALL // EPISODE #{activeEpisode.episodeNumber}
-                  </span>
-                  <span className="text-[#10B981] text-[9px] px-1.5 py-0.2 bg-[#10B981]/10 border border-[#10B981]/40">
-                    R2 STREAM
                   </span>
                 </div>
                 <p className="font-serif text-xs text-[#F3EFE6] truncate mt-0.5">

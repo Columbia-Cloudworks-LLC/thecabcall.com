@@ -3,23 +3,30 @@ import {
   AuditAuthMethod,
   AuditLedgerEntry,
 } from "./audit";
-import { D1DatabaseLike } from "./ingest";
+import {
+  D1DatabaseLike,
+  D1PreparedStatementLike,
+  executeD1Batch,
+} from "./ingest";
 import { JevSreFailureModeKey, JevWorkingToolKey } from "./jev";
 import {
-  buildDeterministicBoundedSynthesis,
   SRE_FAILURE_DISPLAY_NAMES,
   TelemetryArticleRow,
+  validateSynthesizedBriefOutput,
   WORKING_TOOL_DISPLAY_NAMES,
 } from "./synthesize";
 import { validateAndNormalizeIncidentSummary } from "../lib/sanitize";
 
-export interface R2ObjectLike {
+export interface R2ObjectMetaLike {
   key: string;
   size: number;
   etag?: string;
   httpMetadata?: {
     contentType?: string;
   };
+}
+
+export interface R2ObjectLike extends R2ObjectMetaLike {
   body?: ReadableStream<Uint8Array> | null;
   arrayBuffer(): Promise<ArrayBuffer>;
 }
@@ -35,6 +42,7 @@ export interface R2BucketLike {
       customMetadata?: Record<string, string>;
     }
   ): Promise<unknown>;
+  head?(key: string): Promise<R2ObjectMetaLike | null>;
   get(
     key: string,
     options?: {
@@ -42,6 +50,104 @@ export interface R2BucketLike {
     }
   ): Promise<R2ObjectLike | null>;
   delete(key: string | string[]): Promise<void>;
+}
+
+export type EpisodePublishStatus = "PUBLISHED" | "PENDING_AUDIO" | "QUARANTINED";
+
+export interface R2AudioVerificationResult {
+  verified: boolean;
+  status: EpisodePublishStatus;
+  size: number;
+  contentType: string | null;
+  reason?: string;
+}
+
+/**
+ * R2-to-D1 verification check for podcast audio episodes:
+ * A D1 episode record may only transition to `PUBLISHED` after verifying via R2 `head()`
+ * that the audio object exists, is non-zero bytes (`size > 0`), and has valid audio MIME metadata (`audio/*`).
+ */
+export async function verifyR2AudioObjectForPublish(
+  audioBucket: R2BucketLike | undefined,
+  r2Key: string
+): Promise<R2AudioVerificationResult> {
+  if (!audioBucket) {
+    return {
+      verified: false,
+      status: "PENDING_AUDIO",
+      size: 0,
+      contentType: null,
+      reason: "R2 audioBucket binding is not available",
+    };
+  }
+
+  const cleanKey = (r2Key || "").trim();
+  if (!cleanKey) {
+    return {
+      verified: false,
+      status: "QUARANTINED",
+      size: 0,
+      contentType: null,
+      reason: "R2 audio key is empty",
+    };
+  }
+
+  try {
+    const headObj: R2ObjectMetaLike | null =
+      typeof audioBucket.head === "function"
+        ? await audioBucket.head(cleanKey)
+        : await audioBucket.get(cleanKey);
+
+    if (!headObj) {
+      return {
+        verified: false,
+        status: "PENDING_AUDIO",
+        size: 0,
+        contentType: null,
+        reason: `R2 audio object "${cleanKey}" does not exist`,
+      };
+    }
+
+    const size = Number(headObj.size ?? 0);
+    if (!Number.isFinite(size) || size <= 0) {
+      return {
+        verified: false,
+        status: "QUARANTINED",
+        size: 0,
+        contentType: headObj.httpMetadata?.contentType ?? null,
+        reason: `R2 audio object "${cleanKey}" has zero or invalid byte size (${String(headObj.size)})`,
+      };
+    }
+
+    const contentType = (headObj.httpMetadata?.contentType || "").trim();
+    const isValidAudioMime = /^audio\/(mpeg|mp3|mp4|wav|ogg|aac|webm|x-m4a|flac)/i.test(
+      contentType
+    );
+    if (!isValidAudioMime) {
+      return {
+        verified: false,
+        status: "QUARANTINED",
+        size,
+        contentType: contentType || null,
+        reason: `R2 audio object "${cleanKey}" has invalid MIME contentType "${contentType || "missing"}"`,
+      };
+    }
+
+    return {
+      verified: true,
+      status: "PUBLISHED",
+      size,
+      contentType,
+    };
+  } catch (err) {
+    return {
+      verified: false,
+      status: "PENDING_AUDIO",
+      size: 0,
+      contentType: null,
+      reason: err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 export interface WeeklyTelemetryAggregates {
@@ -84,6 +190,8 @@ export interface RollupEpisodeRecord {
   duration_seconds: number;
   file_size_bytes: number;
   published_at: string;
+  status: EpisodePublishStatus;
+  r2_verified: boolean;
   model_used: string;
   audio_source: string;
   aggregates: {
@@ -133,6 +241,7 @@ export interface AdminEpisodeRecord {
   durationFormatted: string;
   fileSizeBytes: number;
   publishedAt: string;
+  status?: EpisodePublishStatus;
 }
 
 export interface D1EpisodeTableRow {
@@ -146,7 +255,42 @@ export interface D1EpisodeTableRow {
   duration_seconds: number;
   file_size_bytes: number;
   published_at: string;
+  status?: EpisodePublishStatus;
 }
+
+export const EPISODES_SELECT_COLUMNS = `
+  id,
+  episode_number,
+  slug,
+  title,
+  summary,
+  transcript,
+  audio_url,
+  duration_seconds,
+  file_size_bytes,
+  published_at,
+  status
+`;
+
+export const TELEMETRY_ARTICLES_ROLLUP_COLUMNS = `
+  id,
+  url_hash,
+  source_feed,
+  title,
+  source_url,
+  raw_excerpt,
+  published_at,
+  ingested_at,
+  is_systemic_prob,
+  jev_confidence,
+  primary_tool,
+  secondary_tool,
+  sre_failure_mode,
+  jev_raw_json,
+  socratic_brief,
+  questions_json,
+  status
+`;
 
 export const ROLLUP_RESPONSE_SCHEMA = {
   type: "OBJECT",
@@ -201,15 +345,15 @@ const BASELINE_ARCHIVE_EPISODES: Array<{
     episode_number: 42,
     slug: "cab-weekly-brief-042-configuration-drift-and-the-square",
     title:
-      "CAB Weekly Brief #42: Configuration Drift (44% Square), Unpinned Certs, and Separated Signal",
+      "CAB Weekly Brief #42: Configuration Drift, Unpinned Certs, and Separated Signal",
     summary:
-      "Friday 5-minute systems retrospective covering October 10–16, 2026. The Square (44%) and Configuration Drift dominate the Trestleboard across municipal water SCADA audits, regional banking TLS halts, and federal aviation routing outages.",
+      "Friday 5-minute systems retrospective covering October 10–16, 2026. The Square and Configuration Drift lead the Trestleboard across municipal water SCADA audits, regional banking TLS halts, and federal aviation routing outages.",
     published_at: "2026-10-16T12:00:00Z",
     duration_seconds: 304,
     file_size_bytes: 4864000,
     audio_url: "/audio/cab-weekly-brief-042.mp3",
     transcript: `[00:00 — THE WEEKLY TELEMETRY]
-The Square leads this week's Trestleboard at forty-four percent of primary classifications, with Configuration Drift emerging as the primary failure mode across municipal water utilities, regional clearing banks, and federal aviation dispatch. Three anchor incidents set the weekly docket: fourteen water districts signing annual segmentation attestations while leaving vendor VPN bridges wide open (#CAB-2026-1042); a four-hour settlement halt across sixty-two credit unions triggered by an unpinned standby TLS certificate (#CAB-2026-1041); and a regional aviation routing outage traced to an unvalidated night-shift sync script (#CAB-2026-1040). Across all three sectors, live production environments had quietly drifted away from their written specifications.
+The Square leads this week's Trestleboard across primary classifications, with Configuration Drift emerging as the primary failure mode across municipal water utilities, regional clearing banks, and federal aviation dispatch. Three anchor incidents set the weekly docket: fourteen water districts signing annual segmentation attestations while leaving vendor VPN bridges wide open (#CAB-2026-1042); a four-hour settlement halt across sixty-two credit unions triggered by an unpinned standby TLS certificate (#CAB-2026-1041); and a regional aviation routing outage traced to an unvalidated night-shift sync script (#CAB-2026-1040). Across all three sectors, live production environments had quietly drifted away from their written specifications.
 
 [01:15 — SEPARATING SIGNAL FROM PANIC]
 The outrage cycle wants you to treat every one of these disclosures as either an imminent collapse or a morality play with a convenient villain. Good systems architecture tells us otherwise: a noisy alert on an edge node isn't a core outage, and an audit finding is telemetry, not an attack. Look at Wednesday's four-hour settlement halt across sixty-two credit unions (#CAB-2026-1041). Social feeds immediately jumped to liquidity panic. In reality, not a single ledger was compromised; a warm-standby node rotated an intermediate TLS certificate that legacy middleware still had pinned, and synthetic health checks missed it because those probes bypassed the mutual-TLS proxy. The news cycle overblew the four-hour delay while missing the actual structural constraint: synthetic monitoring that bypasses the authentication boundary is worse than no monitoring at all, because it manufactures false confidence. We saw the exact same inversion in the transportation subcommittee hearing (#CAB-2026-1040), where three hours of cameras focused on a single night-shift technician who ran an unvalidated sync script, while burying Appendix C—which showed management had decommissioned the pre-production staging environment eight months ago to shave cloud hosting costs.
@@ -229,7 +373,7 @@ Here is how to set your posture on the trestleboard for the coming week. First, 
     file_size_bytes: 4672000,
     audio_url: "/audio/cab-weekly-brief-041.mp3",
     transcript: `[00:00 — THE WEEKLY TELEMETRY]
-The 24-Inch Gauge leads this week's Trestleboard at forty-one percent alongside Alert Fatigue & Signal Loss as the primary operational failure mode, anchored by clinical medication-alert override telemetry (#CAB-2026-1039), a fourteen-thousand-container port manifest stall (#CAB-2026-1038), and municipal pension COBOL batch exhaustion (#CAB-2026-1037). Across these three anchor incidents, organizations treated operator attention as a free, inexhaustible buffer while upstream authorities broke shared interface contracts without backward-compatible mortar.
+The 24-Inch Gauge leads this week's Trestleboard alongside Alert Fatigue & Signal Loss as the primary operational failure mode, anchored by clinical medication-alert override telemetry (#CAB-2026-1039), a fourteen-thousand-container port manifest stall (#CAB-2026-1038), and municipal pension COBOL batch exhaustion (#CAB-2026-1037). Across these three anchor incidents, organizations treated operator attention as a free, inexhaustible buffer while upstream authorities broke shared interface contracts without backward-compatible mortar.
 
 [01:15 — SEPARATING SIGNAL FROM PANIC]
 When the clinical informatics study (#CAB-2026-1039) showed physicians overriding ninety-four percent of medication pop-ups within two seconds, pundits called for stricter clinician training. Systems engineering points to the opposite conclusion: when compliance committees add 114 modal interrupts per shift to transfer legal liability downward, they exhaust the cognitive error budget and train operators to auto-dismiss everything. Similarly, the fourteen-thousand-container port backup (#CAB-2026-1038) wasn't a macroeconomic trade freeze—it was an unversioned JSON validator rejecting dry-freight manifests over an optional hazmat field.
@@ -289,14 +433,28 @@ In systems engineering, Service Level Indicators (SLIs) are our plumb line. The 
   },
 ];
 
+async function ensureEpisodesStatusColumn(db: D1DatabaseLike): Promise<void> {
+  try {
+    await db
+      .prepare(
+        "ALTER TABLE episodes ADD COLUMN status TEXT NOT NULL DEFAULT 'PUBLISHED'"
+      )
+      .run();
+  } catch {
+    // Column already exists
+  }
+}
+
 /**
  * Ensures the 5 baseline archive episodes (#42, #41, #12, #11, #10) are seeded once into D1 `episodes`
- * so all episodes visible on `/archive` and `/feed.xml` are managed in D1 and can be edited or deleted.
+ * using parameterized `db.batch()` statements and transitions any incomplete or templated D1 articles
+ * to `QUARANTINED`.
  */
 export async function ensureBaselineEpisodesSeeded(
   db: D1DatabaseLike
 ): Promise<void> {
   try {
+    await ensureEpisodesStatusColumn(db);
     await db
       .prepare(
         `CREATE TABLE IF NOT EXISTS system_settings (
@@ -314,99 +472,79 @@ export async function ensureBaselineEpisodesSeeded(
       .first<{ value: string }>();
 
     if (flag?.value !== "1") {
-      for (const ep of BASELINE_ARCHIVE_EPISODES) {
-        await db
-          .prepare(
-            `INSERT OR IGNORE INTO episodes (
-              episode_number,
-              slug,
-              title,
-              summary,
-              transcript,
-              audio_url,
-              duration_seconds,
-              file_size_bytes,
-              published_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-          )
-          .bind(
-            ep.episode_number,
-            ep.slug,
-            ep.title,
-            ep.summary,
-            ep.transcript,
-            ep.audio_url,
-            ep.duration_seconds,
-            ep.file_size_bytes,
-            ep.published_at
-          )
-          .run();
-      }
+      const seedStatements: D1PreparedStatementLike[] = BASELINE_ARCHIVE_EPISODES.map(
+        (ep) =>
+          db
+            .prepare(
+              `INSERT INTO episodes (
+                episode_number,
+                slug,
+                title,
+                summary,
+                transcript,
+                audio_url,
+                duration_seconds,
+                file_size_bytes,
+                published_at,
+                status
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'PUBLISHED')
+              ON CONFLICT(slug) DO NOTHING`
+            )
+            .bind(
+              ep.episode_number,
+              ep.slug,
+              ep.title,
+              ep.summary,
+              ep.transcript,
+              ep.audio_url,
+              ep.duration_seconds,
+              ep.file_size_bytes,
+              ep.published_at
+            )
+      );
 
-      await db
-        .prepare(
+      seedStatements.push(
+        db.prepare(
           `INSERT INTO system_settings (key, value, updated_at)
            VALUES ('baseline_episodes_seeded_v1', '1', datetime('now'))
            ON CONFLICT(key) DO UPDATE SET value = '1', updated_at = datetime('now')`
         )
-        .run();
+      );
+
+      await executeD1Batch(db, seedStatements);
     }
 
     const sanitizedFlag = await db
       .prepare(
-        "SELECT value FROM system_settings WHERE key = 'trestleboard_content_sanitized_v3'"
+        "SELECT value FROM system_settings WHERE key = 'trestleboard_content_sanitized_v4'"
       )
       .first<{ value: string }>();
 
     if (sanitizedFlag?.value !== "1") {
-      // 1. Update baseline episodes (#42, #41) so they contain zero ingestion-gate math or classifier references
+      const batchUpdates: D1PreparedStatementLike[] = [];
+
       for (const ep of BASELINE_ARCHIVE_EPISODES) {
-        await db
-          .prepare(
-            `UPDATE episodes
-             SET title = ?, summary = ?, transcript = ?
-             WHERE slug = ?`
-          )
-          .bind(ep.title, ep.summary, ep.transcript, ep.slug)
-          .run();
+        batchUpdates.push(
+          db
+            .prepare(
+              `UPDATE episodes
+               SET title = ?, summary = ?, transcript = ?, status = 'PUBLISHED'
+               WHERE slug = ?`
+            )
+            .bind(ep.title, ep.summary, ep.transcript, ep.slug)
+        );
       }
 
-      // 2. Enrich 1-sentence standfirst RSS excerpts on verified news articles so they provide genuine 2-sentence factual summaries
-      const multiSentenceFactualStandfirsts: Record<number, string> = {
-        6: "Demonstrators across France converged with student unions on Saturday to protest rising living costs and public-sector budget cuts as the country's fiscal deficit deepens. Police deployed tear gas in several metropolitan centers after small fires and street scuffles broke out along the march routes.",
-        9: "Total campaign advertising expenditures have surpassed $10 billion during the current U.S. midterm election cycle across broadcast, cable, and digital platforms. The record spending surge arrives as household surveys continue to cite grocery and fuel inflation as voters' primary economic concern.",
-        10: "The major-party candidates for Minnesota's U.S. Senate seat met Friday for an hourlong televised debate hosted by MPR News. The exchange centered on state program oversight following recent fraud prosecutions, household affordability, and the economic impact of federal tariff and regulatory policies.",
-        11: "The White House has moved to waive newly enacted congressional sanctions against Russian energy exports ahead of next month's midterm elections. Administration officials cited concerns over domestic fuel price spikes, while lawmakers from both parties criticized the waiver as bypassing statutory mandates.",
-        12: "U.S. negotiators have floated a proposal that would permit expanded Russian natural gas shipments into European markets as part of a broader Ukraine cease-fire framework. European energy ministers expressed skepticism toward the plan, warning that renewed pipeline reliance would undermine continental security commitments.",
-        13: "Senator Darline Graham of South Carolina publicly disagreed with the administration's decision to exempt Russian entities from bipartisan sanctions legislation originally co-sponsored by her late brother, Senator Lindsey Graham. The rare intraparty break highlights growing Senate friction over executive waivers of congressionally mandated trade restrictions.",
-        14: "Campaign activity across four competitive congressional districts in Pennsylvania illustrates the demographic and economic fault lines shaping the national midterm map. Suburban ticket-splitting, industrial energy policy, and cost-of-living pressures have turned the commonwealth's swing seats into the primary bellwether for control of the House.",
-        15: "Organizers of the nationwide 'No Kings' demonstrations held coordinated weekend rallies aimed at converting protest turnout into early midterm ballot submissions. Event coordinators partnered with local voter-registration drives across swing states to emphasize mail-in and early in-person voting deadlines.",
-        17: "The Canadian federal government announced $720 million in short-term bridge financing for Canada Post to prevent the state-owned mail carrier from exhausting its cash reserves. Officials stated the emergency liquidity injection will sustain nationwide delivery operations while the corporation restructures its parcel and letter-mail cost model.",
-        18: "Amazon confirmed it is open to discussions with federal Canadian and provincial Quebec officials regarding its decision to close fulfillment operations across the French-speaking province. The planned facility closures are projected to eliminate approximately 1,700 permanent warehouse and logistics positions.",
-        19: "Target announced it is concluding its multiyear diversity, equity, and inclusion targets alongside its dedicated accelerator program for Black-owned retail suppliers. The Minneapolis-based retailer joins a broader wave of large U.S. corporations scaling back formal demographic procurement and hiring benchmarks.",
-        22: "Law enforcement officials reported that an armed parent intervened during the shooting outside Silver Rail Elementary School in Bend, Oregon, before police units arrived on scene. The intervention has renewed national debate over emergency response timelines, campus perimeter security, and the role of armed civilians during active-shooter incidents.",
-        24: "Hundreds of coordinated rallies billed as nonpartisan civic mobilization events took place across U.S. cities this weekend to encourage early voting ahead of the midterm elections. Organizers sought to channel nearly two years of demonstration networks into structured precinct turnout operations.",
-      };
-
-      for (const [idStr, factualStandfirst] of Object.entries(
-        multiSentenceFactualStandfirsts
-      )) {
-        await db
-          .prepare(
-            "UPDATE telemetry_articles SET raw_excerpt = ? WHERE id = ?"
-          )
-          .bind(factualStandfirst, Number(idStr))
-          .run();
-      }
-
-      // 3. Re-evaluate and sanitize all telemetry_articles rows
       const allArticlesRes = await db
-        .prepare("SELECT * FROM telemetry_articles ORDER BY id ASC")
+        .prepare(
+          `SELECT ${TELEMETRY_ARTICLES_ROLLUP_COLUMNS}
+           FROM telemetry_articles
+           ORDER BY id ASC`
+        )
         .all<TelemetryArticleRow>();
       const allArticles = allArticlesRes.results || [];
 
-      let sanitizedArticleCount = 0;
-      let clearedMalformedBriefCount = 0;
+      let quarantinedCount = 0;
 
       for (const row of allArticles) {
         const validation = validateAndNormalizeIncidentSummary({
@@ -418,76 +556,102 @@ export async function ensureBaselineEpisodesSeeded(
         });
 
         if (!validation.valid) {
-          // Strip any legacy Mad-Libs fallback string while preserving raw_excerpt so build/runtime normalization logs quarantine warnings
-          if (row.socratic_brief || row.questions_json) {
-            await db
-              .prepare(
-                "UPDATE telemetry_articles SET socratic_brief = NULL, questions_json = NULL WHERE id = ?"
-              )
-              .bind(row.id)
-              .run();
-            clearedMalformedBriefCount++;
+          if (row.status !== "QUARANTINED" && row.status !== "PENDING_RETRY") {
+            batchUpdates.push(
+              db
+                .prepare(
+                  "UPDATE telemetry_articles SET status = 'QUARANTINED', socratic_brief = NULL, questions_json = NULL WHERE id = ?"
+                )
+                .bind(row.id)
+            );
+            quarantinedCount++;
           }
           continue;
         }
 
         if (row.status === "synthesized") {
-          const cleanSynthesis = buildDeterministicBoundedSynthesis(row);
-          const questionsPayload = JSON.stringify({
-            executive_summary: cleanSynthesis.executive_summary,
-            proportionality: {
-              noise: cleanSynthesis.proportionality_check.noise_overblown,
-              signal: cleanSynthesis.proportionality_check.structural_signal,
-            },
-            questions: cleanSynthesis.questions,
-            model: "editorial-sanitization-v2",
-            synthesized_at: new Date().toISOString(),
-          });
+          let parsedQuestionsObj: any = null;
+          if (row.questions_json) {
+            try {
+              parsedQuestionsObj = JSON.parse(row.questions_json);
+            } catch {
+              parsedQuestionsObj = null;
+            }
+          }
 
-          await db
-            .prepare(
-              "UPDATE telemetry_articles SET socratic_brief = ?, questions_json = ? WHERE id = ?"
-            )
-            .bind(cleanSynthesis.socratic_brief, questionsPayload, row.id)
-            .run();
-          sanitizedArticleCount++;
+          const candidateSynthesis = {
+            executive_summary:
+              parsedQuestionsObj?.executive_summary || validation.executiveSummary,
+            socratic_brief: row.socratic_brief || validation.factualBriefParagraph,
+            proportionality_check: {
+              noise_overblown:
+                parsedQuestionsObj?.proportionality_check?.noise_overblown ||
+                parsedQuestionsObj?.proportionality?.noise ||
+                "",
+              structural_signal:
+                parsedQuestionsObj?.proportionality_check?.structural_signal ||
+                parsedQuestionsObj?.proportionality?.signal ||
+                "",
+            },
+            questions: Array.isArray(parsedQuestionsObj?.questions)
+              ? parsedQuestionsObj.questions
+              : Array.isArray(parsedQuestionsObj)
+                ? parsedQuestionsObj
+                : [],
+          };
+
+          const check = validateSynthesizedBriefOutput(row, candidateSynthesis);
+          if (!check.valid) {
+            // Do NOT generate Mad-Libs fallback strings; transition templated/incomplete rows to QUARANTINED
+            batchUpdates.push(
+              db
+                .prepare(
+                  "UPDATE telemetry_articles SET status = 'QUARANTINED', socratic_brief = NULL, questions_json = NULL WHERE id = ?"
+                )
+                .bind(row.id)
+            );
+            quarantinedCount++;
+          }
         }
       }
 
-      await appendAuditEntry(db, {
-        actorEmail: "system@thecabcall.com",
-        actorRole: "owner",
-        authMethod: "system_bootstrap",
-        actorIpHash: "SYSTEM_SANITIZATION_V2",
-        actionType: "editorial.content_sanitization",
-        targetType: "telemetry_articles",
-        targetId: "cabcall-db",
-        reason:
-          "Eliminated leaked pipeline jargon, Mad-Libs fallback strings, and ingestion-gate math across persisted D1 articles and baseline episodes.",
-        beforeState: {
-          version: "v1",
-          total_articles_inspected: allArticles.length,
-        },
-        afterState: {
-          version: "v2",
-          sanitized_article_count: sanitizedArticleCount,
-          cleared_malformed_brief_count: clearedMalformedBriefCount,
-        },
-        replayCommand: {
-          op: "sanitize_content_v2",
-          target_table: "telemetry_articles",
-          target_id: "cabcall-db",
-          invertible: false,
-        },
-      });
-
-      await db
-        .prepare(
+      batchUpdates.push(
+        db.prepare(
           `INSERT INTO system_settings (key, value, updated_at)
-           VALUES ('trestleboard_content_sanitized_v3', '1', datetime('now'))
+           VALUES ('trestleboard_content_sanitized_v4', '1', datetime('now'))
            ON CONFLICT(key) DO UPDATE SET value = '1', updated_at = datetime('now')`
         )
-        .run();
+      );
+
+      await executeD1Batch(db, batchUpdates);
+
+      if (quarantinedCount > 0) {
+        await appendAuditEntry(db, {
+          actorEmail: "system@thecabcall.com",
+          actorRole: "owner",
+          authMethod: "system_bootstrap",
+          actorIpHash: "SYSTEM_QUARANTINE_V4",
+          actionType: "editorial.content_sanitization",
+          targetType: "telemetry_articles",
+          targetId: "cabcall-db",
+          reason:
+            "Transitioned incomplete or Mad-Libs templated D1 articles to QUARANTINED state.",
+          beforeState: {
+            version: "v3",
+            total_articles_inspected: allArticles.length,
+          },
+          afterState: {
+            version: "v4",
+            quarantined_article_count: quarantinedCount,
+          },
+          replayCommand: {
+            op: "quarantine_templated_v4",
+            target_table: "telemetry_articles",
+            target_id: "cabcall-db",
+            invertible: false,
+          },
+        });
+      }
     }
   } catch (err) {
     console.warn("[Rollup] Failed to seed or sanitize baseline archive episodes:", err);
@@ -608,12 +772,13 @@ export function mapD1RowToAdminEpisode(
     durationFormatted: `${mins}:${secs}`,
     fileSizeBytes: Number(row.file_size_bytes || 256000),
     publishedAt: row.published_at,
+    status: row.status || "PUBLISHED",
   };
 }
 
 /**
  * Queries D1 `telemetry_articles` over the specified window (default 7 days) or hand-picked `incidentIds`
- * to compute real telemetry aggregates.
+ * to compute real telemetry aggregates using explicit column selection.
  */
 export async function computeWeeklyAggregatesFromD1(
   db: D1DatabaseLike,
@@ -630,7 +795,8 @@ export async function computeWeeklyAggregatesFromD1(
 
   const recentResult = await db
     .prepare(
-      `SELECT * FROM telemetry_articles
+      `SELECT ${TELEMETRY_ARTICLES_ROLLUP_COLUMNS}
+       FROM telemetry_articles
        WHERE published_at >= datetime('now', ?)
           OR ingested_at >= datetime('now', ?)
        ORDER BY published_at DESC`
@@ -642,7 +808,10 @@ export async function computeWeeklyAggregatesFromD1(
   if (rows.length === 0) {
     const fallbackAll = await db
       .prepare(
-        "SELECT * FROM telemetry_articles ORDER BY published_at DESC LIMIT 50"
+        `SELECT ${TELEMETRY_ARTICLES_ROLLUP_COLUMNS}
+         FROM telemetry_articles
+         ORDER BY published_at DESC
+         LIMIT 50`
       )
       .all<TelemetryArticleRow>();
     rows = fallbackAll.results || [];
@@ -657,7 +826,10 @@ export async function computeWeeklyAggregatesFromD1(
       const placeholders = validIds.map(() => "?").join(", ");
       const customRes = await db
         .prepare(
-          `SELECT * FROM telemetry_articles WHERE id IN (${placeholders}) ORDER BY is_systemic_prob DESC, published_at DESC`
+          `SELECT ${TELEMETRY_ARTICLES_ROLLUP_COLUMNS}
+           FROM telemetry_articles
+           WHERE id IN (${placeholders})
+           ORDER BY is_systemic_prob DESC, published_at DESC`
         )
         .bind(...validIds)
         .all<TelemetryArticleRow>();
@@ -792,15 +964,15 @@ function buildDeterministicRollupScript(
     ? ` Editorial Focus Directive for this docket: ${editorialFocusNote.trim()}.`
     : "";
 
-  const weekly_telemetry = `Welcome to the Friday Change Advisory Board Weekly Brief, Episode ${episodeNumber}. ${agg.dominantToolDisplay} leads this week's Trestleboard at ${agg.dominantToolPct}% of primary classifications, with ${agg.topSreFailureDisplay} emerging as the primary operational failure mode across ${agg.triagedOrSynthesizedCount} active dispatches.${focusClause} Three anchor incidents set our post-incident docket today: first, from ${inc1?.source_feed || "WSJ US Business"}, "${inc1?.title || "Institutional Capacity & Policy Drift"}", examined under ${WORKING_TOOL_DISPLAY_NAMES[inc1?.primary_tool || "square"]}; second, from ${inc2?.source_feed || "NYT HomePage"}, "${inc2?.title || "Cross-Silo Coordination Strain"}", evaluated under ${WORKING_TOOL_DISPLAY_NAMES[inc2?.primary_tool || "level"]}; and third, "${inc3?.title || "Regulatory Execution Divergence"}", where ${SRE_FAILURE_DISPLAY_NAMES[inc3?.sre_failure_mode || "configuration_drift"]} exposed the gap between nominal policy and live operational state.`;
+  const weekly_telemetry = `Welcome to the Friday Change Advisory Board Weekly Brief, Episode ${episodeNumber}. ${agg.dominantToolDisplay} leads this week's Trestleboard across primary classifications, with ${agg.topSreFailureDisplay} emerging as the primary operational failure mode across ${agg.triagedOrSynthesizedCount} active dispatches.${focusClause} Three anchor incidents set our post-incident docket today: first, from ${inc1?.source_feed || "WSJ US Business"}, "${inc1?.title || "Institutional Capacity & Policy Drift"}", examined under ${WORKING_TOOL_DISPLAY_NAMES[inc1?.primary_tool || "square"]}; second, from ${inc2?.source_feed || "NYT HomePage"}, "${inc2?.title || "Cross-Silo Coordination Strain"}", evaluated under ${WORKING_TOOL_DISPLAY_NAMES[inc2?.primary_tool || "level"]}; and third, "${inc3?.title || "Regulatory Execution Divergence"}", where ${SRE_FAILURE_DISPLAY_NAMES[inc3?.sre_failure_mode || "configuration_drift"]} exposed the gap between nominal policy and live operational state.`;
 
   const separating_signal_from_panic = `The 24-hour commentary cycle wants you to read each of these events as a morality play or an unprecedented institutional collapse. When we apply the Proportionality Check, a far more actionable systems pattern comes into focus. Take "${inc1?.title || "our lead dispatch"}" first. ${prop1?.noise_overblown || "Public commentary immediately fixated on headline optics and individual blame."} Yet the structural signal underneath is straightforward: ${prop1?.structural_signal || "when an institution defers structural reconciliation, live execution inevitably drifts from its chartered specification."} We see the exact same signal-to-noise inversion in "${inc2?.title || "our second incident"}". ${prop2?.noise_overblown || "Partisan observers treated the disruption as a sudden shock."} In reality, ${prop2?.structural_signal || "operational telemetry points directly to capacity exhaustion and asymmetric risk allocation that accumulated quietly across multiple quarters."} And in "${inc3?.title || "our third triaged event"}", the friction between ${WORKING_TOOL_DISPLAY_NAMES[inc3?.primary_tool || "trowel"]} and ${WORKING_TOOL_DISPLAY_NAMES[inc3?.secondary_tool || "common_gavel"]} demonstrates how quickly cross-group coordination fractures when upstream safeguards go untested in production. None of these incidents have completed a verified post-mortem, which means any sweeping verdict right now is premature jitter rather than verified engineering truth.`;
 
   const forward_posture = `As we set the trestleboard for the coming seven days, here is how to put the tools to work without waiting for the headlines to settle. First, when tracking the fallout around "${inc1?.title || "this week's policy and fiscal dispatches"}", bring ${agg.dominantToolDisplay} directly to the primary filings: watch whether leadership reconciles the live operational table with the written mandate, or merely issues another round of press assurances. Second, apply Common Gavel to every congressional or corporate hearing on "${inc2?.title || "active institutional disputes"}"—strip away the defensive rhetoric and ask whether the people who architected the constraint are sharing the same horizontal plane of accountability on The Level as the citizens and workers absorbing the load. Finally, keep the 24-Inch Gauge on your own cognitive error budget this weekend: refuse to spend high-priority attention on outraged speculation while the core post-mortem telemetry is still being collected. Until next Friday, keep your telemetry clean and your horizons level.`;
 
   return {
-    title: `CAB Weekly Brief #${episodeNumber}: ${agg.dominantToolDisplay} (${agg.dominantToolPct}%), ${agg.topSreFailureDisplay}, and This Week's Trestleboard`,
-    summary: `Friday 5-minute Change Advisory Board synthesis led by ${agg.dominantToolDisplay} (${agg.dominantToolPct}%) and ${agg.topSreFailureDisplay} across ${agg.triagedOrSynthesizedCount} active dispatches on the Trestleboard.`,
+    title: `CAB Weekly Brief #${episodeNumber}: ${agg.dominantToolDisplay}, ${agg.topSreFailureDisplay}, and This Week's Trestleboard`,
+    summary: `Friday 5-minute Change Advisory Board synthesis led by ${agg.dominantToolDisplay} and ${agg.topSreFailureDisplay} across ${agg.triagedOrSynthesizedCount} active dispatches on the Trestleboard.`,
     weekly_telemetry,
     separating_signal_from_panic,
     forward_posture,
@@ -853,7 +1025,7 @@ Your audience consists of senior systems engineers, institutional leaders, and F
 
 HARD GOVERNANCE CONSTRAINTS (NON-NEGOTIABLE):
 1. ZERO DEFINITIONS RULE: NEVER define what a Square, Plumb, Level, 24-Inch Gauge, Common Gavel, Trowel, or SRE term is. Apply the tools directly in motion as active diagnostic verbs and instruments.
-2. ZERO PIPELINE JARGON: NEVER include ingestion-gate math ("evaluated X dispatches, rejecting Y% noise") or internal classifier names ("Jev", "System-1", "TypeSafe"). Lead immediately with the dominant Working Tool, the primary Failure Mode, and the 3 anchor incidents for the week.
+2. ZERO PIPELINE JARGON: NEVER include ingestion-gate math ("evaluated X dispatches, rejecting Y% noise"), percentage scores, or internal classifier names ("Jev", "System-1", "TypeSafe"). Lead immediately with the dominant Working Tool, the primary Failure Mode, and the 3 anchor incidents for the week.
 3. PROPORTIONALITY CHECK: Explicitly contrast where public panic, cable-news outrage, or partisan commentary was overblown (jitter/noise) vs. the actual structural engineering or governance signal.
 4. EPISTEMIC HUMILITY & ZERO AI SLOP: Frame ongoing stories as active incidents awaiting full post-mortem verification. Never use AI clichés ("delve", "testament", "In today's fast-paced world", "stark reminder").
 5. SPOKEN CADENCE TARGET: ~750 words total across the 3 sections (~5 minutes at 150 WPM):
@@ -868,7 +1040,7 @@ HARD GOVERNANCE CONSTRAINTS (NON-NEGOTIABLE):
   const userPrompt = `Generate Episode #${episodeNumber} of the Friday 5-Minute "CAB Weekly Brief" from the following ${agg.windowDays}-day Trestleboard state:
 
 DOMINANT POSTURE:
-- Dominant Working Tool: ${agg.dominantToolDisplay} (${agg.dominantToolPct}%)
+- Dominant Working Tool: ${agg.dominantToolDisplay}
 - Primary SRE Failure Mode: ${agg.topSreFailureDisplay}
 - Active Incidents on the Trestleboard: ${agg.triagedOrSynthesizedCount}
 ${focusDirectiveBlock}
@@ -1127,7 +1299,7 @@ export async function synthesizeRollupAudioBytes(
  * 1. Computes telemetry aggregates from D1 `telemetry_articles` (supporting windowDays & incidentIds overrides)
  * 2. Calls Gemini to generate the 3-part ~750-word podcast transcript
  * 3. Synthesizes audio & writes the object to R2 (`env.AUDIO_BUCKET`)
- * 4. Upserts the episode into D1 `episodes`
+ * 4. Verifies the R2 audio object via `head()` before transitioning the D1 episode status to `PUBLISHED`
  */
 export async function runWeeklyRollupPipeline(options: {
   db: D1DatabaseLike;
@@ -1218,6 +1390,14 @@ export async function runWeeklyRollupPipeline(options: {
     });
   }
 
+  // R2-to-D1 verification check: only transition to PUBLISHED if R2 head() confirms
+  // the audio object exists, has size > 0, and has a valid audio/* MIME type.
+  const r2Verification = await verifyR2AudioObjectForPublish(
+    options.audioBucket,
+    r2Key
+  );
+  const episodeStatus: EpisodePublishStatus = r2Verification.status;
+
   const publishedAt = new Date().toISOString();
   const wordCount = formattedTranscript
     .split(/\s+/)
@@ -1226,7 +1406,9 @@ export async function runWeeklyRollupPipeline(options: {
     180,
     Math.min(900, Math.round((wordCount / 150) * 60) || 300)
   );
-  const fileSizeBytes = audioBytes.byteLength;
+  const fileSizeBytes = r2Verification.verified
+    ? r2Verification.size
+    : audioBytes.byteLength;
 
   await options.db
     .prepare(
@@ -1239,8 +1421,9 @@ export async function runWeeklyRollupPipeline(options: {
         audio_url,
         duration_seconds,
         file_size_bytes,
-        published_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        published_at,
+        status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(slug) DO UPDATE SET
         episode_number = excluded.episode_number,
         title = excluded.title,
@@ -1249,7 +1432,8 @@ export async function runWeeklyRollupPipeline(options: {
         audio_url = excluded.audio_url,
         duration_seconds = excluded.duration_seconds,
         file_size_bytes = excluded.file_size_bytes,
-        published_at = excluded.published_at`
+        published_at = excluded.published_at,
+        status = excluded.status`
     )
     .bind(
       nextEpisodeNumber,
@@ -1260,7 +1444,8 @@ export async function runWeeklyRollupPipeline(options: {
       audioUrl,
       durationSeconds,
       fileSizeBytes,
-      publishedAt
+      publishedAt,
+      episodeStatus
     )
     .run();
 
@@ -1270,11 +1455,9 @@ export async function runWeeklyRollupPipeline(options: {
     .first<{ id: number }>();
 
   const elapsedMs = Math.max(150, Date.now() - startMs);
-  const notes = `Published CAB Weekly Brief #${nextEpisodeNumber} (${r2Key}, ${Math.round(
+  const notes = `Generated CAB Weekly Brief #${nextEpisodeNumber} (${r2Key}, ${Math.round(
     fileSizeBytes / 1024
-  )} KB) via ${modelUsed}. Dominant Tool: ${agg.dominantToolDisplay} (${
-    agg.dominantToolPct
-  }%).`;
+  )} KB, status=${episodeStatus}) via ${modelUsed}. Dominant Tool: ${agg.dominantToolDisplay}.`;
 
   try {
     await options.db
@@ -1299,7 +1482,7 @@ export async function runWeeklyRollupPipeline(options: {
         agg.triagedOrSynthesizedCount,
         agg.droppedCount,
         elapsedMs,
-        "nominal",
+        r2Verification.verified ? "nominal" : "degraded",
         notes
       )
       .run();
@@ -1324,6 +1507,8 @@ export async function runWeeklyRollupPipeline(options: {
     duration_seconds: durationSeconds,
     file_size_bytes: fileSizeBytes,
     published_at: publishedAt,
+    status: episodeStatus,
+    r2_verified: r2Verification.verified,
     model_used: modelUsed,
     audio_source: audioSource,
     aggregates: {
@@ -1347,7 +1532,9 @@ export async function listAdminEpisodes(
 
   const res = await db
     .prepare(
-      "SELECT * FROM episodes ORDER BY published_at DESC, episode_number DESC, id DESC"
+      `SELECT ${EPISODES_SELECT_COLUMNS}
+       FROM episodes
+       ORDER BY published_at DESC, episode_number DESC, id DESC`
     )
     .all<D1EpisodeTableRow>();
 
@@ -1372,21 +1559,23 @@ export async function getAdminEpisodeByIdOrSlug(
   let row: D1EpisodeTableRow | null = null;
   if (numericId !== null) {
     row = await db
-      .prepare("SELECT * FROM episodes WHERE id = ?")
+      .prepare(`SELECT ${EPISODES_SELECT_COLUMNS} FROM episodes WHERE id = ?`)
       .bind(numericId)
       .first<D1EpisodeTableRow>();
   }
 
   if (!row) {
     row = await db
-      .prepare("SELECT * FROM episodes WHERE slug = ?")
+      .prepare(`SELECT ${EPISODES_SELECT_COLUMNS} FROM episodes WHERE slug = ?`)
       .bind(raw)
       .first<D1EpisodeTableRow>();
   }
 
   if (!row && numericId !== null) {
     row = await db
-      .prepare("SELECT * FROM episodes WHERE episode_number = ?")
+      .prepare(
+        `SELECT ${EPISODES_SELECT_COLUMNS} FROM episodes WHERE episode_number = ?`
+      )
       .bind(numericId)
       .first<D1EpisodeTableRow>();
   }
@@ -1554,6 +1743,7 @@ export async function updateAdminEpisode(options: {
 
   let updatedFileSizeBytes = Number(beforeRow.file_size_bytes || 256000);
   let updatedDurationSeconds = Number(beforeRow.duration_seconds || 300);
+  let updatedStatus: EpisodePublishStatus = beforeRow.status || "PUBLISHED";
   let audioRegenerated = false;
   let audioSource: string | undefined = undefined;
   const r2Key = extractR2KeyFromAudioUrl(beforeRow.audio_url, beforeRow.slug);
@@ -1588,6 +1778,14 @@ export async function updateAdminEpisode(options: {
         },
       });
     }
+    const r2Verification = await verifyR2AudioObjectForPublish(
+      options.audioBucket,
+      r2Key
+    );
+    updatedStatus = r2Verification.status;
+    if (r2Verification.verified) {
+      updatedFileSizeBytes = r2Verification.size;
+    }
     audioRegenerated = true;
   }
 
@@ -1600,7 +1798,8 @@ export async function updateAdminEpisode(options: {
            transcript = ?,
            duration_seconds = ?,
            file_size_bytes = ?,
-           published_at = ?
+           published_at = ?,
+           status = ?
        WHERE id = ?`
     )
     .bind(
@@ -1611,6 +1810,7 @@ export async function updateAdminEpisode(options: {
       updatedDurationSeconds,
       updatedFileSizeBytes,
       updatedPublishedAt,
+      updatedStatus,
       beforeRow.id
     )
     .run();

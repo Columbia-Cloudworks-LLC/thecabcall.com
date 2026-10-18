@@ -7,7 +7,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "node --import ./scripts/register-ts-resolver.mjs scripts/verify-defensive-hardening.ts",
+    "verify": "pwsh -File scripts/verify-defensive-hardening.ps1"
   },
   "dependencies": {
     "lucide-react": "^1.16.0",

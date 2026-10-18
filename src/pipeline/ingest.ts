@@ -6,10 +6,17 @@ import {
 import {
   buildDroppedByFilterJevResult,
   evaluateArticleWithJev,
+  JevDispositionStatus,
+  JevEvaluationOptions,
   JevEvaluationResult,
   JevWorkingToolKey,
+  validateJevEvaluationOutput,
 } from "./jev";
-import { validateAndNormalizeIncidentSummary } from "../lib/sanitize";
+import {
+  normalizeCanonicalUrl,
+  stripUnsafeHtmlAndCdata,
+  validateAndNormalizeIncidentSummary,
+} from "../lib/sanitize";
 
 export interface D1PreparedStatementLike {
   bind(...values: unknown[]): D1PreparedStatementLike;
@@ -20,7 +27,29 @@ export interface D1PreparedStatementLike {
 
 export interface D1DatabaseLike {
   prepare(query: string): D1PreparedStatementLike;
+  batch?<T = unknown>(statements: D1PreparedStatementLike[]): Promise<T[]>;
 }
+
+/**
+ * Executes an array of parameterized D1 prepared statements using `db.batch()` when available,
+ * falling back to sequential execution only on minimal mock objects.
+ */
+export async function executeD1Batch(
+  db: D1DatabaseLike,
+  statements: D1PreparedStatementLike[]
+): Promise<void> {
+  if (statements.length === 0) return;
+  if (typeof db.batch === "function") {
+    await db.batch(statements);
+    return;
+  }
+  for (const stmt of statements) {
+    await stmt.run();
+  }
+}
+
+export const DEFAULT_FEED_FETCH_TIMEOUT_MS = 8_000;
+export const DEFAULT_MAX_FEED_RESPONSE_BYTES = 1_048_576; // 1 MiB strict cap
 
 export interface FeedConfig {
   id?: number;
@@ -165,6 +194,7 @@ export interface FeedFilterAdminActor {
 
 export interface ParsedRssItem {
   urlHash: string;
+  guid?: string;
   sourceFeed: string;
   feedId?: number;
   title: string;
@@ -224,14 +254,22 @@ export interface FilterDryRunResult {
     filterType: IngestFilterType;
     matchTarget: IngestFilterMatchTarget;
     pattern: string;
+    actionValue?: string | null;
     matchCount: number;
   };
   results: FilterDryRunItemResult[];
 }
 
+export type ArticleIngestionStatus =
+  | "triaged"
+  | "QUARANTINED"
+  | "PENDING_RETRY"
+  | "dropped";
+
 export interface IngestedArticleSummary {
   id?: number;
   url_hash: string;
+  guid?: string;
   source_feed: string;
   title: string;
   source_url: string;
@@ -241,7 +279,8 @@ export interface IngestedArticleSummary {
   primary_tool: string;
   secondary_tool: string;
   sre_failure_mode: string;
-  status: "triaged" | "dropped";
+  status: ArticleIngestionStatus;
+  quarantine_reason?: string;
   matched_filters?: string[];
 }
 
@@ -253,6 +292,8 @@ export interface IngestRunSummary {
   skippedDuplicates: number;
   ingestedCount: number;
   triagedCount: number;
+  quarantinedCount: number;
+  pendingRetryCount: number;
   droppedCount: number;
   preFilterDroppedCount?: number;
   avgLatencyMs: number;
@@ -337,11 +378,12 @@ export async function ensureFeedsAndFiltersTables(
     )
     .run();
 
-  for (const f of US_HIGH_IMPACT_FEEDS) {
-    await db
+  const feedSeedStatements = US_HIGH_IMPACT_FEEDS.map((f) =>
+    db
       .prepare(
-        `INSERT OR IGNORE INTO ingest_feeds (name, url, focus_area, domain_sector_override, items_per_poll, enabled, last_status)
-         VALUES (?, ?, ?, ?, ?, 1, 'nominal')`
+        `INSERT INTO ingest_feeds (name, url, focus_area, domain_sector_override, items_per_poll, enabled, last_status)
+         VALUES (?, ?, ?, ?, ?, 1, 'nominal')
+         ON CONFLICT(url) DO NOTHING`
       )
       .bind(
         f.name,
@@ -350,8 +392,8 @@ export async function ensureFeedsAndFiltersTables(
         f.domainSectorOverride || null,
         f.itemsPerPoll || 5
       )
-      .run();
-  }
+  );
+  await executeD1Batch(db, feedSeedStatements);
 
   await db
     .prepare(
@@ -504,8 +546,8 @@ export async function ensureFeedsAndFiltersTables(
       },
     ];
 
-    for (const bf of baselineFilters) {
-      await db
+    const filterSeedStatements = baselineFilters.map((bf) =>
+      db
         .prepare(
           `INSERT INTO ingest_filters (name, description, filter_type, match_target, pattern, scope_feed_id, action_value, enabled, hit_count)
            VALUES (?, ?, ?, ?, ?, NULL, ?, 1, 0)`
@@ -518,8 +560,8 @@ export async function ensureFeedsAndFiltersTables(
           bf.pattern,
           bf.action_value
         )
-        .run();
-    }
+    );
+    await executeD1Batch(db, filterSeedStatements);
   }
 
   await db
@@ -556,15 +598,46 @@ export async function ensureFeedsAndFiltersTables(
     ],
   ];
 
-  for (const [k, v, desc] of defaults) {
-    await db
+  const settingsStatements = defaults.map(([k, v, desc]) =>
+    db
       .prepare(
-        "INSERT OR IGNORE INTO system_settings (key, value, description) VALUES (?, ?, ?)"
+        "INSERT INTO system_settings (key, value, description) VALUES (?, ?, ?) ON CONFLICT(key) DO NOTHING"
       )
       .bind(k, v, desc)
-      .run();
-  }
+  );
+  await executeD1Batch(db, settingsStatements);
 }
+
+export const INGEST_FEEDS_COLUMNS = `
+  id,
+  name,
+  url,
+  focus_area,
+  domain_sector_override,
+  items_per_poll,
+  enabled,
+  last_polled_at,
+  last_status,
+  last_error,
+  items_ingested_total,
+  created_at,
+  updated_at
+`;
+
+export const INGEST_FILTERS_COLUMNS = `
+  id,
+  name,
+  description,
+  filter_type,
+  match_target,
+  pattern,
+  scope_feed_id,
+  action_value,
+  enabled,
+  hit_count,
+  created_at,
+  updated_at
+`;
 
 /**
  * Lists all configured `ingest_feeds` from D1.
@@ -575,8 +648,8 @@ export async function listIngestFeeds(
 ): Promise<IngestFeedRecord[]> {
   await ensureFeedsAndFiltersTables(db);
   const sql = options?.enabledOnly
-    ? "SELECT * FROM ingest_feeds WHERE enabled = 1 ORDER BY id ASC"
-    : "SELECT * FROM ingest_feeds ORDER BY id ASC";
+    ? `SELECT ${INGEST_FEEDS_COLUMNS} FROM ingest_feeds WHERE enabled = 1 ORDER BY id ASC`
+    : `SELECT ${INGEST_FEEDS_COLUMNS} FROM ingest_feeds ORDER BY id ASC`;
   const res = await db.prepare(sql).all<IngestFeedRow>();
   return (res.results || []).map(mapFeedRowToRecord);
 }
@@ -641,7 +714,7 @@ export async function createIngestFeed(
     .run();
 
   const inserted = await db
-    .prepare("SELECT * FROM ingest_feeds WHERE url = ?")
+    .prepare(`SELECT ${INGEST_FEEDS_COLUMNS} FROM ingest_feeds WHERE url = ?`)
     .bind(url)
     .first<IngestFeedRow>();
 
@@ -688,7 +761,7 @@ export async function updateIngestFeed(
   await ensureFeedsAndFiltersTables(db);
 
   const existing = await db
-    .prepare("SELECT * FROM ingest_feeds WHERE id = ?")
+    .prepare(`SELECT ${INGEST_FEEDS_COLUMNS} FROM ingest_feeds WHERE id = ?`)
     .bind(id)
     .first<IngestFeedRow>();
 
@@ -745,7 +818,7 @@ export async function updateIngestFeed(
     .run();
 
   const updated = await db
-    .prepare("SELECT * FROM ingest_feeds WHERE id = ?")
+    .prepare(`SELECT ${INGEST_FEEDS_COLUMNS} FROM ingest_feeds WHERE id = ?`)
     .bind(id)
     .first<IngestFeedRow>();
 
@@ -789,7 +862,7 @@ export async function deleteIngestFeed(
   await ensureFeedsAndFiltersTables(db);
 
   const existing = await db
-    .prepare("SELECT * FROM ingest_feeds WHERE id = ?")
+    .prepare(`SELECT ${INGEST_FEEDS_COLUMNS} FROM ingest_feeds WHERE id = ?`)
     .bind(id)
     .first<IngestFeedRow>();
 
@@ -826,8 +899,8 @@ export async function listIngestFilters(
 ): Promise<IngestFilterRecord[]> {
   await ensureFeedsAndFiltersTables(db);
   const sql = options?.enabledOnly
-    ? "SELECT * FROM ingest_filters WHERE enabled = 1 ORDER BY id ASC"
-    : "SELECT * FROM ingest_filters ORDER BY id ASC";
+    ? `SELECT ${INGEST_FILTERS_COLUMNS} FROM ingest_filters WHERE enabled = 1 ORDER BY id ASC`
+    : `SELECT ${INGEST_FILTERS_COLUMNS} FROM ingest_filters ORDER BY id ASC`;
   const res = await db.prepare(sql).all<IngestFilterRow>();
   return (res.results || []).map(mapFilterRowToRecord);
 }
@@ -907,7 +980,9 @@ export async function createIngestFilter(
     .run();
 
   const inserted = await db
-    .prepare("SELECT * FROM ingest_filters ORDER BY id DESC LIMIT 1")
+    .prepare(
+      `SELECT ${INGEST_FILTERS_COLUMNS} FROM ingest_filters ORDER BY id DESC LIMIT 1`
+    )
     .first<IngestFilterRow>();
 
   if (!inserted) {
@@ -955,7 +1030,7 @@ export async function updateIngestFilter(
   await ensureFeedsAndFiltersTables(db);
 
   const existing = await db
-    .prepare("SELECT * FROM ingest_filters WHERE id = ?")
+    .prepare(`SELECT ${INGEST_FILTERS_COLUMNS} FROM ingest_filters WHERE id = ?`)
     .bind(id)
     .first<IngestFilterRow>();
 
@@ -1023,7 +1098,7 @@ export async function updateIngestFilter(
     .run();
 
   const updated = await db
-    .prepare("SELECT * FROM ingest_filters WHERE id = ?")
+    .prepare(`SELECT ${INGEST_FILTERS_COLUMNS} FROM ingest_filters WHERE id = ?`)
     .bind(id)
     .first<IngestFilterRow>();
 
@@ -1067,7 +1142,7 @@ export async function deleteIngestFilter(
   await ensureFeedsAndFiltersTables(db);
 
   const existing = await db
-    .prepare("SELECT * FROM ingest_filters WHERE id = ?")
+    .prepare(`SELECT ${INGEST_FILTERS_COLUMNS} FROM ingest_filters WHERE id = ?`)
     .bind(id)
     .first<IngestFilterRow>();
 
@@ -1727,41 +1802,55 @@ export async function testIngestFiltersDryRun(
 }
 
 /**
- * Computes a SHA-256 hex digest of the canonical article URL using Web Crypto.
+ * Normalizes a raw RSS `<guid>` or Atom `<id>` value for canonical hashing.
+ * If the GUID is itself an HTTP(S) URL, normalizes it to strip tracking parameters.
  */
-export async function computeUrlSha256(url: string): Promise<string> {
-  const canonical = url.trim();
-  const data = new TextEncoder().encode(canonical);
+export function normalizeCanonicalGuid(
+  rawGuid: string | null | undefined,
+  fallbackNormalizedUrl = ""
+): string {
+  const cleaned = stripUnsafeHtmlAndCdata(rawGuid || "").trim();
+  if (!cleaned) {
+    return fallbackNormalizedUrl;
+  }
+  if (/^https?:\/\//i.test(cleaned)) {
+    return normalizeCanonicalUrl(cleaned) || cleaned;
+  }
+  return cleaned.replace(/\s+/g, " ").toLowerCase();
+}
+
+/**
+ * Computes a deterministic canonical SHA-256 hex digest from the normalized article URL
+ * and normalized GUID prior to processing, guaranteeing idempotent ingestion across headline edits.
+ */
+export async function computeCanonicalArticleHash(
+  rawUrl: string,
+  rawGuid?: string | null
+): Promise<string> {
+  const normalizedUrl = normalizeCanonicalUrl(rawUrl) || rawUrl.trim();
+  const normalizedGuid = normalizeCanonicalGuid(rawGuid, normalizedUrl);
+  const canonicalPayload = `${normalizedUrl}::${normalizedGuid}`;
+  const data = new TextEncoder().encode(canonicalPayload);
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 /**
- * Strips CDATA wrappers, HTML tags, and common HTML entities, collapsing whitespace.
+ * Computes a SHA-256 hex digest of the canonical article URL (+ optional GUID) using Web Crypto.
+ */
+export async function computeUrlSha256(
+  url: string,
+  guid?: string | null
+): Promise<string> {
+  return computeCanonicalArticleHash(url, guid);
+}
+
+/**
+ * Strips CDATA wrappers, unsafe HTML tags (script/style/iframe/object/svg), and HTML entities.
  */
 export function stripHtmlAndCdata(raw: string): string {
-  if (!raw) return "";
-  return raw
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/gi, "$1")
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<\/(p|div|li|h[1-6]|br)>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#0?39;/gi, "'")
-    .replace(/&apos;/gi, "'")
-    .replace(/&#8216;|&#8217;/g, "'")
-    .replace(/&#8220;|&#8221;/g, '"')
-    .replace(/&#8211;|&#8212;/g, "—")
-    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(Number(dec)))
-    .replace(/[ \t]+/g, " ")
-    .replace(/\n\s*\n+/g, "\n\n")
-    .trim();
+  return stripUnsafeHtmlAndCdata(raw);
 }
 
 /**
@@ -1789,9 +1878,105 @@ function extractTagValue(itemXml: string, tagPattern: string): string {
   return match ? match[1] : "";
 }
 
+export interface HardenedFeedFetchOptions {
+  timeoutMs?: number;
+  maxResponseBytes?: number;
+  fetchImpl?: typeof fetch;
+}
+
+/**
+ * Fetches an RSS/Atom XML feed using an isolated `AbortController` timeout and enforces a strict
+ * maximum response byte limit (`maxResponseBytes`, default 1 MiB) via streaming chunk inspection
+ * so hung sockets or oversized XML payloads can never exhaust Worker memory.
+ */
+export async function fetchFeedXmlWithLimits(
+  url: string,
+  options?: HardenedFeedFetchOptions
+): Promise<{ xml: string; status: number; byteLength: number }> {
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_FEED_FETCH_TIMEOUT_MS;
+  const maxBytes = options?.maxResponseBytes ?? DEFAULT_MAX_FEED_RESPONSE_BYTES;
+  const fetchFn = options?.fetchImpl ?? fetch;
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort(new Error(`Feed fetch timed out after ${timeoutMs}ms`));
+  }, timeoutMs);
+
+  try {
+    const response = await fetchFn(url, {
+      headers: {
+        "User-Agent":
+          "TheCABCall-Telemetry/1.0 (+https://thecabcall.com; system-incident-collector)",
+        Accept:
+          "application/rss+xml, application/atom+xml, application/xml, text/xml, */*;q=0.8",
+      },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} ${response.statusText}`);
+    }
+
+    const contentLengthHeader = response.headers?.get?.("content-length");
+    if (contentLengthHeader) {
+      const declaredBytes = Number.parseInt(contentLengthHeader, 10);
+      if (Number.isFinite(declaredBytes) && declaredBytes > maxBytes) {
+        controller.abort();
+        throw new Error(
+          `Feed Content-Length (${declaredBytes} bytes) exceeds maximum limit of ${maxBytes} bytes`
+        );
+      }
+    }
+
+    if (!response.body || typeof response.body.getReader !== "function") {
+      const text = await response.text();
+      const byteLength = new TextEncoder().encode(text).byteLength;
+      if (byteLength > maxBytes) {
+        throw new Error(
+          `Feed payload (${byteLength} bytes) exceeds maximum limit of ${maxBytes} bytes`
+        );
+      }
+      return { xml: text, status: response.status, byteLength };
+    }
+
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        totalBytes += value.byteLength;
+        if (totalBytes > maxBytes) {
+          await reader.cancel("Response exceeded maxResponseBytes").catch(() => {});
+          controller.abort();
+          throw new Error(
+            `Feed stream exceeded maximum limit of ${maxBytes} bytes`
+          );
+        }
+        chunks.push(value);
+      }
+    }
+
+    const combined = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      combined.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+
+    const xml = new TextDecoder("utf-8", { fatal: false }).decode(combined);
+    return { xml, status: response.status, byteLength: totalBytes };
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 /**
  * Parses an RSS 2.0 (`<item>`) or Atom 1.0 (`<entry>`) XML payload and extracts up to `maxItems` (default 5) items.
- * Prefers richer `<content:encoded>` / `<content>` + `<description>` / `<summary>` payloads so Jev receives multi-paragraph context.
+ * Strips all unsafe HTML, CDATA wrappers, and URL tracking parameters during initial normalization,
+ * and computes deterministic canonical SHA-256 hashes (normalized URL + GUID) prior to processing.
  */
 export async function parseRssFeedItems(
   xml: string,
@@ -1799,6 +1984,10 @@ export async function parseRssFeedItems(
   maxItems = 5,
   feedId?: number
 ): Promise<ParsedRssItem[]> {
+  if (!xml || typeof xml !== "string") {
+    return [];
+  }
+
   const items: ParsedRssItem[] = [];
   const blockRegex = /<(?:item|entry)[\s>]([\s\S]*?)<\/(?:item|entry)>/gi;
   let match: RegExpExecArray | null;
@@ -1806,6 +1995,8 @@ export async function parseRssFeedItems(
   while ((match = blockRegex.exec(xml)) !== null && items.length < maxItems) {
     const block = match[1];
     const rawTitle = extractTagValue(block, "title");
+    const rawGuid =
+      extractTagValue(block, "guid") || extractTagValue(block, "id");
     let rawLink = extractTagValue(block, "link");
     if (!rawLink) {
       // Atom <link href="..." rel="alternate" /> or <link href="..." />
@@ -1817,11 +2008,8 @@ export async function parseRssFeedItems(
         rawLink = atomLinkMatch[1];
       }
     }
-    if (!rawLink) {
-      const guidMatch = block.match(/<(?:guid|id)[^>]*>([\s\S]*?)<\/(?:guid|id)>/i);
-      if (guidMatch && guidMatch[1].includes("http")) {
-        rawLink = guidMatch[1];
-      }
+    if (!rawLink && rawGuid && /https?:\/\//i.test(rawGuid)) {
+      rawLink = rawGuid;
     }
 
     const rawDesc =
@@ -1836,10 +2024,14 @@ export async function parseRssFeedItems(
       extractTagValue(block, "updated");
 
     const title = stripHtmlAndCdata(rawTitle);
-    const sourceUrl = stripHtmlAndCdata(rawLink);
+    const cleanedLink = stripHtmlAndCdata(rawLink);
+    const sourceUrl = normalizeCanonicalUrl(cleanedLink);
     if (!title || !sourceUrl) {
       continue;
     }
+
+    const guid = normalizeCanonicalGuid(rawGuid, sourceUrl);
+    const urlHash = await computeCanonicalArticleHash(sourceUrl, guid);
 
     const cleanedDesc = stripHtmlAndCdata(rawDesc);
     const cleanedContent = stripHtmlAndCdata(rawContentEncoded);
@@ -1873,10 +2065,9 @@ export async function parseRssFeedItems(
       }
     }
 
-    const urlHash = await computeUrlSha256(sourceUrl);
-
     items.push({
       urlHash,
+      guid,
       sourceFeed,
       feedId,
       title,
@@ -1895,7 +2086,8 @@ export async function parseRssFeedItems(
  */
 export async function testCandidateRssFeed(
   candidateUrl: string,
-  maxItems = 5
+  maxItems = 5,
+  fetchOptions?: HardenedFeedFetchOptions
 ): Promise<FeedTestPreviewResult> {
   const startedMs = Date.now();
   const cleanUrl = candidateUrl.trim();
@@ -1911,30 +2103,9 @@ export async function testCandidateRssFeed(
   }
 
   try {
-    const response = await fetch(cleanUrl, {
-      headers: {
-        "User-Agent":
-          "TheCABCall-Telemetry/1.0 (+https://thecabcall.com; feed-validator)",
-        Accept:
-          "application/rss+xml, application/atom+xml, application/xml, text/xml, */*;q=0.8",
-      },
-      signal: AbortSignal.timeout(8000),
-    });
-
+    const { xml, status } = await fetchFeedXmlWithLimits(cleanUrl, fetchOptions);
     const latencyMs = Date.now() - startedMs;
-    if (!response.ok) {
-      return {
-        ok: false,
-        url: cleanUrl,
-        httpStatus: response.status,
-        latencyMs,
-        itemCount: 0,
-        items: [],
-        error: `HTTP ${response.status} ${response.statusText}`,
-      };
-    }
 
-    const xml = await response.text();
     const channelTitleMatch = xml.match(
       /<(?:channel|feed)[\s>][\s\S]*?<title[^>]*>([\s\S]*?)<\/title>/i
     );
@@ -1964,12 +2135,12 @@ export async function testCandidateRssFeed(
         url: cleanUrl,
         feedTitle,
         feedFormat,
-        httpStatus: response.status,
+        httpStatus: status,
         latencyMs,
         itemCount: 0,
         items: [],
         error:
-          "Connected successfully, but no RSS <item> or Atom <entry> elements were found in the response.",
+          "Connected successfully, but no valid RSS <item> or Atom <entry> elements were found in the response.",
       };
     }
 
@@ -1978,7 +2149,7 @@ export async function testCandidateRssFeed(
       url: cleanUrl,
       feedTitle,
       feedFormat,
-      httpStatus: response.status,
+      httpStatus: status,
       latencyMs,
       itemCount: items.length,
       items,
@@ -1996,21 +2167,22 @@ export async function testCandidateRssFeed(
 }
 
 /**
- * Fetches the latest items from all active feeds in D1 `ingest_feeds` (`WHERE enabled = 1`),
- * falling back to `US_HIGH_IMPACT_FEEDS` if D1 is not provided or empty.
- * Also updates `last_polled_at`, `last_status`, and `last_error` on each `ingest_feeds` row.
+ * Concurrently polls all active feeds in D1 `ingest_feeds` (`WHERE enabled = 1`, falling back to
+ * `US_HIGH_IMPACT_FEEDS`) using isolated timeout controllers and strict response byte limits.
+ * Updates `last_polled_at`, `last_status`, and `last_error` in a single parameterized `db.batch()`.
  */
 export async function collectLatestUsRssItems(
   itemsPerFeed = 5,
-  db?: D1DatabaseLike
+  db?: D1DatabaseLike,
+  fetchOptions?: HardenedFeedFetchOptions & { feedsOverride?: FeedConfig[] }
 ): Promise<{
   items: ParsedRssItem[];
   feedsPolled: number;
   feedErrors: { feed: string; error: string }[];
 }> {
-  let activeFeeds: FeedConfig[] = US_HIGH_IMPACT_FEEDS;
+  let activeFeeds: FeedConfig[] = fetchOptions?.feedsOverride ?? US_HIGH_IMPACT_FEEDS;
 
-  if (db) {
+  if (!fetchOptions?.feedsOverride && db) {
     try {
       const dbFeeds = await listIngestFeeds(db, { enabledOnly: true });
       if (dbFeeds.length > 0) {
@@ -2030,76 +2202,82 @@ export async function collectLatestUsRssItems(
 
   const allItems: ParsedRssItem[] = [];
   const feedErrors: { feed: string; error: string }[] = [];
+  const feedStatusStatements: D1PreparedStatementLike[] = [];
 
-  await Promise.all(
+  const settled = await Promise.allSettled(
     activeFeeds.map(async (feed) => {
       const polledAt = new Date().toISOString();
       const pollLimit = feed.itemsPerPoll || itemsPerFeed;
       try {
-        const response = await fetch(feed.url, {
-          headers: {
-            "User-Agent":
-              "TheCABCall-Telemetry/1.0 (+https://thecabcall.com; system-incident-collector)",
-            Accept:
-              "application/rss+xml, application/atom+xml, application/xml, text/xml, */*;q=0.8",
-          },
-          signal: AbortSignal.timeout(8000),
-        });
-
-        if (!response.ok) {
-          const errMsg = `HTTP ${response.status} ${response.statusText}`;
-          feedErrors.push({
-            feed: feed.name,
-            error: errMsg,
-          });
-          if (db && feed.id) {
-            await db
-              .prepare(
-                "UPDATE ingest_feeds SET last_polled_at = ?, last_status = 'error', last_error = ?, updated_at = ? WHERE id = ?"
-              )
-              .bind(polledAt, errMsg, polledAt, feed.id)
-              .run()
-              .catch(() => {});
-          }
-          return;
-        }
-
-        const xml = await response.text();
+        const { xml } = await fetchFeedXmlWithLimits(feed.url, fetchOptions);
         const parsed = await parseRssFeedItems(
           xml,
           feed.name,
           pollLimit,
           feed.id
         );
-        allItems.push(...parsed);
-
-        if (db && feed.id) {
-          await db
-            .prepare(
-              "UPDATE ingest_feeds SET last_polled_at = ?, last_status = 'nominal', last_error = NULL, updated_at = ? WHERE id = ?"
-            )
-            .bind(polledAt, polledAt, feed.id)
-            .run()
-            .catch(() => {});
-        }
+        return {
+          ok: true as const,
+          feed,
+          polledAt,
+          items: parsed,
+        };
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : String(err);
-        feedErrors.push({
-          feed: feed.name,
+        return {
+          ok: false as const,
+          feed,
+          polledAt,
           error: errMsg,
-        });
-        if (db && feed.id) {
-          await db
-            .prepare(
-              "UPDATE ingest_feeds SET last_polled_at = ?, last_status = 'error', last_error = ?, updated_at = ? WHERE id = ?"
-            )
-            .bind(polledAt, errMsg, polledAt, feed.id)
-            .run()
-            .catch(() => {});
-        }
+        };
       }
     })
   );
+
+  for (const outcome of settled) {
+    if (outcome.status === "rejected") {
+      feedErrors.push({
+        feed: "Unknown Feed",
+        error:
+          outcome.reason instanceof Error
+            ? outcome.reason.message
+            : String(outcome.reason),
+      });
+      continue;
+    }
+
+    const res = outcome.value;
+    if (res.ok) {
+      allItems.push(...res.items);
+      if (db && res.feed.id) {
+        feedStatusStatements.push(
+          db
+            .prepare(
+              "UPDATE ingest_feeds SET last_polled_at = ?, last_status = 'nominal', last_error = NULL, updated_at = ? WHERE id = ?"
+            )
+            .bind(res.polledAt, res.polledAt, res.feed.id)
+        );
+      }
+    } else {
+      feedErrors.push({
+        feed: res.feed.name,
+        error: res.error,
+      });
+      if (db && res.feed.id) {
+        feedStatusStatements.push(
+          db
+            .prepare(
+              "UPDATE ingest_feeds SET last_polled_at = ?, last_status = 'error', last_error = ?, updated_at = ? WHERE id = ?"
+            )
+            .bind(res.polledAt, res.error, res.polledAt, res.feed.id)
+        );
+      }
+    }
+  }
+
+  if (db && feedStatusStatements.length > 0) {
+    await executeD1Batch(db, feedStatusStatements).catch(() => {});
+  }
 
   return {
     items: allItems,
@@ -2109,20 +2287,29 @@ export async function collectLatestUsRssItems(
 }
 
 /**
- * Runs one full pass of the dynamic RSS collector + `ingest_filters` triage rules + Jev (`jev-1.14.0`)
- * classifier across up to `maxNetNew` net-new articles, storing results in Cloudflare D1 `telemetry_articles`,
- * incrementing filter `hit_count` and feed `total_ingested`, and logging the execution in `pipeline_runs`.
+ * Runs one full pass of the hardened RSS ingestion & `jev-1.14.0` classification pipeline:
+ * 1. Polls all active feeds concurrently with isolated timeouts & byte limits.
+ * 2. Decouples raw feed ingestion from Jev classification by batch-inserting raw normalized items
+ *    into `telemetry_articles` with `ON CONFLICT(url_hash) DO NOTHING` and initial status `'PENDING_RETRY'`.
+ * 3. Evaluates `jev-1.14.0` classification with strict runtime boundary validation:
+ *    - Transient Jev API failures leave the record in `'PENDING_RETRY'` (never dropping ingested records).
+ *    - Malformed or low-confidence Jev outputs transition the record to `'QUARANTINED'`.
+ *    - Valid high-signal records transition to `'triaged'`.
+ * 4. Persists all classification updates and counter increments via parameterized `db.batch()`.
  */
 export async function runD1IngestPipeline(options: {
   db: D1DatabaseLike;
   typesafeApiKey?: string;
   maxNetNew?: number;
   itemsPerFeed?: number;
+  fetchOptions?: HardenedFeedFetchOptions & { feedsOverride?: FeedConfig[] };
+  jevOptions?: Partial<JevEvaluationOptions>;
   customArticle?: {
     title: string;
     description: string;
     sourceFeed: string;
     link?: string;
+    guid?: string;
   };
 }): Promise<IngestRunSummary> {
   const startedAt = new Date().toISOString();
@@ -2142,13 +2329,16 @@ export async function runD1IngestPipeline(options: {
   let feedErrors: { feed: string; error: string }[] = [];
 
   if (options.customArticle) {
-    const sourceUrl =
+    const rawUrl =
       options.customArticle.link?.trim() ||
       `https://thecabcall.com/live-sim/${Date.now()}`;
-    const urlHash = await computeUrlSha256(sourceUrl);
-    const customTitle = options.customArticle.title.trim();
+    const sourceUrl = normalizeCanonicalUrl(rawUrl) || rawUrl;
+    const guid = normalizeCanonicalGuid(options.customArticle.guid, sourceUrl);
+    const urlHash = await computeCanonicalArticleHash(sourceUrl, guid);
+    const customTitle = stripHtmlAndCdata(options.customArticle.title.trim());
     const customFeed =
-      options.customArticle.sourceFeed?.trim() || "LIVE TELEMETRY SANDBOX";
+      stripHtmlAndCdata(options.customArticle.sourceFeed?.trim() || "") ||
+      "LIVE TELEMETRY SANDBOX";
     const validation = validateAndNormalizeIncidentSummary({
       title: customTitle,
       sourceFeed: customFeed,
@@ -2159,6 +2349,7 @@ export async function runD1IngestPipeline(options: {
       items = [
         {
           urlHash,
+          guid,
           sourceFeed: customFeed,
           title: customTitle,
           sourceUrl,
@@ -2168,7 +2359,11 @@ export async function runD1IngestPipeline(options: {
       ];
     }
   } else {
-    const collected = await collectLatestUsRssItems(itemsPerFeed, options.db);
+    const collected = await collectLatestUsRssItems(
+      itemsPerFeed,
+      options.db,
+      options.fetchOptions
+    );
     items = collected.items;
     feedsPolled = collected.feedsPolled;
     feedErrors = collected.feedErrors;
@@ -2176,6 +2371,8 @@ export async function runD1IngestPipeline(options: {
 
   let skippedDuplicates = 0;
   let triagedCount = 0;
+  let quarantinedCount = 0;
+  let pendingRetryCount = 0;
   let droppedCount = 0;
   let preFilterDroppedCount = 0;
   let totalJevLatencyMs = 0;
@@ -2184,36 +2381,88 @@ export async function runD1IngestPipeline(options: {
   const feedIngestedCounter = new Map<number, number>();
   const filterHitCounter = new Map<number, number>();
 
+  // Deduplicate within batch and check existing records in D1
+  const candidateItems: ParsedRssItem[] = [];
   for (const item of items) {
-    if (processedArticles.length >= maxNetNew) {
+    if (candidateItems.length >= maxNetNew) {
       break;
     }
-
     if (seenHashesInBatch.has(item.urlHash)) {
       skippedDuplicates++;
       continue;
     }
     seenHashesInBatch.add(item.urlHash);
 
-    // Check D1 for existing url_hash
     const existing = await options.db
-      .prepare("SELECT id, url_hash FROM telemetry_articles WHERE url_hash = ?")
+      .prepare(
+        "SELECT id, url_hash, status FROM telemetry_articles WHERE url_hash = ?"
+      )
       .bind(item.urlHash)
-      .first<{ id: number; url_hash: string }>();
+      .first<{ id: number; url_hash: string; status: string }>();
 
-    if (existing && !options.customArticle) {
+    if (existing && existing.status !== "PENDING_RETRY" && !options.customArticle) {
       skippedDuplicates++;
       continue;
     }
 
-    // Evaluate dynamic ingest_filters before and after Jev
+    candidateItems.push(item);
+  }
+
+  // Phase 1: Decoupled Raw Ingestion Persistence via parameterized db.batch()
+  // Persist raw feed records with status = 'PENDING_RETRY' and ON CONFLICT(url_hash) DO NOTHING
+  // BEFORE calling jev-1.14.0 so transient classification failures never drop ingested feed records.
+  if (candidateItems.length > 0) {
+    const rawInsertStatements = candidateItems.map((item) =>
+      options.db
+        .prepare(
+          `INSERT INTO telemetry_articles (
+            url_hash,
+            source_feed,
+            title,
+            source_url,
+            raw_excerpt,
+            published_at,
+            is_systemic_prob,
+            jev_confidence,
+            primary_tool,
+            secondary_tool,
+            sre_failure_mode,
+            jev_raw_json,
+            status
+          ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'square', 'twenty_four_inch_gauge', 'configuration_drift', '{}', 'PENDING_RETRY')
+          ON CONFLICT(url_hash) DO NOTHING`
+        )
+        .bind(
+          item.urlHash,
+          item.sourceFeed,
+          item.title,
+          item.sourceUrl,
+          item.rawExcerpt,
+          item.publishedAt
+        )
+    );
+    await executeD1Batch(options.db, rawInsertStatements);
+  }
+
+  // Phase 2: Jev-1.14.0 Classification & Strict Runtime Boundary Validation
+  const classificationStatements: D1PreparedStatementLike[] = [];
+
+  for (const item of candidateItems) {
+    if (item.feedId) {
+      feedIngestedCounter.set(
+        item.feedId,
+        (feedIngestedCounter.get(item.feedId) || 0) + 1
+      );
+    }
+
     const filterEval = evaluateFiltersOnItem(item, activeFilters);
     for (const fId of filterEval.matchedFilterIds) {
       filterHitCounter.set(fId, (filterHitCounter.get(fId) || 0) + 1);
     }
 
-    let jevResult: JevEvaluationResult;
     const evalStartMs = Date.now();
+    let jevResult: JevEvaluationResult | null = null;
+    let transientError: string | null = null;
 
     if (filterEval.preFilterDropped && !options.customArticle) {
       preFilterDroppedCount++;
@@ -2227,93 +2476,111 @@ export async function runD1IngestPipeline(options: {
       );
       totalJevLatencyMs += Math.max(12, Date.now() - evalStartMs);
     } else {
-      jevResult = await evaluateArticleWithJev(
-        {
-          title: item.title,
-          source: item.sourceFeed,
-          excerpt: item.rawExcerpt,
-        },
-        options.typesafeApiKey,
-        {
-          minSystemicProb: thresholds.jevMinSystemicProb,
-          minConfidence: thresholds.jevMinConfidence,
-          systemicProbDelta: filterEval.systemicProbDelta,
-          forcedPrimaryTool: filterEval.forcedPrimaryTool,
-          appliedFilterNames: filterEval.matchedFilterNames,
-        }
-      );
-      totalJevLatencyMs += Math.max(85, Date.now() - evalStartMs);
+      try {
+        jevResult = await evaluateArticleWithJev(
+          {
+            title: item.title,
+            source: item.sourceFeed,
+            excerpt: item.rawExcerpt,
+          },
+          options.typesafeApiKey,
+          {
+            minSystemicProb: thresholds.jevMinSystemicProb,
+            minConfidence: thresholds.jevMinConfidence,
+            systemicProbDelta: filterEval.systemicProbDelta,
+            forcedPrimaryTool: filterEval.forcedPrimaryTool,
+            appliedFilterNames: filterEval.matchedFilterNames,
+            ...options.jevOptions,
+          }
+        );
+        totalJevLatencyMs += Math.max(85, Date.now() - evalStartMs);
+      } catch (err) {
+        // Transient Jev failure: do NOT drop the ingested record; keep it in PENDING_RETRY
+        transientError = err instanceof Error ? err.message : String(err);
+        totalJevLatencyMs += Math.max(25, Date.now() - evalStartMs);
+      }
     }
 
-    // For custom sandbox articles, ensure they enter the triaged queue so System-2 synthesis can run immediately
-    const finalStatus: "triaged" | "dropped" = options.customArticle
-      ? "triaged"
-      : jevResult.status;
-
-    await options.db
-      .prepare(
-        `INSERT INTO telemetry_articles (
-          url_hash,
-          source_feed,
-          title,
-          source_url,
-          raw_excerpt,
-          published_at,
-          is_systemic_prob,
-          jev_confidence,
-          primary_tool,
-          secondary_tool,
-          sre_failure_mode,
-          jev_raw_json,
-          status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(url_hash) DO UPDATE SET
-          is_systemic_prob = excluded.is_systemic_prob,
-          jev_confidence = excluded.jev_confidence,
-          primary_tool = excluded.primary_tool,
-          secondary_tool = excluded.secondary_tool,
-          sre_failure_mode = excluded.sre_failure_mode,
-          jev_raw_json = excluded.jev_raw_json,
-          status = excluded.status`
-      )
-      .bind(
-        item.urlHash,
-        item.sourceFeed,
-        item.title,
-        item.sourceUrl,
-        item.rawExcerpt,
-        item.publishedAt,
-        jevResult.isSystemicProb,
-        jevResult.jevConfidence,
-        jevResult.primaryTool,
-        jevResult.secondaryTool,
-        jevResult.sreFailureMode,
-        jevResult.rawJson,
-        finalStatus
-      )
-      .run();
-
-    const insertedRow = await options.db
-      .prepare("SELECT id FROM telemetry_articles WHERE url_hash = ?")
-      .bind(item.urlHash)
-      .first<{ id: number }>();
-
-    if (item.feedId) {
-      feedIngestedCounter.set(
-        item.feedId,
-        (feedIngestedCounter.get(item.feedId) || 0) + 1
+    if (transientError || !jevResult) {
+      pendingRetryCount++;
+      const retryRawJson = JSON.stringify({
+        status: "PENDING_RETRY",
+        error: transientError || "Unknown transient Jev classification error",
+        timestamp: new Date().toISOString(),
+      });
+      classificationStatements.push(
+        options.db
+          .prepare(
+            `UPDATE telemetry_articles
+             SET status = 'PENDING_RETRY',
+                 jev_raw_json = ?
+             WHERE url_hash = ?`
+          )
+          .bind(retryRawJson, item.urlHash)
       );
+
+      processedArticles.push({
+        url_hash: item.urlHash,
+        guid: item.guid,
+        source_feed: item.sourceFeed,
+        title: item.title,
+        source_url: item.sourceUrl,
+        published_at: item.publishedAt,
+        is_systemic_prob: 0,
+        jev_confidence: 0,
+        primary_tool: "square",
+        secondary_tool: "twenty_four_inch_gauge",
+        sre_failure_mode: "configuration_drift",
+        status: "PENDING_RETRY",
+        quarantine_reason: transientError || undefined,
+      });
+      continue;
     }
 
-    if (finalStatus === "triaged") {
-      triagedCount++;
-    } else {
+    // Enforce strict runtime boundary validation on jevResult
+    const boundaryCheck = validateJevEvaluationOutput(jevResult, {
+      minSystemicProb: thresholds.jevMinSystemicProb,
+      minConfidence: thresholds.jevMinConfidence,
+    });
+
+    let finalStatus: ArticleIngestionStatus;
+    if (!boundaryCheck.valid || boundaryCheck.quarantined || jevResult.status !== "triaged") {
+      finalStatus = "QUARANTINED";
+      quarantinedCount++;
       droppedCount++;
+    } else {
+      finalStatus = "triaged";
+      triagedCount++;
     }
+
+    classificationStatements.push(
+      options.db
+        .prepare(
+          `UPDATE telemetry_articles
+           SET is_systemic_prob = ?,
+               jev_confidence = ?,
+               primary_tool = ?,
+               secondary_tool = ?,
+               sre_failure_mode = ?,
+               jev_raw_json = ?,
+               status = ?
+           WHERE url_hash = ?`
+        )
+        .bind(
+          jevResult.isSystemicProb,
+          jevResult.jevConfidence,
+          jevResult.primaryTool,
+          jevResult.secondaryTool,
+          jevResult.sreFailureMode,
+          jevResult.rawJson,
+          finalStatus,
+          item.urlHash
+        )
+    );
 
     processedArticles.push({
-      id: insertedRow?.id,
       url_hash: item.urlHash,
+      guid: item.guid,
       source_feed: item.sourceFeed,
       title: item.title,
       source_url: item.sourceUrl,
@@ -2324,6 +2591,7 @@ export async function runD1IngestPipeline(options: {
       secondary_tool: jevResult.secondaryTool,
       sre_failure_mode: jevResult.sreFailureMode,
       status: finalStatus,
+      quarantine_reason: boundaryCheck.reason || jevResult.quarantineReason,
       matched_filters:
         filterEval.matchedFilterNames.length > 0
           ? filterEval.matchedFilterNames
@@ -2331,25 +2599,49 @@ export async function runD1IngestPipeline(options: {
     });
   }
 
-  // Persist incremented hit_count on matched filters and total_ingested on polled feeds
   for (const [filterId, delta] of filterHitCounter.entries()) {
-    await options.db
-      .prepare(
-        "UPDATE ingest_filters SET hit_count = hit_count + ?, updated_at = datetime('now') WHERE id = ?"
-      )
-      .bind(delta, filterId)
-      .run()
-      .catch(() => {});
+    classificationStatements.push(
+      options.db
+        .prepare(
+          "UPDATE ingest_filters SET hit_count = hit_count + ?, updated_at = datetime('now') WHERE id = ?"
+        )
+        .bind(delta, filterId)
+    );
   }
 
   for (const [feedId, delta] of feedIngestedCounter.entries()) {
-    await options.db
+    classificationStatements.push(
+      options.db
+        .prepare(
+          "UPDATE ingest_feeds SET total_ingested = total_ingested + ?, updated_at = datetime('now') WHERE id = ?"
+        )
+        .bind(delta, feedId)
+    );
+  }
+
+  if (classificationStatements.length > 0) {
+    await executeD1Batch(options.db, classificationStatements);
+  }
+
+  if (processedArticles.length > 0) {
+    const hashes = processedArticles.map((a) => a.url_hash);
+    const placeholders = hashes.map(() => "?").join(", ");
+    const idRows = await options.db
       .prepare(
-        "UPDATE ingest_feeds SET total_ingested = total_ingested + ?, updated_at = datetime('now') WHERE id = ?"
+        `SELECT id, url_hash FROM telemetry_articles WHERE url_hash IN (${placeholders})`
       )
-      .bind(delta, feedId)
-      .run()
-      .catch(() => {});
+      .bind(...hashes)
+      .all<{ id: number; url_hash: string }>();
+    const hashToId = new Map<string, number>();
+    for (const r of idRows.results || []) {
+      hashToId.set(r.url_hash, r.id);
+    }
+    for (const art of processedArticles) {
+      const id = hashToId.get(art.url_hash);
+      if (typeof id === "number") {
+        art.id = id;
+      }
+    }
   }
 
   const completedAt = new Date().toISOString();
@@ -2359,10 +2651,10 @@ export async function runD1IngestPipeline(options: {
       : 118;
 
   const notes = options.customArticle
-    ? `Sandbox Jev (jev-1.14.0) triage on "${options.customArticle.title.slice(0, 60)}": ${processedArticles[0]?.primary_tool || "square"} (${Math.round((processedArticles[0]?.jev_confidence || 0.85) * 100)}% confidence).`
+    ? `Sandbox triage on "${options.customArticle.title.slice(0, 60)}": ${processedArticles[0]?.status || "QUARANTINED"}.`
     : processedArticles.length > 0
-      ? `Ingested ${processedArticles.length} net-new dispatches across ${feedsPolled} active feeds via Jev (jev-1.14.0, threshold >= ${thresholds.jevMinSystemicProb.toFixed(2)}): ${triagedCount} triaged, ${droppedCount} dropped (${preFilterDroppedCount} pre-filtered by rules, ${skippedDuplicates} duplicates skipped).`
-      : `Polled ${feedsPolled} active RSS feeds (${items.length} items); all ${skippedDuplicates} items matched existing D1 URL hashes (0 net-new).`;
+      ? `Ingested ${processedArticles.length} net-new dispatches across ${feedsPolled} active feeds: ${triagedCount} triaged, ${quarantinedCount} quarantined, ${pendingRetryCount} pending retry (${skippedDuplicates} duplicates skipped).`
+      : `Polled ${feedsPolled} active RSS feeds (${items.length} items); all ${skippedDuplicates} items matched existing canonical hashes (0 net-new).`;
 
   try {
     await options.db
@@ -2385,7 +2677,7 @@ export async function runD1IngestPipeline(options: {
         completedAt,
         processedArticles.length > 0 ? processedArticles.length : items.length,
         triagedCount,
-        droppedCount,
+        quarantinedCount,
         avgLatencyMs,
         feedErrors.length === feedsPolled && feedsPolled > 0
           ? "degraded"
@@ -2405,6 +2697,8 @@ export async function runD1IngestPipeline(options: {
     skippedDuplicates,
     ingestedCount: processedArticles.length,
     triagedCount,
+    quarantinedCount,
+    pendingRetryCount,
     droppedCount,
     preFilterDroppedCount,
     avgLatencyMs,
@@ -2413,3 +2707,4 @@ export async function runD1IngestPipeline(options: {
     feedErrors: feedErrors.length > 0 ? feedErrors : undefined,
   };
 }
+

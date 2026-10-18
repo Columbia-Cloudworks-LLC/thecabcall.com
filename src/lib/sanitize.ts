@@ -158,6 +158,9 @@ const BANNED_PIPELINE_PATTERNS: RegExp[] = [
   /Under System-1 Jev evaluation/i,
   /active incident with incomplete public telemetry/i,
   /Classified under .+ \(\d+%\) and /i,
+  /\bApplying .+ alongside .+ anchors the review of\b/i,
+  /\bUnder\s+(?:The Square|The Plumb|The Level|The Trowel|Common Gavel|24-Inch Gauge)\s*\([^)]+\)\s+and\s+(?:The Square|The Plumb|The Level|The Trowel|Common Gavel|24-Inch Gauge)/i,
+  /\bunderwent an operational evaluation to determine how\b/i,
 ];
 
 const GENERIC_SIGNAL_PATTERNS: RegExp[] = [
@@ -169,26 +172,175 @@ const GENERIC_SIGNAL_PATTERNS: RegExp[] = [
   /^Alert Fatigue & Signal Loss:\s+Warning signs or audit flags were present/i,
   /^Blame Culture vs\. Root-Cause Isolation:\s+Actors are punishing a scapegoat/i,
   /^Technical & Institutional Debt(?:\s*\/\s*Capacity Exhaustion)?:\s+Demand or crisis load exceeded/i,
+  /^Measured against (?:The Square|The Plumb|The Level|The Trowel|Common Gavel|24-Inch Gauge), the core operational friction is that .+—demonstrating how live institutional execution drifted from its stated baseline without continuous verification\.$/i,
+  /^Examined through (?:The Square|The Plumb|The Level|The Trowel|Common Gavel|24-Inch Gauge), the underlying constraint is that .+, allowing localized friction across organizational boundaries to cascade into a broader operational bottleneck\.$/i,
+  /^Tested by (?:The Square|The Plumb|The Level|The Trowel|Common Gavel|24-Inch Gauge), the structural lesson is that .+, exposing an unvalidated safeguard that could not absorb real-world load once primary controls were bypassed\.$/i,
+  /^Weighed on (?:The Square|The Plumb|The Level|The Trowel|Common Gavel|24-Inch Gauge), the signal is that .+, illustrating how high-volume noise and competing priorities exhaust finite institutional bandwidth before core risks are addressed\.$/i,
+  /^Applying (?:The Square|The Plumb|The Level|The Trowel|Common Gavel|24-Inch Gauge), the structural reality is that .+, showing why isolating the upstream incentive structure matters more than punishing proximate actors\.$/i,
+  /^Evaluated on (?:The Square|The Plumb|The Level|The Trowel|Common Gavel|24-Inch Gauge), the structural constraint is that .+, reflecting how deferred capacity investments eventually force emergency interventions under peak load\.$/i,
 ];
 
 const GENERIC_NOISE_PATTERNS: RegExp[] = [
   /^Reactive commentary framing ["“'].+?["”'] as an isolated personality clash or sudden catastrophe/i,
   /^Reactive headline (?:spin|framing) (?:surrounding|around) ["“'].+?["”'] that treats an/i,
+  /^Commentary framing .+ as a sudden, unforeseeable policy shock rather than the predictable outcome of unmonitored divergence between formal rules and day-to-day execution\.$/i,
+  /^Headline panic treating the disruption around .+ as an isolated black-swan collapse rather than tracing the tightly coupled dependencies that allowed the fault to propagate\.$/i,
+  /^Reactive coverage fixating on the immediate incident trigger in .+ while overlooking why backup safeguards failed to contain the blast radius when called upon\.$/i,
+  /^Performative outrage demanding (?:aún )?more surface-level reporting around .+ when prior warning indicators were already present and routinely bypassed\.$/i,
+  /^Public spectacle centering on individual personalities in .+ while ignoring the institutional incentives and missing guardrails that shaped the outcome\.$/i,
+  /^Treating the strain exposed in .+ as a short-term political or market fluctuation rather than the compounding cost of deferred structural maintenance\.$/i,
 ];
 
+const GENERIC_QUESTION_PATTERNS: RegExp[] = [
+  /^Applying .+ to ["“']/i,
+  /^What concrete post-mortem telemetry must be disclosed before an impartial observer/i,
+  /^In .+, what concrete mechanism allowed live operational practice to diverge from the stated legal or institutional charter without triggering an earlier corrective audit\?$/i,
+  /^When commercial or political pressures mounted around .+, which specific verification standard or safeguard was compromised first\?$/i,
+  /^Across the stakeholders affected by .+, are the decision-makers who architected the policy bearing the same operational cost as those absorbing the downstream impact\?$/i,
+  /^Once the partisan rhetoric surrounding .+ is stripped away, what structural defect in the underlying workflow or oversight boundary actually enabled this event\?$/i,
+  /^How much finite institutional bandwidth in .+ was consumed by reactive symptom management rather than retiring the underlying capacity constraint\?$/i,
+  /^Which interface contract or coordination protocol between independent institutions fractured during .+, and what shared safeguard is required to restore trust\?$/i,
+  /^When (?:The Square|The Plumb|The Level|The Trowel|Common Gavel|24-Inch Gauge) is applied alongside (?:The Square|The Plumb|The Level|The Trowel|Common Gavel|24-Inch Gauge), what concrete guardrail is required to prevent recurring /i,
+];
+
+const TRACKING_QUERY_PARAMS = new Set([
+  "fbclid",
+  "gclid",
+  "dclid",
+  "msclkid",
+  "mc_cid",
+  "mc_eid",
+  "twclid",
+  "igshid",
+  "yclid",
+  "nysrc",
+  "smid",
+  "ref",
+  "ref_src",
+  "ref_url",
+  "_hsenc",
+  "_hsmi",
+  "mkt_tok",
+  "vero_id",
+  "oly_enc_id",
+  "oly_anon_id",
+  "rb_clickid",
+  "s_kwcid",
+  "ncid",
+  "sr_share",
+  "ito",
+  "at_medium",
+  "at_campaign",
+  "partner",
+  "campaign_id",
+  "ad_id",
+]);
+
+function isTrackingParamName(key: string): boolean {
+  const lower = key.trim().toLowerCase();
+  return (
+    lower.startsWith("utm_") ||
+    lower.startsWith("at_") ||
+    lower.startsWith("mc_") ||
+    lower.startsWith("oly_") ||
+    TRACKING_QUERY_PARAMS.has(lower)
+  );
+}
+
 /**
- * Strips HTML tags, CDATA, entities, image credit tags, "Read full article / Comments" footers,
- * and broadcast sign-off lines from raw RSS descriptions.
+ * Normalizes a URL for deterministic canonical hashing and storage by:
+ * - Stripping CDATA/whitespace and decoding `&amp;` in URL query strings
+ * - Enforcing lowercase scheme and hostname
+ * - Removing default ports (:80, :443) and hash fragments (#...)
+ * - Stripping all tracking parameters (`utm_*`, `fbclid`, `gclid`, `nysrc`, `smid`, etc.)
+ * - Sorting remaining query parameters alphabetically
+ * - Stripping trailing slashes on non-root paths
  */
-export function cleanRssText(raw: string | null | undefined): string {
+export function normalizeCanonicalUrl(rawUrl: string | null | undefined): string {
+  if (!rawUrl || typeof rawUrl !== "string") return "";
+
+  const cleaned = rawUrl
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/gi, "$1")
+    .replace(/&amp;/gi, "&")
+    .trim();
+  if (!cleaned) return "";
+
+  try {
+    const parsed = new URL(cleaned);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return "";
+    }
+    parsed.protocol = parsed.protocol.toLowerCase();
+    parsed.hostname = parsed.hostname.toLowerCase();
+    if (
+      (parsed.protocol === "http:" && parsed.port === "80") ||
+      (parsed.protocol === "https:" && parsed.port === "443")
+    ) {
+      parsed.port = "";
+    }
+    parsed.hash = "";
+
+    const retainedParams: Array<[string, string]> = [];
+    for (const [key, value] of parsed.searchParams.entries()) {
+      if (!isTrackingParamName(key)) {
+        retainedParams.push([key, value]);
+      }
+    }
+    retainedParams.sort(([aKey, aVal], [bKey, bVal]) =>
+      aKey === bKey ? aVal.localeCompare(bVal) : aKey.localeCompare(bKey)
+    );
+
+    const nextSearch = new URLSearchParams();
+    for (const [k, v] of retainedParams) {
+      nextSearch.append(k, v);
+    }
+    const searchStr = nextSearch.toString();
+    parsed.search = searchStr ? `?${searchStr}` : "";
+
+    if (parsed.pathname.length > 1 && parsed.pathname.endsWith("/")) {
+      parsed.pathname = parsed.pathname.replace(/\/+$/, "");
+    }
+
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Strips all unsafe HTML, script/style/iframe/object/svg/form elements, CDATA wrappers,
+ * HTML comments, and double-encoded HTML tags during initial normalization.
+ */
+export function stripUnsafeHtmlAndCdata(raw: string | null | undefined): string {
   if (!raw || typeof raw !== "string") return "";
 
-  return raw
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/gi, "$1")
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<\/(p|div|li|h[1-6]|br)>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
+  let text = raw;
+  // Iteratively unwrap CDATA sections (handles nested or split CDATA markers)
+  for (let i = 0; i < 3; i += 1) {
+    if (!/<!\[CDATA\[/i.test(text)) break;
+    text = text.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/gi, "$1");
+  }
+  text = text.replace(/<!\[CDATA\[/gi, "").replace(/\]\]>/g, "");
+
+  const removeUnsafeBlocks = (input: string): string =>
+    input
+      .replace(/<!--[\s\S]*?-->/g, " ")
+      .replace(
+        /<(script|style|iframe|object|embed|svg|form|applet|noscript|template)[\s\S]*?<\/\1>/gi,
+        " "
+      )
+      .replace(
+        /<(script|style|iframe|object|embed|svg|form|applet|meta|link|base|input|button)[^>]*\/?>/gi,
+        " "
+      )
+      .replace(/<\/(p|div|li|h[1-6]|br|tr|blockquote|section|article)>/gi, "\n")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\b(?:javascript|vbscript|data):[^\s"'>]+/gi, " ");
+
+  text = removeUnsafeBlocks(text);
+
+  // Decode standard & numeric HTML entities
+  text = text
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
     .replace(/&lt;/gi, "<")
@@ -196,10 +348,40 @@ export function cleanRssText(raw: string | null | undefined): string {
     .replace(/&quot;/gi, '"')
     .replace(/&#0?39;/gi, "'")
     .replace(/&apos;/gi, "'")
-    .replace(/&#8216;|&#8217;/g, "'")
-    .replace(/&#8220;|&#8221;/g, '"')
-    .replace(/&#8211;|&#8212;/g, "—")
-    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(Number(dec)))
+    .replace(/&#8216;|&#8217;|&lsquo;|&rsquo;/gi, "'")
+    .replace(/&#8220;|&#8221;|&ldquo;|&rdquo;/gi, '"')
+    .replace(/&#8211;|&#8212;|&ndash;|&mdash;/gi, "—")
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => {
+      const code = Number.parseInt(hex, 16);
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff
+        ? String.fromCodePoint(code)
+        : " ";
+    })
+    .replace(/&#(\d+);/g, (_, dec) => {
+      const code = Number.parseInt(dec, 10);
+      return Number.isFinite(code) && code > 0 && code <= 0x10ffff
+        ? String.fromCodePoint(code)
+        : " ";
+    });
+
+  // Second pass to strip any HTML tags that were entity-encoded inside XML/CDATA
+  text = removeUnsafeBlocks(text);
+
+  return text
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n\s*\n+/g, "\n\n")
+    .trim();
+}
+
+/**
+ * Strips HTML tags, CDATA, entities, image credit tags, "Read full article / Comments" footers,
+ * and broadcast sign-off lines from raw RSS descriptions.
+ */
+export function cleanRssText(raw: string | null | undefined): string {
+  const stripped = stripUnsafeHtmlAndCdata(raw);
+  if (!stripped) return "";
+
+  return stripped
     .replace(/\(Image credit:[^)]*\)/gi, " ")
     .replace(/\bCredit:\s*via\s+[^\n.]+/gi, " ")
     .replace(/\bRead full article\b[\s\S]*$/i, " ")
@@ -652,9 +834,40 @@ function extractCleanFirstParagraphFromBrief(
 }
 
 /**
- * Generates or sanitizes the Proportionality Check (Overblown Media Jitter vs. Underlying Structural Constraint)
- * and the 2 sentence-case Socratic Inquiry questions so the Signal card always explains how the structural
- * constraint applies to the specific article rather than repeating generic rubric definitions verbatim.
+ * Returns true if the text matches any banned pipeline jargon or robotic Mad-Libs fallback template.
+ */
+export function isTemplatedOrMalformedCopy(text: string | null | undefined): boolean {
+  if (!text || typeof text !== "string") return true;
+  const trimmed = text.trim();
+  if (!trimmed) return true;
+  if (hasBannedPipelineJargon(trimmed)) return true;
+  if (GENERIC_NOISE_PATTERNS.some((p) => p.test(trimmed))) return true;
+  if (GENERIC_SIGNAL_PATTERNS.some((p) => p.test(trimmed))) return true;
+  if (GENERIC_QUESTION_PATTERNS.some((p) => p.test(trimmed))) return true;
+  return false;
+}
+
+export type DiagnosticsValidationResult =
+  | {
+      valid: true;
+      noiseOverblown: string;
+      structuralSignal: string;
+      questions: [string, string];
+      reason?: undefined;
+    }
+  | {
+      valid: false;
+      noiseOverblown: string;
+      structuralSignal: string;
+      questions: string[];
+      reason: string;
+    };
+
+/**
+ * Validates and sanitizes the editorial diagnostics (the_noise, the_signal, the_questions)
+ * for an article WITHOUT falling back to Mad-Libs or robotic string-interpolation templates.
+ * If any section is missing, truncated, or matches a fallback template, returns `valid: false`
+ * so the caller transitions the article to `QUARANTINED` or suppresses it from public projection.
  */
 export function buildOrSanitizeArticleDiagnostics(input: {
   title: string;
@@ -666,199 +879,72 @@ export function buildOrSanitizeArticleDiagnostics(input: {
   existingNoise?: string | null;
   existingSignal?: string | null;
   existingQuestions?: string[] | null;
-}): {
-  noiseOverblown: string;
-  structuralSignal: string;
-  questions: [string, string];
-} {
+}): DiagnosticsValidationResult {
   const primarySpec = getWorkingToolSpec(input.primaryTool);
-  const secondarySpec = getWorkingToolSpec(input.secondaryTool);
   const failureSpec = getSreFailureModeSpec(input.sreFailureMode);
 
+  const rawNoise = cleanRssText(input.existingNoise || "");
+  const rawSignal = cleanRssText(input.existingSignal || "");
+
   const hasValidExistingNoise =
-    Boolean(input.existingNoise && input.existingNoise.trim().length >= 30) &&
-    !hasBannedPipelineJargon(input.existingNoise) &&
-    !GENERIC_NOISE_PATTERNS.some((p) => p.test(input.existingNoise!.trim()));
+    rawNoise.length >= 30 &&
+    !hasBannedPipelineJargon(rawNoise) &&
+    !GENERIC_NOISE_PATTERNS.some((p) => p.test(rawNoise));
+
+  if (!hasValidExistingNoise) {
+    return {
+      valid: false,
+      noiseOverblown: "",
+      structuralSignal: "",
+      questions: [],
+      reason: `Missing or templated 'the_noise' copy for "${input.title}"`,
+    };
+  }
 
   const hasValidExistingSignal =
-    Boolean(input.existingSignal && input.existingSignal.trim().length >= 30) &&
-    !hasBannedPipelineJargon(input.existingSignal) &&
-    !GENERIC_SIGNAL_PATTERNS.some((p) => p.test(input.existingSignal!.trim())) &&
-    input.existingSignal!.trim() !== failureSpec.systemsDefinition &&
-    input.existingSignal!.trim() !== failureSpec.summary;
+    rawSignal.length >= 30 &&
+    !hasBannedPipelineJargon(rawSignal) &&
+    !GENERIC_SIGNAL_PATTERNS.some((p) => p.test(rawSignal)) &&
+    rawSignal !== failureSpec.systemsDefinition &&
+    rawSignal !== failureSpec.summary;
 
-  const summarySentences = splitIntoSentences(input.factualSummary);
-  const primaryFactSentence = summarySentences[0] || input.title;
-  const secondaryFactSentence =
-    summarySentences[1] || summarySentences[0] || input.title;
+  if (!hasValidExistingSignal) {
+    return {
+      valid: false,
+      noiseOverblown: "",
+      structuralSignal: "",
+      questions: [],
+      reason: `Missing or templated 'the_signal' copy for "${input.title}"`,
+    };
+  }
 
-  const noiseOverblown = hasValidExistingNoise
-    ? sanitizeStringConcatenation(input.existingNoise!.trim())
-    : buildArticleSpecificNoise(input.title, primaryFactSentence, input.sreFailureMode);
-
-  const structuralSignal = hasValidExistingSignal
-    ? sanitizeStringConcatenation(input.existingSignal!.trim())
-    : buildArticleSpecificSignal(
-        input.title,
-        secondaryFactSentence,
-        input.primaryTool,
-        input.sreFailureMode
-      );
-
-  // Filter and normalize Socratic questions to the 2 highest-impact questions in standard sentence case
   const validExistingQuestions = (input.existingQuestions || [])
-    .map((q) => String(q || "").trim())
+    .map((q) => cleanRssText(String(q || "")))
     .filter(
       (q) =>
         q.length >= 25 &&
+        q.endsWith("?") &&
         !hasBannedPipelineJargon(q) &&
-        !/^Applying .+ to ["“']/i.test(q) &&
-        !/^What concrete post-mortem telemetry must be disclosed before an impartial observer/i.test(
-          q
-        ) &&
+        !GENERIC_QUESTION_PATTERNS.some((p) => p.test(q)) &&
         q !== primarySpec.diagnosticQuestionPattern
     )
     .map(normalizeQuestionSentenceCase);
 
-  if (validExistingQuestions.length >= 2) {
+  if (validExistingQuestions.length < 2) {
     return {
-      noiseOverblown,
-      structuralSignal,
-      questions: [validExistingQuestions[0], validExistingQuestions[1]],
+      valid: false,
+      noiseOverblown: "",
+      structuralSignal: "",
+      questions: [],
+      reason: `Fewer than 2 valid non-templated Socratic questions for "${input.title}"`,
     };
   }
 
-  const generatedQuestions = buildArticleSpecificQuestions(
-    input.title,
-    input.primaryTool,
-    input.secondaryTool,
-    input.sreFailureMode,
-    secondarySpec.sreEquivalent
-  );
-
   return {
-    noiseOverblown,
-    structuralSignal,
-    questions: [
-      validExistingQuestions[0] || generatedQuestions[0],
-      validExistingQuestions[1] || generatedQuestions[1],
-    ],
+    valid: true,
+    noiseOverblown: sanitizeStringConcatenation(rawNoise),
+    structuralSignal: sanitizeStringConcatenation(rawSignal),
+    questions: [validExistingQuestions[0], validExistingQuestions[1]],
   };
 }
 
-function extractSubjectClause(title: string): string {
-  const cleaned = title.replace(/^["“']|["”']$/g, "").trim();
-  if (cleaned.length <= 72) return cleaned;
-  const words = cleaned.split(/\s+/);
-  return words.slice(0, 10).join(" ");
-}
-
-function buildArticleSpecificNoise(
-  title: string,
-  primaryFactSentence: string,
-  failureMode: SreFailureModeId
-): string {
-  const subject = extractSubjectClause(title);
-  switch (failureMode) {
-    case "Configuration Drift":
-      return sanitizeStringConcatenation(
-        `Commentary framing ${subject} as a sudden, unforeseeable policy shock rather than the predictable outcome of unmonitored divergence between formal rules and day-to-day execution.`
-      );
-    case "Cascading Failure":
-      return sanitizeStringConcatenation(
-        `Headline panic treating the disruption around ${subject} as an isolated black-swan collapse rather than tracing the tightly coupled dependencies that allowed the fault to propagate.`
-      );
-    case "Single Point of Failure (SPOF) / Untested Failover":
-      return sanitizeStringConcatenation(
-        `Reactive coverage fixating on the immediate incident trigger in ${subject} while overlooking why backup safeguards failed to contain the blast radius when called upon.`
-      );
-    case "Alert Fatigue & Signal Loss":
-      return sanitizeStringConcatenation(
-        `Performative outrage demanding aún more surface-level reporting around ${subject} when prior warning indicators were already present and routinely bypassed.`
-      ).replace("aún ", "");
-    case "Blame Culture vs. Root-Cause Isolation":
-      return sanitizeStringConcatenation(
-        `Public spectacle centering on individual personalities in ${subject} while ignoring the institutional incentives and missing guardrails that shaped the outcome.`
-      );
-    case "Technical & Institutional Debt":
-      return sanitizeStringConcatenation(
-        `Treating the strain exposed in ${subject} as a short-term political or market fluctuation rather than the compounding cost of deferred structural maintenance.`
-      );
-  }
-}
-
-function buildArticleSpecificSignal(
-  title: string,
-  secondaryFactSentence: string,
-  primaryTool: WorkingToolId,
-  failureMode: SreFailureModeId
-): string {
-  const cleanDetail = secondaryFactSentence
-    .replace(/[.!?]+$/, "")
-    .trim();
-  const loweredDetail = startsWithProtectedProperTerm(cleanDetail)
-    ? cleanDetail
-    : cleanDetail.charAt(0).toLowerCase() + cleanDetail.slice(1);
-
-  switch (failureMode) {
-    case "Configuration Drift":
-      return sanitizeStringConcatenation(
-        `Measured against ${primaryTool}, the core operational friction is that ${loweredDetail}—demonstrating how live institutional execution drifted from its stated baseline without continuous verification.`
-      );
-    case "Cascading Failure":
-      return sanitizeStringConcatenation(
-        `Examined through ${primaryTool}, the underlying constraint is that ${loweredDetail}, allowing localized friction across organizational boundaries to cascade into a broader operational bottleneck.`
-      );
-    case "Single Point of Failure (SPOF) / Untested Failover":
-      return sanitizeStringConcatenation(
-        `Tested by ${primaryTool}, the structural lesson is that ${loweredDetail}, exposing an unvalidated safeguard that could not absorb real-world load once primary controls were bypassed.`
-      );
-    case "Alert Fatigue & Signal Loss":
-      return sanitizeStringConcatenation(
-        `Weighed on ${primaryTool}, the signal is that ${loweredDetail}, illustrating how high-volume noise and competing priorities exhaust finite institutional bandwidth before core risks are addressed.`
-      );
-    case "Blame Culture vs. Root-Cause Isolation":
-      return sanitizeStringConcatenation(
-        `Applying ${primaryTool}, the structural reality is that ${loweredDetail}, showing why isolating the upstream incentive structure matters more than punishing proximate actors.`
-      );
-    case "Technical & Institutional Debt":
-      return sanitizeStringConcatenation(
-        `Evaluated on ${primaryTool}, the structural constraint is that ${loweredDetail}, reflecting how deferred capacity investments eventually force emergency interventions under peak load.`
-      );
-  }
-}
-
-function buildArticleSpecificQuestions(
-  title: string,
-  primaryTool: WorkingToolId,
-  secondaryTool: WorkingToolId,
-  failureMode: SreFailureModeId,
-  _secondarySreEquivalent: string
-): [string, string] {
-  const subject = extractSubjectClause(title);
-
-  const q1ByTool: Record<WorkingToolId, string> = {
-    "The Square": `In ${subject}, what concrete mechanism allowed live operational practice to diverge from the stated legal or institutional charter without triggering an earlier corrective audit?`,
-    "The Plumb": `When commercial or political pressures mounted around ${subject}, which specific verification standard or safeguard was compromised first?`,
-    "The Level": `Across the stakeholders affected by ${subject}, are the decision-makers who architected the policy bearing the same operational cost as those absorbing the downstream impact?`,
-    "Common Gavel": `Once the partisan rhetoric surrounding ${subject} is stripped away, what structural defect in the underlying workflow or oversight boundary actually enabled this event?`,
-    "24-Inch Gauge": `How much finite institutional bandwidth in ${subject} was consumed by reactive symptom management rather than retiring the underlying capacity constraint?`,
-    "The Trowel": `Which interface contract or coordination protocol between independent institutions fractured during ${subject}, and what shared safeguard is required to restore trust?`,
-  };
-
-  const failurePhrase: Record<SreFailureModeId, string> = {
-    "Configuration Drift": "silent configuration drift between formal policy and live execution",
-    "Cascading Failure": "cascading failures across coupled organizational boundaries",
-    "Single Point of Failure (SPOF) / Untested Failover": "untested failover safeguards and single points of failure",
-    "Alert Fatigue & Signal Loss": "alert fatigue and institutional signal loss",
-    "Blame Culture vs. Root-Cause Isolation": "reactive scapegoating in place of root-cause isolation",
-    "Technical & Institutional Debt": "compounding technical and institutional capacity debt",
-  };
-
-  const q2 = `When ${secondaryTool} is applied alongside ${primaryTool}, what concrete guardrail is required to prevent recurring ${failurePhrase[failureMode]}?`;
-
-  return [
-    normalizeQuestionSentenceCase(q1ByTool[primaryTool]),
-    normalizeQuestionSentenceCase(q2),
-  ];
-}

@@ -1,5 +1,6 @@
 import React from "react";
 import { notFound } from "next/navigation";
+import { projectPublicIncidentDto } from "@/lib/dto";
 import {
   ensureD1Snapshot,
   getAllIncidents,
@@ -16,7 +17,8 @@ export default async function IncidentBriefPage({
 }) {
   await ensureD1Snapshot();
   const { slug } = await params;
-  const incident = getIncidentBySlug(slug);
+  const rawIncident = getIncidentBySlug(slug);
+  const incident = rawIncident ? projectPublicIncidentDto(rawIncident) : null;
 
   if (!incident) {
     notFound();
@@ -24,6 +26,8 @@ export default async function IncidentBriefPage({
 
   const relatedIncidents = getAllIncidents()
     .filter((i) => i.id !== incident.id)
+    .map((i) => projectPublicIncidentDto(i))
+    .filter((i): i is NonNullable<typeof i> => i !== null)
     .slice(0, 2);
 
   return (

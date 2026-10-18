@@ -1,4 +1,5 @@
 import React from "react";
+import { projectPublicEpisodeDto } from "@/lib/dto";
 import { ensureD1Snapshot, getAllEpisodes } from "@/lib/store";
 import { PodcastArchiveClient } from "@/components/PodcastArchiveClient";
 
@@ -10,6 +11,8 @@ export const metadata = {
 
 export default async function ArchivePage() {
   await ensureD1Snapshot(true);
-  const episodes = getAllEpisodes();
+  const episodes = getAllEpisodes()
+    .map((ep) => projectPublicEpisodeDto(ep))
+    .filter((ep): ep is NonNullable<typeof ep> => ep !== null);
   return <PodcastArchiveClient initialEpisodes={episodes} />;
 }

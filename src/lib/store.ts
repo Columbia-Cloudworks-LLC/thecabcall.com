@@ -6,6 +6,10 @@ import {
 
 export { ensureD1Snapshot };
 import {
+  isRenderablePublicEpisode,
+  isRenderablePublicIncident,
+} from "./dto";
+import {
   buildOrSanitizeArticleDiagnostics,
   validateAndNormalizeIncidentSummary,
 } from "./sanitize";
@@ -67,7 +71,11 @@ function normalizeAndValidateIncidentRecord(
     existingQuestions: inc.questions,
   });
 
-  return {
+  if (!diagnostics.valid || diagnostics.questions.length < 2) {
+    return null;
+  }
+
+  const candidate: IncidentArticle = {
     ...inc,
     executiveSummary: validation.executiveSummary,
     socraticBrief: validation.factualBriefParagraph,
@@ -75,8 +83,14 @@ function normalizeAndValidateIncidentRecord(
       noiseOverblown: diagnostics.noiseOverblown,
       structuralSignal: diagnostics.structuralSignal,
     },
-    questions: diagnostics.questions,
+    questions: [diagnostics.questions[0], diagnostics.questions[1]],
   };
+
+  if (!isRenderablePublicIncident(candidate)) {
+    return null;
+  }
+
+  return candidate;
 }
 
 export function getAllIncidents(): IncidentArticle[] {
@@ -104,7 +118,7 @@ export function getAllIncidents(): IncidentArticle[] {
     }
   }
 
-  // Keep live D1 synthesized/triaged incidents prioritized ahead of static seed archive,
+  // Keep live D1 synthesized incidents prioritized ahead of static seed archive,
   // or sorted by publishedAt within each tier
   if (d1.incidents.length > 0) {
     return merged;
@@ -141,24 +155,26 @@ export function insertIncident(incident: IncidentArticle): void {
 export function getAllEpisodes(): PodcastEpisode[] {
   const d1 = readLocalD1Snapshot();
   if (d1.available) {
-    return [...d1.episodes].sort(
-      (a, b) =>
-        new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-    );
+    return [...d1.episodes]
+      .filter((ep) => isRenderablePublicEpisode(ep))
+      .sort(
+        (a, b) =>
+          new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+      );
   }
 
   const seenSlugs = new Set<string>();
   const merged: PodcastEpisode[] = [];
 
   for (const ep of d1.episodes) {
-    if (!seenSlugs.has(ep.slug)) {
+    if (!seenSlugs.has(ep.slug) && isRenderablePublicEpisode(ep)) {
       seenSlugs.add(ep.slug);
       merged.push(ep);
     }
   }
 
   for (const ep of state.episodes) {
-    if (!seenSlugs.has(ep.slug)) {
+    if (!seenSlugs.has(ep.slug) && isRenderablePublicEpisode(ep)) {
       seenSlugs.add(ep.slug);
       merged.push(ep);
     }

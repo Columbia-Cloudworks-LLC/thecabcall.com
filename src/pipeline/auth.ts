@@ -92,6 +92,29 @@ export async function hashTokenSha256(rawToken: string): Promise<string> {
   return sha256Hex(rawToken.trim());
 }
 
+export const ADMIN_USERS_COLUMNS = `
+  id,
+  email,
+  display_name,
+  avatar_url,
+  role,
+  auth_provider_pref,
+  status,
+  invited_by_email,
+  created_at,
+  last_login_at
+`;
+
+export const ADMIN_MAGIC_LINKS_COLUMNS = `
+  id,
+  email,
+  token_hash,
+  purpose,
+  expires_at,
+  used_at,
+  created_at
+`;
+
 export function mapAdminUserRow(
   row: AdminUserRow,
   activeSessionCount?: number
@@ -203,7 +226,7 @@ export async function ensureAdminAuthTablesAndOwner(
   }
 
   let ownerRow = await db
-    .prepare("SELECT * FROM admin_users WHERE LOWER(email) = ?")
+    .prepare(`SELECT ${ADMIN_USERS_COLUMNS} FROM admin_users WHERE LOWER(email) = ?`)
     .bind(ownerEmail)
     .first<AdminUserRow>();
 
@@ -225,7 +248,7 @@ export async function ensureAdminAuthTablesAndOwner(
       .run();
 
     ownerRow = await db
-      .prepare("SELECT * FROM admin_users WHERE LOWER(email) = ?")
+      .prepare(`SELECT ${ADMIN_USERS_COLUMNS} FROM admin_users WHERE LOWER(email) = ?`)
       .bind(ownerEmail)
       .first<AdminUserRow>();
   } else if (ownerRow.role !== "owner" || ownerRow.status !== "active") {
@@ -236,7 +259,7 @@ export async function ensureAdminAuthTablesAndOwner(
       .bind(ownerRow.id)
       .run();
     ownerRow = await db
-      .prepare("SELECT * FROM admin_users WHERE id = ?")
+      .prepare(`SELECT ${ADMIN_USERS_COLUMNS} FROM admin_users WHERE id = ?`)
       .bind(ownerRow.id)
       .first<AdminUserRow>();
   }
@@ -261,7 +284,7 @@ export async function listAdminUsers(
   const [usersRes, sessionsRes] = await Promise.all([
     db
       .prepare(
-        `SELECT * FROM admin_users
+        `SELECT ${ADMIN_USERS_COLUMNS} FROM admin_users
          ORDER BY
            CASE role
              WHEN 'owner' THEN 0
@@ -484,7 +507,7 @@ export async function authenticateGoogleOAuthUser(options: {
   }
 
   const existingUser = await db
-    .prepare("SELECT * FROM admin_users WHERE LOWER(email) = ?")
+    .prepare(`SELECT ${ADMIN_USERS_COLUMNS} FROM admin_users WHERE LOWER(email) = ?`)
     .bind(normalizedEmail)
     .first<AdminUserRow>();
 
@@ -535,7 +558,7 @@ export async function authenticateGoogleOAuthUser(options: {
     .run();
 
   const updatedRow = await db
-    .prepare("SELECT * FROM admin_users WHERE id = ?")
+    .prepare(`SELECT ${ADMIN_USERS_COLUMNS} FROM admin_users WHERE id = ?`)
     .bind(existingUser.id)
     .first<AdminUserRow>();
 
@@ -734,7 +757,7 @@ export async function requestAdminMagicLink(options: {
   }
 
   const user = await db
-    .prepare("SELECT * FROM admin_users WHERE LOWER(email) = ?")
+    .prepare(`SELECT ${ADMIN_USERS_COLUMNS} FROM admin_users WHERE LOWER(email) = ?`)
     .bind(normalizedEmail)
     .first<AdminUserRow>();
 
@@ -851,7 +874,7 @@ export async function verifyAdminMagicLinkToken(options: {
 
   const tokenHash = await hashTokenSha256(cleanedToken);
   const linkRow = await db
-    .prepare("SELECT * FROM admin_magic_links WHERE token_hash = ?")
+    .prepare(`SELECT ${ADMIN_MAGIC_LINKS_COLUMNS} FROM admin_magic_links WHERE token_hash = ?`)
     .bind(tokenHash)
     .first<AdminMagicLinkRow>();
 
@@ -886,7 +909,7 @@ export async function verifyAdminMagicLinkToken(options: {
   }
 
   const user = await db
-    .prepare("SELECT * FROM admin_users WHERE LOWER(email) = ?")
+    .prepare(`SELECT ${ADMIN_USERS_COLUMNS} FROM admin_users WHERE LOWER(email) = ?`)
     .bind(normalizeEmail(linkRow.email))
     .first<AdminUserRow>();
 
@@ -932,7 +955,7 @@ export async function verifyAdminMagicLinkToken(options: {
 
   const updatedUser =
     (await db
-      .prepare("SELECT * FROM admin_users WHERE id = ?")
+      .prepare(`SELECT ${ADMIN_USERS_COLUMNS} FROM admin_users WHERE id = ?`)
       .bind(user.id)
       .first<AdminUserRow>()) || user;
 
@@ -1004,7 +1027,7 @@ export async function inviteAdminUser(options: {
       : "any";
 
   const beforeRow = await db
-    .prepare("SELECT * FROM admin_users WHERE LOWER(email) = ?")
+    .prepare(`SELECT ${ADMIN_USERS_COLUMNS} FROM admin_users WHERE LOWER(email) = ?`)
     .bind(normalizedEmail)
     .first<AdminUserRow>();
 
@@ -1066,7 +1089,7 @@ export async function inviteAdminUser(options: {
   }
 
   const afterRow = await db
-    .prepare("SELECT * FROM admin_users WHERE LOWER(email) = ?")
+    .prepare(`SELECT ${ADMIN_USERS_COLUMNS} FROM admin_users WHERE LOWER(email) = ?`)
     .bind(normalizedEmail)
     .first<AdminUserRow>();
 
@@ -1190,11 +1213,11 @@ export async function revokeAdminUser(options: {
 
   const beforeRow = isNumericId
     ? await db
-        .prepare("SELECT * FROM admin_users WHERE id = ?")
+        .prepare(`SELECT ${ADMIN_USERS_COLUMNS} FROM admin_users WHERE id = ?`)
         .bind(Number(targetEmailOrId))
         .first<AdminUserRow>()
     : await db
-        .prepare("SELECT * FROM admin_users WHERE LOWER(email) = ?")
+        .prepare(`SELECT ${ADMIN_USERS_COLUMNS} FROM admin_users WHERE LOWER(email) = ?`)
         .bind(normalizeEmail(String(targetEmailOrId)))
         .first<AdminUserRow>();
 
@@ -1240,7 +1263,7 @@ export async function revokeAdminUser(options: {
     .run();
 
   const afterRow = await db
-    .prepare("SELECT * FROM admin_users WHERE id = ?")
+    .prepare(`SELECT ${ADMIN_USERS_COLUMNS} FROM admin_users WHERE id = ?`)
     .bind(beforeRow.id)
     .first<AdminUserRow>();
 
@@ -1314,11 +1337,11 @@ export async function updateAdminUserRole(options: {
 
   const beforeRow = isNumericId
     ? await db
-        .prepare("SELECT * FROM admin_users WHERE id = ?")
+        .prepare(`SELECT ${ADMIN_USERS_COLUMNS} FROM admin_users WHERE id = ?`)
         .bind(Number(targetEmailOrId))
         .first<AdminUserRow>()
     : await db
-        .prepare("SELECT * FROM admin_users WHERE LOWER(email) = ?")
+        .prepare(`SELECT ${ADMIN_USERS_COLUMNS} FROM admin_users WHERE LOWER(email) = ?`)
         .bind(normalizeEmail(String(targetEmailOrId)))
         .first<AdminUserRow>();
 
@@ -1377,7 +1400,7 @@ export async function updateAdminUserRole(options: {
     .run();
 
   const afterRow = await db
-    .prepare("SELECT * FROM admin_users WHERE id = ?")
+    .prepare(`SELECT ${ADMIN_USERS_COLUMNS} FROM admin_users WHERE id = ?`)
     .bind(beforeRow.id)
     .first<AdminUserRow>();
 

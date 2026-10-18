@@ -20,7 +20,10 @@ import {
   RollupEpisodeRecord,
   updateAdminEpisode,
 } from "@/pipeline/rollup";
-import { TelemetryArticleRow } from "@/pipeline/synthesize";
+import {
+  TELEMETRY_ARTICLES_SYNTHESIS_COLUMNS,
+  TelemetryArticleRow,
+} from "@/pipeline/synthesize";
 
 export * from "@/pipeline/rollup";
 
@@ -103,7 +106,8 @@ export async function getAdminEpisodesAndCandidatesBridge(): Promise<{
     listAdminEpisodes(db),
     db
       .prepare(
-        `SELECT * FROM telemetry_articles
+        `SELECT ${TELEMETRY_ARTICLES_SYNTHESIS_COLUMNS}
+         FROM telemetry_articles
          WHERE status IN ('synthesized', 'triaged')
          ORDER BY
            CASE WHEN status = 'synthesized' THEN 0 ELSE 1 END,

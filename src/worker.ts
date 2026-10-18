@@ -43,21 +43,39 @@ import {
   updateSystemThresholds,
   US_HIGH_IMPACT_FEEDS,
 } from "./pipeline/ingest";
-import { evaluateArticleWithJev } from "./pipeline/jev";
+import { evaluateArticleWithJev, JevSreFailureModeKey, JevWorkingToolKey } from "./pipeline/jev";
 import {
   buildValidMp3AudioBytes,
+  D1EpisodeTableRow,
   deleteAdminEpisode,
   ensureBaselineEpisodesSeeded,
+  EPISODES_SELECT_COLUMNS,
   extractR2KeyFromAudioUrl,
   generateAdminEpisode,
   GenerateEpisodeOverrides,
   getAdminEpisodeByIdOrSlug,
   listAdminEpisodes,
+  parseEpisodeTranscriptSections,
   R2BucketLike,
   runWeeklyRollupPipeline,
   updateAdminEpisode,
 } from "./pipeline/rollup";
-import { runSynthesizePipeline, TelemetryArticleRow } from "./pipeline/synthesize";
+import {
+  runSynthesizePipeline,
+  TELEMETRY_ARTICLES_SYNTHESIS_COLUMNS,
+  TelemetryArticleRow,
+} from "./pipeline/synthesize";
+import {
+  projectPublicEpisodeDto,
+  projectPublicIncidentDto,
+  PublicEpisodeDto,
+  PublicIncidentDto,
+} from "./lib/dto";
+import {
+  buildOrSanitizeArticleDiagnostics,
+  validateAndNormalizeIncidentSummary,
+} from "./lib/sanitize";
+import { DomainSectorId, SreFailureModeId, WorkingToolId } from "./lib/taxonomy";
 
 export interface WorkerEnv {
   DB: D1DatabaseLike;
@@ -89,6 +107,220 @@ const DEFAULT_SAMPLE_ARTICLE = {
   excerpt:
     "Federal investigators reported Tuesday that routine inspection alerts were repeatedly dismissed over six months due to staffing shortages before the dispatch system failed.",
 };
+
+const WORKER_TOOL_DISPLAY: Record<JevWorkingToolKey, WorkingToolId> = {
+  twenty_four_inch_gauge: "24-Inch Gauge",
+  common_gavel: "Common Gavel",
+  plumb: "The Plumb",
+  square: "The Square",
+  level: "The Level",
+  trowel: "The Trowel",
+};
+
+const WORKER_FAILURE_DISPLAY: Record<JevSreFailureModeKey, SreFailureModeId> = {
+  configuration_drift: "Configuration Drift",
+  cascading_failure: "Cascading Failure",
+  untested_failover: "Single Point of Failure (SPOF) / Untested Failover",
+  alert_fatigue: "Alert Fatigue & Signal Loss",
+  blameless_postmortem_gap: "Blame Culture vs. Root-Cause Isolation",
+  capacity_exhaustion: "Technical & Institutional Debt",
+};
+
+function inferWorkerDomainSector(
+  sourceFeed: string,
+  title: string,
+  excerpt: string
+): DomainSectorId {
+  const feedLower = (sourceFeed || "").toLowerCase();
+  const text = `${title} ${excerpt}`.toLowerCase();
+  if (
+    feedLower.includes("wsj") ||
+    /(bank|loan|market|supplier|billion|million|insolvency|economy|tariff|fund)/.test(text)
+  ) {
+    return "Economics & Markets";
+  }
+  if (
+    feedLower.includes("ars technica") ||
+    /(cyber|software|cloud|ai|chip|protocol|network|encryption|security)/.test(text)
+  ) {
+    return "Technology & Cyber";
+  }
+  if (
+    /(mail|postal|grid|rail|aviation|faa|water|port|supply chain|shutdown|warehouse)/.test(text)
+  ) {
+    return "Infrastructure & Supply Chain";
+  }
+  if (/(ceo|board|press secretary|ousted|dei|executive|leadership|resign)/.test(text)) {
+    return "Institutional Leadership";
+  }
+  return "Public Policy & Governance";
+}
+
+function mapWorkerRowToPublicIncidentDto(
+  row: TelemetryArticleRow
+): PublicIncidentDto | null {
+  if (row.status !== "synthesized") {
+    return null;
+  }
+
+  let parsedQ: Record<string, any> | null = null;
+  if (row.questions_json) {
+    try {
+      const p = JSON.parse(row.questions_json);
+      if (p && typeof p === "object" && !Array.isArray(p)) {
+        parsedQ = p;
+      }
+    } catch {
+      parsedQ = null;
+    }
+  }
+
+  const validation = validateAndNormalizeIncidentSummary({
+    id: row.id,
+    title: row.title,
+    sourceFeed: row.source_feed,
+    rawExcerpt: row.raw_excerpt,
+    executiveSummary: parsedQ?.executive_summary || null,
+    socraticBrief: row.socratic_brief,
+    logWarnings: false,
+  });
+  if (!validation.valid) {
+    return null;
+  }
+
+  const primaryTool =
+    WORKER_TOOL_DISPLAY[row.primary_tool] || "The Square";
+  const secondaryTool =
+    WORKER_TOOL_DISPLAY[row.secondary_tool || "twenty_four_inch_gauge"] ||
+    "24-Inch Gauge";
+  const sreFailureMode =
+    WORKER_FAILURE_DISPLAY[row.sre_failure_mode] || "Configuration Drift";
+
+  const diagnostics = buildOrSanitizeArticleDiagnostics({
+    title: row.title,
+    sourceFeed: row.source_feed,
+    factualSummary: validation.factualBriefParagraph,
+    primaryTool,
+    secondaryTool,
+    sreFailureMode,
+    existingNoise: parsedQ?.proportionality_check?.noise_overblown || null,
+    existingSignal: parsedQ?.proportionality_check?.structural_signal || null,
+    existingQuestions: Array.isArray(parsedQ?.questions)
+      ? parsedQ.questions.map((q: unknown) => String(q))
+      : [],
+  });
+
+  if (!diagnostics.valid || diagnostics.questions.length < 2) {
+    return null;
+  }
+
+  const slugBase = row.title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 64);
+
+  return projectPublicIncidentDto({
+    id: `d1-inc-${row.id}`,
+    incidentCode: `#CAB-2026-${2000 + row.id}`,
+    slug: `${slugBase || "incident"}-d1-${row.id}`,
+    sourceFeed: row.source_feed.toUpperCase(),
+    title: row.title,
+    sourceUrl: row.source_url,
+    publishedAt: row.published_at,
+    domainSector: inferWorkerDomainSector(
+      row.source_feed,
+      row.title,
+      row.raw_excerpt
+    ),
+    primaryTool,
+    secondaryTool,
+    sreFailureMode,
+    executiveSummary: validation.executiveSummary,
+    socraticBrief: validation.factualBriefParagraph,
+    proportionalityCheck: {
+      noiseOverblown: diagnostics.noiseOverblown,
+      structuralSignal: diagnostics.structuralSignal,
+    },
+    questions: [diagnostics.questions[0], diagnostics.questions[1]],
+    isLeadPostMortem: Boolean(parsedQ?.is_lead_post_mortem),
+    leadPostMortemAnalysis:
+      typeof parsedQ?.lead_post_mortem_analysis === "string"
+        ? parsedQ.lead_post_mortem_analysis
+        : undefined,
+  });
+}
+
+function mapWorkerRowToPublicEpisodeDto(
+  row: D1EpisodeTableRow,
+  incidents: PublicIncidentDto[]
+): PublicEpisodeDto | null {
+  if (row.status && row.status !== "PUBLISHED") {
+    return null;
+  }
+  const episodeNumber = Number(row.episode_number || 42);
+  const durationSeconds = Number(row.duration_seconds || 300);
+  const mins = Math.floor(durationSeconds / 60)
+    .toString()
+    .padStart(2, "0");
+  const secs = Math.floor(durationSeconds % 60)
+    .toString()
+    .padStart(2, "0");
+
+  let dominantTool: WorkingToolId = incidents[0]?.primaryTool || "The Square";
+  for (const t of Object.values(WORKER_TOOL_DISPLAY)) {
+    if (row.title.includes(t) || row.summary.includes(t)) {
+      dominantTool = t;
+      break;
+    }
+  }
+
+  let dominantFailureMode: SreFailureModeId =
+    incidents[0]?.sreFailureMode || "Configuration Drift";
+  for (const fm of Object.values(WORKER_FAILURE_DISPLAY)) {
+    if (row.title.includes(fm) || row.summary.includes(fm)) {
+      dominantFailureMode = fm;
+      break;
+    }
+  }
+
+  const isLegacy =
+    row.slug.startsWith("legacy-") ||
+    row.title.toLowerCase().includes("legacy archive") ||
+    episodeNumber <= 30;
+  const rawTranscript = row.transcript || row.summary || "";
+  const parsedSections = parseEpisodeTranscriptSections(rawTranscript);
+
+  return projectPublicEpisodeDto({
+    id: `d1-ep-${row.id}`,
+    slug: row.slug,
+    episodeNumber,
+    series: isLegacy ? "legacy_archive" : "weekly_rollup",
+    title: row.title,
+    summary: row.summary,
+    transcript: rawTranscript,
+    transcriptSections:
+      parsedSections.weeklyTelemetry && parsedSections.separatingSignalFromPanic
+        ? parsedSections
+        : undefined,
+    audioUrl: row.audio_url,
+    durationSeconds,
+    durationFormatted: `${mins}:${secs}`,
+    fileSizeBytes: Number(row.file_size_bytes || 0),
+    publishedAt: row.published_at,
+    dominantTool,
+    dominantFailureMode,
+    incidentMarkers: incidents.slice(0, 3).map((inc, idx) => ({
+      incidentId: inc.id,
+      incidentCode: inc.incidentCode,
+      incidentSlug: inc.slug,
+      incidentTitle: inc.title,
+      timestampSeconds: idx === 0 ? 35 : idx === 1 ? 115 : 210,
+      timecodeLabel: idx === 0 ? "00:35" : idx === 1 ? "01:55" : "03:30",
+      toolApplied: inc.primaryTool,
+    })),
+  });
+}
 
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -229,36 +461,20 @@ const worker = {
       });
     }
 
-    // Health & status check
+    // Health & status check (zero internal model version tags exposed)
     if (request.method === "GET" && url.pathname === "/") {
       return jsonResponse({
-        service: "thecabcall.com Cloudflare Worker Pipeline",
-        system1Model: "jev-1.14.0",
-        system2Model: "gemini-2.5-flash (with gemini-3.8-flash fallback)",
+        service: "thecabcall.com Editorial Edge Dispatch",
         feeds: US_HIGH_IMPACT_FEEDS,
         endpoints: {
           snapshot:
-            "GET /api/snapshot (public edge-cached D1 telemetry snapshot)",
-          auditList:
-            "GET /api/admin/audit (list & filter immutable audit_ledger entries)",
-          auditVerify:
-            "GET /api/admin/audit/verify (verify SHA-256 cryptographic hash chain)",
-          auditReplay:
-            "POST /api/admin/audit/replay (requires x-admin-secret; deterministic state revert/replay)",
-          auditExport:
-            "GET /api/admin/audit/export (signed JSON & Markdown public disclosure bundle)",
-          testJev: "POST /api/test-jev (requires x-admin-secret header)",
-          runIngest:
-            "POST /api/run-ingest (requires x-admin-secret header; optional ?synthesize=true)",
-          runSynthesize:
-            "POST /api/run-synthesize (requires x-admin-secret header)",
-          runRollup: "POST /api/run-rollup (requires x-admin-secret header)",
+            "GET /api/snapshot (public editorial Trestleboard DTO snapshot)",
           audioStream: "GET /audio/:filename (supports Range requests)",
         },
       });
     }
 
-    // Public Route: GET /api/snapshot (Returns live D1 telemetry_articles, episodes, and pipeline_runs)
+    // Public Route: GET /api/snapshot (Returns strictly projected Public DTOs; zero SELECT * or telemetry bleed)
     if (request.method === "GET" && url.pathname === "/api/snapshot") {
       try {
         try {
@@ -268,63 +484,48 @@ const worker = {
         }
 
         const articlesRes = await env.DB.prepare(
-          `SELECT * FROM telemetry_articles
-           ORDER BY
-             CASE WHEN status = 'synthesized' THEN 0 WHEN status = 'triaged' THEN 1 ELSE 2 END,
-             published_at DESC,
-             id DESC`
-        ).all<Record<string, unknown>>();
-        const articles = articlesRes.results || [];
+          `SELECT ${TELEMETRY_ARTICLES_SYNTHESIS_COLUMNS}
+           FROM telemetry_articles
+           WHERE status = 'synthesized'
+           ORDER BY published_at DESC, id DESC`
+        ).all<TelemetryArticleRow>();
+        const articleRows = articlesRes.results || [];
 
-        let episodes: Record<string, unknown>[] = [];
+        const incidents: PublicIncidentDto[] = [];
+        for (const row of articleRows) {
+          const dto = mapWorkerRowToPublicIncidentDto(row);
+          if (dto) {
+            incidents.push(dto);
+          }
+        }
+
+        let episodeRows: D1EpisodeTableRow[] = [];
         try {
           const episodesRes = await env.DB.prepare(
-            "SELECT * FROM episodes ORDER BY published_at DESC, episode_number DESC, id DESC"
-          ).all<Record<string, unknown>>();
-          episodes = episodesRes.results || [];
+            `SELECT ${EPISODES_SELECT_COLUMNS}
+             FROM episodes
+             WHERE status = 'PUBLISHED'
+             ORDER BY published_at DESC, episode_number DESC, id DESC`
+          ).all<D1EpisodeTableRow>();
+          episodeRows = episodesRes.results || [];
         } catch {
-          episodes = [];
+          episodeRows = [];
         }
 
-        let pipelineRuns: Record<string, unknown>[] = [];
-        try {
-          const runsRes = await env.DB.prepare(
-            "SELECT * FROM pipeline_runs ORDER BY started_at DESC, id DESC LIMIT 50"
-          ).all<Record<string, unknown>>();
-          pipelineRuns = runsRes.results || [];
-        } catch {
-          pipelineRuns = [];
+        const episodes: PublicEpisodeDto[] = [];
+        for (const epRow of episodeRows) {
+          const dto = mapWorkerRowToPublicEpisodeDto(epRow, incidents);
+          if (dto) {
+            episodes.push(dto);
+          }
         }
-
-        const synthesizedCount = articles.filter(
-          (r) => r.status === "synthesized"
-        ).length;
-        const triagedCount = articles.filter(
-          (r) => r.status === "triaged"
-        ).length;
-        const droppedCount = articles.filter(
-          (r) => r.status === "dropped"
-        ).length;
-
-        const forceFresh =
-          url.searchParams.get("fresh") === "1" ||
-          url.searchParams.get("fresh") === "true";
 
         return jsonResponse(
           {
             ok: true,
-            source: "cloudflare-d1",
-            database: "cabcall-db",
-            timestamp: new Date().toISOString(),
-            counts: {
-              synthesizedCount,
-              triagedCount,
-              droppedCount,
-              totalEvaluated: articles.length,
-            },
-            articles,
+            publishedAt: new Date().toISOString(),
+            incidents,
             episodes,
-            pipelineRuns,
           },
           200,
           {
@@ -2214,7 +2415,8 @@ const worker = {
           const [episodes, candidateArticlesRes] = await Promise.all([
             listAdminEpisodes(env.DB),
             env.DB.prepare(
-              `SELECT * FROM telemetry_articles
+              `SELECT ${TELEMETRY_ARTICLES_SYNTHESIS_COLUMNS}
+               FROM telemetry_articles
                WHERE status IN ('synthesized', 'triaged')
                ORDER BY
                  CASE WHEN status = 'synthesized' THEN 0 ELSE 1 END,
@@ -2515,39 +2717,62 @@ const worker = {
     if (controller.cron === "0 */6 * * *") {
       ctx.waitUntil(
         (async () => {
-          await runD1IngestPipeline({
-            db: env.DB,
-            typesafeApiKey: env.TYPESAFE_API_KEY,
-            maxNetNew: 10,
-            itemsPerFeed: 5,
-          });
-          await runSynthesizePipeline({
-            db: env.DB,
-            geminiApiKey: env.GEMINI_API_KEY,
-            limit: 5,
-          });
+          try {
+            await runD1IngestPipeline({
+              db: env.DB,
+              typesafeApiKey: env.TYPESAFE_API_KEY,
+              maxNetNew: 10,
+              itemsPerFeed: 5,
+            });
+          } catch (err) {
+            console.error("[Scheduled 6h Cron] Ingest stage error:", err);
+          }
+          try {
+            await runSynthesizePipeline({
+              db: env.DB,
+              geminiApiKey: env.GEMINI_API_KEY,
+              limit: 5,
+            });
+          } catch (err) {
+            console.error("[Scheduled 6h Cron] Synthesize stage error:", err);
+          }
         })()
       );
     } else if (controller.cron === "0 12 * * 5") {
       // Weekly Friday 12:00 UTC rollup hook: runs latest ingestion + synthesis sweep, then generates the Weekly Rollup
       ctx.waitUntil(
         (async () => {
-          await runD1IngestPipeline({
-            db: env.DB,
-            typesafeApiKey: env.TYPESAFE_API_KEY,
-            maxNetNew: 10,
-            itemsPerFeed: 5,
-          });
-          await runSynthesizePipeline({
-            db: env.DB,
-            geminiApiKey: env.GEMINI_API_KEY,
-            limit: 5,
-          });
-          await runWeeklyRollupPipeline({
-            db: env.DB,
-            audioBucket: env.AUDIO_BUCKET,
-            geminiApiKey: env.GEMINI_API_KEY,
-          });
+          try {
+            await runD1IngestPipeline({
+              db: env.DB,
+              typesafeApiKey: env.TYPESAFE_API_KEY,
+              maxNetNew: 10,
+              itemsPerFeed: 5,
+            });
+          } catch (err) {
+            console.error("[Scheduled Friday Cron] Ingest stage error:", err);
+          }
+          try {
+            await runSynthesizePipeline({
+              db: env.DB,
+              geminiApiKey: env.GEMINI_API_KEY,
+              limit: 5,
+            });
+          } catch (err) {
+            console.error(
+              "[Scheduled Friday Cron] Synthesize stage error:",
+              err
+            );
+          }
+          try {
+            await runWeeklyRollupPipeline({
+              db: env.DB,
+              audioBucket: env.AUDIO_BUCKET,
+              geminiApiKey: env.GEMINI_API_KEY,
+            });
+          } catch (err) {
+            console.error("[Scheduled Friday Cron] Rollup stage error:", err);
+          }
         })()
       );
     }

@@ -1,12 +1,12 @@
 import {
   buildOrSanitizeArticleDiagnostics,
-  joinClauseWithTransition,
+  normalizeCanonicalUrl,
   sanitizeStringConcatenation,
+  stripUnsafeHtmlAndCdata,
   validateAndNormalizeIncidentSummary,
 } from "./sanitize";
 import {
   DomainSectorId,
-  getSreFailureModeSpec,
   getWorkingToolSpec,
   SreFailureModeId,
   WorkingToolId,
@@ -25,10 +25,16 @@ import {
   PodcastEpisode,
   ToolProbabilityDistribution,
 } from "./types";
+import {
+  computeCanonicalArticleHash,
+  fetchFeedXmlWithLimits,
+} from "../pipeline/ingest";
 
 export interface RawFeedItem {
   title: string;
   link: string;
+  guid?: string;
+  urlHash?: string;
   description: string;
   pubDate: string;
   sourceFeed: string;
@@ -57,11 +63,14 @@ export const TARGET_RSS_FEEDS = [
   },
 ];
 
-export function computeUrlHash(url: string): string {
-  let h1 = 0xdeadbeef ^ url.length;
-  let h2 = 0x41c6ce57 ^ url.length;
-  for (let i = 0, ch; i < url.length; i++) {
-    ch = url.charCodeAt(i);
+export function computeUrlHash(url: string, guid?: string): string {
+  const normalizedUrl = normalizeCanonicalUrl(url) || url.trim();
+  const normalizedGuid = guid ? stripUnsafeHtmlAndCdata(guid).trim() : normalizedUrl;
+  const canonical = `${normalizedUrl}::${normalizedGuid}`;
+  let h1 = 0xdeadbeef ^ canonical.length;
+  let h2 = 0x41c6ce57 ^ canonical.length;
+  for (let i = 0, ch; i < canonical.length; i++) {
+    ch = canonical.charCodeAt(i);
     h1 = Math.imul(h1 ^ ch, 2654435761);
     h2 = Math.imul(h2 ^ ch, 1597334677);
   }
@@ -74,24 +83,12 @@ export function computeUrlHash(url: string): string {
   return (
     (h2 >>> 0).toString(16).padStart(8, "0") +
     (h1 >>> 0).toString(16).padStart(8, "0") +
-    url.length.toString(16).padStart(4, "0")
+    canonical.length.toString(16).padStart(4, "0")
   );
 }
 
 export function stripHtmlToPlainText(raw: string): string {
-  return raw
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&#039;/g, "'")
-    .replace(/&#8217;/g, "'")
-    .replace(/&#8220;/g, '"')
-    .replace(/&#8221;/g, '"')
-    .replace(/\s+/g, " ")
-    .trim();
+  return stripUnsafeHtmlAndCdata(raw);
 }
 
 export function parseRssXml(xml: string, sourceFeed: string): RawFeedItem[] {
@@ -103,17 +100,24 @@ export function parseRssXml(xml: string, sourceFeed: string): RawFeedItem[] {
     const block = match[1];
     const titleMatch = block.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
     const linkMatch = block.match(/<link[^>]*>([\s\S]*?)<\/link>/i);
+    const guidMatch = block.match(/<guid[^>]*>([\s\S]*?)<\/guid>/i);
     const descMatch = block.match(
       /<description[^>]*>([\s\S]*?)<\/description>/i
     );
     const pubDateMatch = block.match(/<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i);
 
     const title = titleMatch ? stripHtmlToPlainText(titleMatch[1]) : "";
-    const link = linkMatch ? stripHtmlToPlainText(linkMatch[1]) : "";
+    const rawLink = linkMatch ? stripHtmlToPlainText(linkMatch[1]) : "";
+    const link = normalizeCanonicalUrl(rawLink);
+    const guid = guidMatch ? stripHtmlToPlainText(guidMatch[1]) : link;
     const description = descMatch ? stripHtmlToPlainText(descMatch[1]) : "";
-    const pubDate = pubDateMatch
-      ? new Date(stripHtmlToPlainText(pubDateMatch[1])).toISOString()
-      : new Date().toISOString();
+    let pubDate = new Date().toISOString();
+    if (pubDateMatch) {
+      const parsedDate = new Date(stripHtmlToPlainText(pubDateMatch[1]));
+      if (!Number.isNaN(parsedDate.getTime())) {
+        pubDate = parsedDate.toISOString();
+      }
+    }
 
     if (!title || !link) {
       continue;
@@ -132,6 +136,8 @@ export function parseRssXml(xml: string, sourceFeed: string): RawFeedItem[] {
     items.push({
       title,
       link,
+      guid,
+      urlHash: computeUrlHash(link, guid),
       description: validation.cleanedDescription,
       pubDate,
       sourceFeed,
@@ -159,59 +165,6 @@ export async function classifyArticleSystem1(
 ): Promise<System1ClassificationResult> {
   const start = Date.now();
   const text = `${item.title} ${item.description}`.toLowerCase();
-
-  // Check if Jev API key is configured for external live endpoint
-  if (process.env.JEV_API_KEY) {
-    try {
-      const response = await fetch("https://api.typesafe.ai/v1/classify", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.JEV_API_KEY}`,
-        },
-        body: JSON.stringify({
-          input: `${item.title}\n\n${item.description}`,
-          questions: {
-            signal:
-              "Does this story involve systemic failure, leadership decisions, ethical friction, infrastructure resilience, or public accountability?",
-            working_tool: [
-              "24-Inch Gauge",
-              "Common Gavel",
-              "The Plumb",
-              "The Square",
-              "The Level",
-              "The Trowel",
-            ],
-            sre_failure_mode: [
-              "Configuration Drift",
-              "Cascading Failure",
-              "Alert Fatigue & Signal Loss",
-              "Single Point of Failure (SPOF) / Untested Failover",
-              "Blame Culture vs. Root-Cause Isolation",
-              "Technical & Institutional Debt",
-            ],
-          },
-        }),
-      });
-      if (response.ok) {
-        const data = await response.json();
-        if (data && data.probabilities) {
-          return {
-            isSignal: data.confidence >= 0.75,
-            jevConfidence: data.confidence,
-            primaryTool: data.primary_tool,
-            secondaryTool: data.secondary_tool,
-            sreFailureMode: data.sre_failure_mode,
-            domainSector: "Technology & Cyber",
-            toolProbabilities: data.probabilities,
-            latencyMs: Math.max(72, Date.now() - start),
-          };
-        }
-      }
-    } catch {
-      // Fall through to local deterministic NLI classifier
-    }
-  }
 
   // Deterministic Zero-Shot NLI Lexical-Semantic Scoring
   const rawScores: Record<WorkingToolId, number> = {
@@ -252,7 +205,6 @@ export async function classifyArticleSystem1(
     })
     .sort((a, b) => b.prob - a.prob);
 
-  // Normalize rounding sum to 1.00
   const sum = Object.values(probabilities).reduce((a, b) => a + b, 0);
   probabilities[sortedTools[0].tool] =
     Math.round((probabilities[sortedTools[0].tool] + (1 - sum)) * 100) / 100;
@@ -274,7 +226,6 @@ export async function classifyArticleSystem1(
     domainSector = "Institutional Leadership";
   }
 
-  // Signal vs. Noise calculation
   const signalKeywords =
     /(system|audit|outage|security|policy|failure|infrastructure|protocol|governance|network|database|kernel|court|grid|bank|agency|compliance|vulnerability|deployment|architecture)/i;
   const hasHighSignal = signalKeywords.test(text) && item.title.length > 24;
@@ -297,17 +248,18 @@ export async function classifyArticleSystem1(
 }
 
 /**
- * Stage 4: System 2 Synthesis — Strictly bound by the System 1 classification record
+ * Stage 4: System 2 Synthesis — Strictly bound by the System 1 classification record.
+ * Never fabricates Mad-Libs fallback strings; returns null if complete editorial diagnostics are absent.
  */
 export async function synthesizeIncidentBriefSystem2(
-  item: RawFeedItem,
+  item: RawFeedItem & {
+    existingNoise?: string;
+    existingSignal?: string;
+    existingQuestions?: string[];
+  },
   classification: System1ClassificationResult,
   sequenceNumber: number
-): Promise<IncidentArticle> {
-  const toolSpec = getWorkingToolSpec(classification.primaryTool);
-  const secondarySpec = getWorkingToolSpec(classification.secondaryTool);
-  const failureSpec = getSreFailureModeSpec(classification.sreFailureMode);
-
+): Promise<IncidentArticle | null> {
   const incidentCode = `#CAB-2026-${sequenceNumber}`;
   const slug =
     item.title
@@ -324,6 +276,10 @@ export async function synthesizeIncidentBriefSystem2(
     logWarnings: false,
   });
 
+  if (!validation.valid) {
+    return null;
+  }
+
   const executiveSummary =
     validation.executiveSummary ||
     sanitizeStringConcatenation(validation.cleanedDescription);
@@ -338,20 +294,22 @@ export async function synthesizeIncidentBriefSystem2(
     primaryTool: classification.primaryTool,
     secondaryTool: classification.secondaryTool,
     sreFailureMode: classification.sreFailureMode,
+    existingNoise: item.existingNoise,
+    existingSignal: item.existingSignal,
+    existingQuestions: item.existingQuestions,
   });
 
-  const diagnosticApplication = sanitizeStringConcatenation(
-    `${toolSpec.sreDefinition} ${joinClauseWithTransition(
-      "Meanwhile",
-      failureSpec.summary
-    )} Applying ${classification.primaryTool} alongside ${secondarySpec.id} frames the inquiry around verifiable system state rather than reactive commentary.`
-  );
+  if (!diagnostics.valid || diagnostics.questions.length < 2) {
+    return null;
+  }
+
+  const urlHash = await computeCanonicalArticleHash(item.link, item.guid);
 
   return {
     id: `inc-${sequenceNumber}`,
     incidentCode,
     slug,
-    urlHash: computeUrlHash(item.link),
+    urlHash,
     sourceFeed: item.sourceFeed,
     title: item.title,
     sourceUrl: item.link,
@@ -365,18 +323,19 @@ export async function synthesizeIncidentBriefSystem2(
     toolProbabilities: classification.toolProbabilities,
     executiveSummary,
     socraticBrief,
-    diagnosticApplication,
+    diagnosticApplication: diagnostics.structuralSignal,
     proportionalityCheck: {
       noiseOverblown: diagnostics.noiseOverblown,
       structuralSignal: diagnostics.structuralSignal,
     },
-    questions: diagnostics.questions,
+    questions: [diagnostics.questions[0], diagnostics.questions[1]],
     classifierLatencyMs: classification.latencyMs,
   };
 }
 
 /**
- * Full Stage 1 -> Stage 4 Ingestion Pipeline execution
+ * Full Stage 1 -> Stage 4 Ingestion Pipeline execution with concurrent feed polling
+ * and isolated timeout controllers.
  */
 export async function runIngestionPipeline(options?: {
   customArticle?: {
@@ -396,6 +355,9 @@ export async function runIngestionPipeline(options?: {
   const candidateItems: RawFeedItem[] = [];
 
   if (options?.customArticle) {
+    const normalizedLink =
+      normalizeCanonicalUrl(options.customArticle.link) ||
+      `https://thecabcall.com/telemetry/${Date.now()}`;
     const validation = validateAndNormalizeIncidentSummary({
       title: options.customArticle.title,
       sourceFeed: options.customArticle.sourceFeed || "LIVE TELEMETRY INPUT",
@@ -404,29 +366,27 @@ export async function runIngestionPipeline(options?: {
     });
     if (validation.valid) {
       candidateItems.push({
-        title: options.customArticle.title,
+        title: stripHtmlToPlainText(options.customArticle.title),
         description: validation.cleanedDescription,
         sourceFeed: options.customArticle.sourceFeed || "LIVE TELEMETRY INPUT",
-        link:
-          options.customArticle.link ||
-          `https://thecabcall.com/telemetry/${Date.now()}`,
+        link: normalizedLink,
+        guid: normalizedLink,
+        urlHash: computeUrlHash(normalizedLink, normalizedLink),
         pubDate: new Date().toISOString(),
       });
     }
   } else {
-    for (const feed of TARGET_RSS_FEEDS) {
-      try {
-        const res = await fetch(feed.url, {
-          headers: { "User-Agent": "TheCABCall-Telemetry-Bot/1.0" },
-          signal: AbortSignal.timeout(4500),
+    const settled = await Promise.allSettled(
+      TARGET_RSS_FEEDS.map(async (feed) => {
+        const { xml } = await fetchFeedXmlWithLimits(feed.url, {
+          timeoutMs: 4500,
         });
-        if (res.ok) {
-          const xml = await res.text();
-          const parsed = parseRssXml(xml, feed.name).slice(0, 4);
-          candidateItems.push(...parsed);
-        }
-      } catch {
-        // Fallback if external RSS feed times out in restricted environment
+        return parseRssXml(xml, feed.name).slice(0, 4);
+      })
+    );
+    for (const outcome of settled) {
+      if (outcome.status === "fulfilled") {
+        candidateItems.push(...outcome.value);
       }
     }
   }
@@ -435,7 +395,7 @@ export async function runIngestionPipeline(options?: {
   let nextSeq = 1043 + currentIncidents.length;
 
   for (const item of candidateItems) {
-    const hash = computeUrlHash(item.link);
+    const hash = item.urlHash || computeUrlHash(item.link, item.guid);
     if (hasUrlHash(hash) && !options?.customArticle) {
       continue;
     }
@@ -449,9 +409,13 @@ export async function runIngestionPipeline(options?: {
         classification,
         nextSeq++
       );
-      insertIncident(incident);
-      newlyCreated.push(incident);
-      itemsAccepted++;
+      if (incident) {
+        insertIncident(incident);
+        newlyCreated.push(incident);
+        itemsAccepted++;
+      } else {
+        itemsRejectedNoise++;
+      }
     } else {
       itemsRejectedNoise++;
     }
@@ -472,7 +436,7 @@ export async function runIngestionPipeline(options?: {
     status: "nominal" as const,
     notes: options?.customArticle
       ? `Evaluated custom telemetry submission: "${options.customArticle.title.slice(0, 50)}..."`
-      : `Evaluated ${itemsEvaluated} net-new RSS items; accepted ${itemsAccepted} high-signal incidents (>=0.75 confidence).`,
+      : `Evaluated ${itemsEvaluated} net-new RSS items; accepted ${itemsAccepted} high-signal incidents.`,
   };
 
   recordPipelineRun(runRecord);
@@ -498,7 +462,7 @@ export function generateWeeklyRollupEpisode(): PodcastEpisode {
 
   const [inc1, inc2, inc3] = topIncidents;
 
-  const weeklyTelemetry = `${posture.dominantTool} leads this week's Trestleboard at ${posture.dominantToolPercentage}% of primary classifications, with ${posture.topFailureMode} emerging as the primary failure mode across ${posture.totalIncidentsWindow} active dispatches. Three anchor incidents set the weekly docket: ${inc1?.incidentCode || "#CAB-2026-1042"} ("${inc1?.title || "SCADA segmentation drift"}"), ${inc2?.incidentCode || "#CAB-2026-1041"} ("${inc2?.title || "Standby TLS certificate halt"}"), and ${inc3?.incidentCode || "#CAB-2026-1040"} ("${inc3?.title || "BGP routing sync outage"}"). Across each sector, live operational environments quietly diverged from their chartered specifications.`;
+  const weeklyTelemetry = `${posture.dominantTool} leads this week's Trestleboard across ${posture.totalIncidentsWindow} active dispatches, with ${posture.topFailureMode} emerging as the primary failure mode. Three anchor incidents set the weekly docket: ${inc1?.incidentCode || "#CAB-2026-1042"} ("${inc1?.title || "SCADA segmentation drift"}"), ${inc2?.incidentCode || "#CAB-2026-1041"} ("${inc2?.title || "Standby TLS certificate halt"}"), and ${inc3?.incidentCode || "#CAB-2026-1040"} ("${inc3?.title || "BGP routing sync outage"}"). Across each sector, live operational environments quietly diverged from their chartered specifications.`;
 
   const separatingSignalFromPanic = `The commentary cycle wants you to treat every one of these disclosures as a total system collapse or a partisan morality play. Good systems architecture tells us otherwise: a localized component fault isn't a core outage, and an audit disclosure is diagnostic telemetry, not an active breach. Look closely at ${inc1?.incidentCode || "#CAB-2026-1042"} and ${inc2?.incidentCode || "#CAB-2026-1041"}. Pundits immediately amplified worst-case speculation, while overlooking the actual engineering lesson: ${inc1?.proportionalityCheck.structuralSignal || "paper attestations cannot replace continuous state verification"}. We saw the exact same signal-to-noise inversion in ${inc3?.incidentCode || "#CAB-2026-1040"}, where hours of public attention focused on blaming a single operator at the keyboard while ignoring the upstream budget decisions that removed the staging guardrails in the first place.`;
 
@@ -511,8 +475,8 @@ export function generateWeeklyRollupEpisode(): PodcastEpisode {
     slug: `cab-weekly-brief-0${nextEpisodeNum}-automated-friday-retro`,
     episodeNumber: nextEpisodeNum,
     series: "weekly_rollup",
-    title: `CAB Weekly Brief #${nextEpisodeNum}: ${posture.dominantTool} (${posture.dominantToolPercentage}%), ${posture.topFailureMode}, and Next Week's Trestleboard`,
-    summary: `Friday 5-minute Change Advisory Board synthesis led by ${posture.dominantTool} (${posture.dominantToolPercentage}%) and ${posture.topFailureMode} across ${posture.totalIncidentsWindow} active dispatches.`,
+    title: `CAB Weekly Brief #${nextEpisodeNum}: ${posture.dominantTool}, ${posture.topFailureMode}, and Next Week's Trestleboard`,
+    summary: `Friday 5-minute Change Advisory Board synthesis led by ${posture.dominantTool} and ${posture.topFailureMode} across ${posture.totalIncidentsWindow} active dispatches.`,
     publishedAt: new Date().toISOString(),
     durationSeconds: 300,
     durationFormatted: "05:00",
@@ -555,4 +519,5 @@ export function generateWeeklyRollupEpisode(): PodcastEpisode {
 
   return episode;
 }
+
 
