@@ -315,20 +315,26 @@ async function runVerificationSuite() {
         { status: 200 }
       );
     }
-    // Ars Technica succeeds with valid RSS item containing CDATA and tracking params
+    if (url.includes("arstechnica.com")) {
+      // Ars Technica succeeds with valid RSS item containing CDATA and tracking params
+      return new Response(
+        `<?xml version="1.0" encoding="UTF-8"?>
+         <rss version="2.0">
+           <channel>
+             <item>
+               <title><![CDATA[Regional Fiber Backhaul Cut Exposes Redundant Path Sharing Across Three Carriers]]></title>
+               <link>https://arstechnica.com/information-technology/2026/10/fiber-cut/?utm_source=rss&amp;utm_campaign=main</link>
+               <guid>ars-fiber-2026-10-17</guid>
+               <pubDate>Sat, 17 Oct 2026 12:00:00 GMT</pubDate>
+               <description><![CDATA[<script>bad()</script><p>A backhoe severance along a shared highway right-of-way simultaneously disrupted three ostensibly independent cloud transit providers whose backup dark-fiber leases traversed the same physical conduit. Post-incident engineering reviews confirmed that logical BGP route diversity had never been cross-checked against municipal physical conduit maps.</p>]]></description>
+             </item>
+           </channel>
+         </rss>`,
+        { status: 200 }
+      );
+    }
     return new Response(
-      `<?xml version="1.0" encoding="UTF-8"?>
-       <rss version="2.0">
-         <channel>
-           <item>
-             <title><![CDATA[Regional Fiber Backhaul Cut Exposes Redundant Path Sharing Across Three Carriers]]></title>
-             <link>https://arstechnica.com/information-technology/2026/10/fiber-cut/?utm_source=rss&amp;utm_campaign=main</link>
-             <guid>ars-fiber-2026-10-17</guid>
-             <pubDate>Sat, 17 Oct 2026 12:00:00 GMT</pubDate>
-             <description><![CDATA[<script>bad()</script><p>A backhoe severance along a shared highway right-of-way simultaneously disrupted three ostensibly independent cloud transit providers whose backup dark-fiber leases traversed the same physical conduit. Post-incident engineering reviews confirmed that logical BGP route diversity had never been cross-checked against municipal physical conduit maps.</p>]]></description>
-           </item>
-         </channel>
-       </rss>`,
+      `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel></channel></rss>`,
       { status: 200 }
     );
   };

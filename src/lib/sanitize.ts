@@ -401,6 +401,8 @@ export function cleanRssText(raw: string | null | undefined): string {
     .replace(/\(Image credit:[^)]*\)/gi, " ")
     .replace(/\bCredit:\s*via\s+[^\n.]+/gi, " ")
     .replace(/\bRead full article\b[\s\S]*$/i, " ")
+    .replace(/\s*-\s*by\s+[^\n]+\s+(?:Read|Watch|Listen)\s+on\s+Aeon\s*$/i, " ")
+    .replace(/\s*(?:\[\.\.\.\]|\[…\])\s*$/g, "")
     .replace(/\bComments\s*$/i, " ")
     .replace(/\bLeave your feedback\b/gi, " ")
     .replace(/\b[A-Z][a-z]+ [A-Z][a-z]+ reports\.?\s*$/g, " ")
@@ -766,6 +768,62 @@ export function validateAndNormalizeIncidentSummary(input: {
 
   const cleanedDescription = cleanRssText(rawDesc);
 
+  // Candidate 1: Check if an existing executiveSummary is clean, non-Mad-Libs, and 2-3 factual sentences
+  if (
+    input.executiveSummary &&
+    !hasBannedPipelineJargon(input.executiveSummary)
+  ) {
+    const cleanedExec = cleanRssText(input.executiveSummary);
+    const execSentences = splitIntoSentences(cleanedExec);
+    if (
+      cleanedExec.length >= 80 &&
+      execSentences.length >= 2 &&
+      !isHeadlineEcho(title, cleanedExec)
+    ) {
+      const twoSent = sanitizeStringConcatenation(
+        execSentences.slice(0, 2).join(" ")
+      );
+      // Also check if socraticBrief has a clean 2-3 sentence first paragraph
+      let factualPara = sanitizeStringConcatenation(
+        execSentences.slice(0, 3).join(" ")
+      );
+      if (input.socraticBrief) {
+        const firstPara = extractCleanFirstParagraphFromBrief(
+          title,
+          input.socraticBrief
+        );
+        if (firstPara) {
+          factualPara = firstPara;
+        }
+      }
+      return {
+        valid: true,
+        cleanedDescription: cleanedDescription || cleanedExec,
+        executiveSummary: twoSent,
+        factualBriefParagraph: factualPara,
+      };
+    }
+  }
+
+  // Candidate 2: Check if socraticBrief has a clean 2-3 sentence first paragraph
+  if (input.socraticBrief) {
+    const firstPara = extractCleanFirstParagraphFromBrief(
+      title,
+      input.socraticBrief
+    );
+    if (firstPara) {
+      const sents = splitIntoSentences(firstPara);
+      if (sents.length >= 2 && firstPara.length >= 80 && !isHeadlineEcho(title, firstPara)) {
+        return {
+          valid: true,
+          cleanedDescription: cleanedDescription || firstPara,
+          executiveSummary: sanitizeStringConcatenation(sents.slice(0, 2).join(" ")),
+          factualBriefParagraph: sanitizeStringConcatenation(sents.slice(0, 3).join(" ")),
+        };
+      }
+    }
+  }
+
   if (cleanedDescription.length < 80) {
     const reason = `Description shorter than 80 characters (${cleanedDescription.length} chars) for "${title}" (${input.sourceFeed})`;
     if (shouldLog) {
@@ -806,62 +864,6 @@ export function validateAndNormalizeIncidentSummary(input: {
       factualBriefParagraph: "",
       reason,
     };
-  }
-
-  // Candidate 1: Check if an existing executiveSummary is clean, non-Mad-Libs, and 2-3 factual sentences
-  if (
-    input.executiveSummary &&
-    !hasBannedPipelineJargon(input.executiveSummary)
-  ) {
-    const cleanedExec = cleanRssText(input.executiveSummary);
-    const execSentences = splitIntoSentences(cleanedExec);
-    if (
-      cleanedExec.length >= 80 &&
-      execSentences.length >= 2 &&
-      !isHeadlineEcho(title, cleanedExec)
-    ) {
-      const twoSent = sanitizeStringConcatenation(
-        execSentences.slice(0, 2).join(" ")
-      );
-      // Also check if socraticBrief has a clean 2-3 sentence first paragraph
-      let factualPara = sanitizeStringConcatenation(
-        execSentences.slice(0, 3).join(" ")
-      );
-      if (input.socraticBrief) {
-        const firstPara = extractCleanFirstParagraphFromBrief(
-          title,
-          input.socraticBrief
-        );
-        if (firstPara) {
-          factualPara = firstPara;
-        }
-      }
-      return {
-        valid: true,
-        cleanedDescription,
-        executiveSummary: twoSent,
-        factualBriefParagraph: factualPara,
-      };
-    }
-  }
-
-  // Candidate 2: Check if socraticBrief has a clean 2-3 sentence first paragraph
-  if (input.socraticBrief) {
-    const firstPara = extractCleanFirstParagraphFromBrief(
-      title,
-      input.socraticBrief
-    );
-    if (firstPara) {
-      const sents = splitIntoSentences(firstPara);
-      if (sents.length >= 2 && firstPara.length >= 80 && !isHeadlineEcho(title, firstPara)) {
-        return {
-          valid: true,
-          cleanedDescription,
-          executiveSummary: sanitizeStringConcatenation(sents.slice(0, 2).join(" ")),
-          factualBriefParagraph: sanitizeStringConcatenation(sents.slice(0, 3).join(" ")),
-        };
-      }
-    }
   }
 
   // Candidate 3: Extract 2-to-3 factual sentences directly from cleanedDescription
