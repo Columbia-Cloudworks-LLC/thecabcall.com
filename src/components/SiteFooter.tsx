@@ -117,31 +117,24 @@ export function SiteFooter() {
         </div>
 
         <div className="pt-6 flex flex-col lg:flex-row items-center justify-between gap-4 text-xs text-[#94A3B8]">
-          <div className="flex flex-wrap items-center justify-center lg:justify-start gap-x-2 gap-y-1.5 font-mono">
-            <span>
-              © {currentYear} Columbia Cloudworks LLC. All rights reserved.
-            </span>
-            <span aria-hidden="true" className="text-[#8A6D3B]/60">
-              ·
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span>Owned and operated by</span>
-              <a
-                href={COLUMBIA_CLOUDWORKS_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-[#F3EFE6] hover:text-[#C5A059] transition-colors font-semibold underline-offset-4 hover:underline"
-              >
-                <img
-                  src="/images/brand/icons/Columbia-Cloudworks-Icon-Small.png"
-                  alt="Columbia Cloudworks LLC"
-                  width={18}
-                  height={18}
-                  className="w-4.5 h-4.5 shrink-0 rounded-sm opacity-95 ring-1 ring-white/10"
-                />
-                <span>Columbia Cloudworks LLC</span>
-              </a>
-            </span>
+          <div className="inline-flex flex-wrap items-center justify-center lg:justify-start font-mono">
+            <span className="mr-1.5">© {currentYear}</span>
+            <a
+              href={COLUMBIA_CLOUDWORKS_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-[#F3EFE6] hover:text-[#C5A059] transition-colors font-semibold underline-offset-4 hover:underline"
+            >
+              <img
+                src="/images/brand/icons/Columbia-Cloudworks-Icon-Small.png"
+                alt="Columbia Cloudworks LLC"
+                width={18}
+                height={18}
+                className="w-4.5 h-4.5 shrink-0 rounded-sm opacity-95 ring-1 ring-white/10"
+              />
+              <span>Columbia Cloudworks LLC</span>
+            </a>
+            <span>. All rights reserved.</span>
           </div>
           <span className="font-serif italic text-sm text-[#C5A059]">
             &ldquo;Meet on the Level. Act by the Plumb. Part upon the Square.&rdquo;
