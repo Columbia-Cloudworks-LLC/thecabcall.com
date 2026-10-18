@@ -3,14 +3,13 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import {
-  DomainSectorId,
   SreFailureModeId,
   WorkingToolId,
 } from "@/lib/taxonomy";
 import {
   IncidentArticle,
   PodcastEpisode,
-  SystemPostureSummary,
+  WeeklyTrestleboardState,
 } from "@/lib/types";
 import { useTelemetry } from "./TelemetryContext";
 import { IncidentCard } from "./IncidentCard";
@@ -21,7 +20,7 @@ import {
 
 interface TrestleboardClientProps {
   initialIncidents: IncidentArticle[];
-  posture: SystemPostureSummary;
+  weeklyState: WeeklyTrestleboardState;
   pinnedEpisode: PodcastEpisode;
 }
 
@@ -50,14 +49,6 @@ const FAILURE_MODE_OPTIONS: { value: SreFailureModeId; label: string }[] = [
     value: "Technical & Institutional Debt",
     label: "Institutional Debt",
   },
-];
-
-const SECTOR_OPTIONS: { value: DomainSectorId; label: string }[] = [
-  { value: "Infrastructure & Supply Chain", label: "Infrastructure" },
-  { value: "Technology & Cyber", label: "Technology" },
-  { value: "Public Policy & Governance", label: "Governance" },
-  { value: "Economics & Markets", label: "Markets" },
-  { value: "Institutional Leadership", label: "Leadership" },
 ];
 
 const SHORT_FAILURE_LABELS: Record<SreFailureModeId, string> = {
@@ -93,7 +84,7 @@ function formatLeadDateline(isoDate: string): string {
 
 export function TrestleboardClient({
   initialIncidents,
-  posture,
+  weeklyState,
   pinnedEpisode,
 }: TrestleboardClientProps) {
   const {
@@ -106,29 +97,36 @@ export function TrestleboardClient({
 
   const [selectedTool, setSelectedTool] = useState<string>("ALL");
   const [selectedFailure, setSelectedFailure] = useState<string>("ALL");
-  const [selectedSector, setSelectedSector] = useState<string>("ALL");
 
   const isPinnedActive = activeEpisode.id === pinnedEpisode.id;
-
-  const heroDominantTool = pinnedEpisode.dominantTool || posture.dominantTool;
-  const heroDominantToolPct =
-    pinnedEpisode.dominantToolPercentage ?? posture.dominantToolPercentage;
-  const heroTopFailureMode =
-    pinnedEpisode.dominantFailureMode || posture.topFailureMode;
-  const heroWeeklyNarrative =
-    pinnedEpisode.transcriptSections?.weeklyTelemetry || pinnedEpisode.summary;
 
   const filteredIncidents = initialIncidents.filter((inc) => {
     if (selectedTool !== "ALL" && inc.primaryTool !== selectedTool) return false;
     if (selectedFailure !== "ALL" && inc.sreFailureMode !== selectedFailure)
       return false;
-    if (selectedSector !== "ALL" && inc.domainSector !== selectedSector)
-      return false;
     return true;
   });
 
-  const leadIncident = filteredIncidents[0] || null;
-  const secondaryIncidents = filteredIncidents.slice(1, 7);
+  // Only render a full-width Featured Incident card if a record is explicitly flagged
+  // as the week's "Lead Post-Mortem" with bespoke multi-paragraph analysis.
+  const leadPostMortemIncident =
+    filteredIncidents.find(
+      (inc) =>
+        Boolean(inc.isLeadPostMortem) &&
+        typeof inc.leadPostMortemAnalysis === "string" &&
+        inc.leadPostMortemAnalysis.trim().split(/\n\s*\n/).length >= 2
+    ) || null;
+
+  const gridIncidents = leadPostMortemIncident
+    ? filteredIncidents
+        .filter((inc) => inc.id !== leadPostMortemIncident.id)
+        .slice(0, 8)
+    : filteredIncidents.slice(0, 8);
+
+  const resetFilters = () => {
+    setSelectedTool("ALL");
+    setSelectedFailure("ALL");
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
@@ -148,7 +146,7 @@ export function TrestleboardClient({
 
         <div className="relative z-10 flex flex-col lg:flex-row">
           {/* Left Column (65% Width) — Pattern of the Week */}
-          <div className="relative lg:w-[65%] p-6 sm:p-8 lg:p-10 overflow-hidden">
+          <div className="relative lg:w-[65%] p-6 sm:p-8 lg:p-10 overflow-hidden flex flex-col justify-between">
             {/* Subtle 10% opacity copperplate vector engraving of a Mason's Square */}
             <div className="pointer-events-none select-none absolute -bottom-6 -right-4 opacity-10">
               <MasonSquareWatermark className="w-64 h-64 sm:w-72 sm:h-72" />
@@ -156,60 +154,91 @@ export function TrestleboardClient({
 
             <div className="relative z-10 space-y-4">
               <div className="font-mono text-xs uppercase tracking-[0.2em] text-[#C5A059]">
-                WEEK OF {formatLeadDateline(pinnedEpisode.publishedAt)} // WEEKLY SYSTEMS RETROSPECTIVE
+                WEEK OF {formatLeadDateline(weeklyState.publishedAt)} // WEEKLY SYSTEMS RETROSPECTIVE
               </div>
 
               <h2 className="font-display italic text-2xl sm:text-3xl lg:text-[32px] text-[#F3EFE6] leading-tight">
-                {pinnedEpisode.title}
+                {weeklyState.heroTitle}
               </h2>
 
-              {/* Live D1 Posture Badges: Dominant Working Tool %, Top SRE Failure Mode, and Gate Metrics */}
+              {/* Synchronized Status Badges from Immutable weeklyState */}
               <div className="flex flex-wrap items-center gap-2.5 pt-1 font-mono text-xs">
                 <button
                   type="button"
-                  onClick={() => openRubricInspector({ tool: heroDominantTool })}
+                  onClick={() =>
+                    openRubricInspector({ tool: weeklyState.dominantTool })
+                  }
                   className="px-2.5 py-1 bg-[#0B0E14] border border-[#C5A059]/75 text-[#C5A059] hover:bg-[#C5A059]/15 transition-colors cursor-pointer"
                 >
-                  DOMINANT TOOL: {heroDominantTool.toUpperCase()} ({heroDominantToolPct}%)
+                  DOMINANT TOOL: {weeklyState.dominantTool.toUpperCase()} (
+                  {weeklyState.dominantToolPercentage}%)
                 </button>
                 <button
                   type="button"
                   onClick={() =>
-                    openRubricInspector({ failureMode: heroTopFailureMode })
+                    openRubricInspector({
+                      failureMode: weeklyState.primaryFailureMode,
+                    })
                   }
                   className="px-2.5 py-1 bg-[#0B0E14] border border-[#8A6D3B]/75 text-[#F3EFE6] hover:border-[#C5A059] transition-colors cursor-pointer"
                 >
-                  TOP FAILURE MODE:{" "}
+                  PRIMARY FAILURE MODE:{" "}
                   {(
-                    SHORT_FAILURE_LABELS[heroTopFailureMode] ||
-                    heroTopFailureMode
+                    SHORT_FAILURE_LABELS[weeklyState.primaryFailureMode] ||
+                    weeklyState.primaryFailureMode
                   ).toUpperCase()}
                 </button>
                 <span className="px-2.5 py-1 bg-[#0B0E14]/80 border border-[#10B981]/45 text-[#10B981]">
-                  {posture.totalIncidentsWindow} INCIDENTS · {posture.noiseRejectionRate}% NOISE REJECTED
+                  {weeklyState.activeIncidentCount} ACTIVE INCIDENTS
                 </span>
               </div>
 
               <p className="font-serif text-base sm:text-[17px] text-[#F3EFE6]/90 leading-relaxed pt-1">
-                {heroWeeklyNarrative}
+                {weeklyState.heroOpeningProse}
               </p>
             </div>
           </div>
 
-          {/* Right Column (35% Width) — The Friday CAB Call (Audio Feature) */}
+          {/* Right Column (35% Width) — The Friday CAB Call (Audio Feature + Weekly Docket) */}
           <div className="lg:w-[35%] p-6 sm:p-8 lg:p-10 border-t lg:border-t-0 lg:border-l border-[#C5A059]/35 bg-[#0B0E14]/35 flex flex-col justify-between">
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div className="font-mono text-xs uppercase tracking-[0.18em] text-[#C5A059]">
-                THE CAB CALL // EPISODE #{pinnedEpisode.episodeNumber} (5 MIN)
+                THE CAB CALL // EPISODE #{weeklyState.episodeNumber} (5 MIN)
               </div>
 
-              <p className="font-serif italic text-base sm:text-[17px] text-[#F3EFE6]/90 leading-relaxed">
-                {pinnedEpisode.summary ||
-                  "A five-minute Friday reflection for those who already know the headlines—separating cable-news panic from structural reality."}
+              <p className="font-serif italic text-sm sm:text-[15px] text-[#F3EFE6]/90 leading-relaxed">
+                {weeklyState.podcastDescription}
               </p>
+
+              {/* Compact 3-Item Bulleted Weekly Docket Eliminating Vertical Dead Space */}
+              {weeklyState.anchorIncidents.length > 0 && (
+                <div className="pt-3 border-t border-[#8A6D3B]/35 space-y-2">
+                  <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#C5A059]">
+                    Weekly Docket // 3 Anchor Incidents
+                  </div>
+                  <ul className="space-y-2">
+                    {weeklyState.anchorIncidents.slice(0, 3).map((item) => (
+                      <li
+                        key={item.id}
+                        className="flex items-start gap-2 text-xs leading-snug"
+                      >
+                        <span className="text-[#C5A059] font-mono mt-0.5 select-none">
+                          •
+                        </span>
+                        <Link
+                          href={`/incidents/${item.slug}`}
+                          className="font-serif text-[#F3EFE6]/90 hover:text-[#C5A059] transition-colors line-clamp-2"
+                        >
+                          {item.title}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
 
-            <div className="pt-6 mt-6 border-t border-[#8A6D3B]/35 space-y-3.5">
+            <div className="pt-5 mt-5 border-t border-[#8A6D3B]/35 space-y-3.5">
               <button
                 type="button"
                 onClick={() => {
@@ -225,7 +254,7 @@ export function TrestleboardClient({
                   <span>
                     ⏸ Pause Weekly Brief (
                     <span className="font-mono font-semibold">
-                      {pinnedEpisode.durationFormatted}
+                      {weeklyState.durationFormatted}
                     </span>
                     )
                   </span>
@@ -233,7 +262,7 @@ export function TrestleboardClient({
                   <span>
                     ▶ Listen to Weekly Brief (
                     <span className="font-mono font-semibold">
-                      {pinnedEpisode.durationFormatted}
+                      {weeklyState.durationFormatted}
                     </span>
                     )
                   </span>
@@ -261,7 +290,7 @@ export function TrestleboardClient({
         </div>
       </section>
 
-      {/* C. EDITORIAL FILTER RIBBON (Separated by ornate brass horizontal divider with centered compass-point diamond) */}
+      {/* C. EDITORIAL FILTER RIBBON */}
       <BrassSectionDivider />
 
       <section
@@ -327,199 +356,153 @@ export function TrestleboardClient({
             </select>
           </div>
 
-          {/* 3. Sector Selector */}
-          <div className="flex items-center gap-2.5 bg-[#111726]/80 border border-[#8A6D3B]/50 px-3.5 py-2">
-            <label
-              htmlFor="filter-sector"
-              className="font-display text-[11px] uppercase tracking-wider text-[#C5A059] whitespace-nowrap"
-            >
-              Sector:
-            </label>
-            <select
-              id="filter-sector"
-              value={selectedSector}
-              onChange={(e) => setSelectedSector(e.target.value)}
-              className="bg-transparent font-serif text-sm text-[#F3EFE6] focus:outline-none cursor-pointer pr-2 w-full"
-            >
-              <option value="ALL" className="bg-[#0B0E14] text-[#F3EFE6]">
-                All Sectors
-              </option>
-              {SECTOR_OPTIONS.map((sec) => (
-                <option
-                  key={sec.value}
-                  value={sec.value}
-                  className="bg-[#0B0E14] text-[#F3EFE6]"
-                >
-                  {sec.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {(selectedTool !== "ALL" ||
-            selectedFailure !== "ALL" ||
-            selectedSector !== "ALL") && (
+          {(selectedTool !== "ALL" || selectedFailure !== "ALL") && (
             <button
               type="button"
-              onClick={() => {
-                setSelectedTool("ALL");
-                setSelectedFailure("ALL");
-                setSelectedSector("ALL");
-              }}
+              onClick={resetFilters}
               className="font-serif text-xs text-[#C5A059] hover:text-[#F3EFE6] underline cursor-pointer whitespace-nowrap px-2 py-1"
             >
-              Clear Filters
+              Reset Filters
             </button>
           )}
         </div>
       </section>
 
-      {/* D. THE BROADSHEET STORY LAYOUT (1 Lead Story + 6 Two-Column Stories) */}
-      {!leadIncident ? (
-        <div className="tracing-board-frame p-10 text-center space-y-3">
-          <p className="font-display text-lg text-[#F3EFE6]">
-            No Broadsheet Dispatches Match the Selected Criteria
-          </p>
-          <p className="font-serif text-sm text-[#94A3B8]">
-            Restore all Working Tools, Failure Modes, and Sectors to view the full weekly Trestleboard.
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedTool("ALL");
-              setSelectedFailure("ALL");
-              setSelectedSector("ALL");
-            }}
-            className="px-4 py-2 bg-[#C5A059] text-[#0B0E14] font-display text-xs font-semibold uppercase tracking-wider cursor-pointer"
-          >
-            Restore All Dispatches
-          </button>
+      {/* D. THE TRESTLEBOARD INCIDENT GRID (Or Empty Filter State) */}
+      {filteredIncidents.length === 0 ? (
+        <div
+          role="status"
+          className="relative bg-[#111726] border border-[#C5A059]/75 p-10 text-center space-y-4 shadow-[0_12px_36px_rgba(0,0,0,0.55)]"
+        >
+          <div className="pointer-events-none absolute inset-1.5 border border-[#8A6D3B]/45" />
+          <span className="pointer-events-none absolute top-1 left-1 w-3 h-3 border-t-2 border-l-2 border-[#C5A059]" />
+          <span className="pointer-events-none absolute top-1 right-1 w-3 h-3 border-t-2 border-r-2 border-[#C5A059]" />
+          <span className="pointer-events-none absolute bottom-1 left-1 w-3 h-3 border-b-2 border-l-2 border-[#C5A059]" />
+          <span className="pointer-events-none absolute bottom-1 right-1 w-3 h-3 border-b-2 border-r-2 border-[#C5A059]" />
+
+          <div className="relative z-10 space-y-3 max-w-lg mx-auto">
+            <p className="font-display text-lg text-[#F3EFE6]">
+              No Active Incidents Match the Selected Filter Combination
+            </p>
+            <p className="font-serif text-sm text-[#94A3B8] leading-relaxed">
+              No verified dispatches on the Trestleboard simultaneously match{" "}
+              <span className="text-[#C5A059]">
+                {selectedTool === "ALL" ? "All Working Tools" : selectedTool}
+              </span>{" "}
+              and{" "}
+              <span className="text-[#C5A059]">
+                {selectedFailure === "ALL"
+                  ? "All Failure Modes"
+                  : SHORT_FAILURE_LABELS[selectedFailure as SreFailureModeId] ||
+                    selectedFailure}
+              </span>
+              .
+            </p>
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="px-5 py-2.5 bg-[#C5A059] text-[#0B0E14] font-display text-xs font-semibold uppercase tracking-wider hover:bg-[#d4b26a] transition-colors cursor-pointer"
+              >
+                Reset Filters
+              </button>
+            </div>
+          </div>
         </div>
       ) : (
         <div className="space-y-10">
-          {/* 1. The Lead Analysis (Full-Width 2-Column Span at Top of Feed) */}
-          <article
-            aria-label="Lead Broadsheet Analysis"
-            className="relative bg-[#111726] border border-[#C5A059]/60 p-6 sm:p-8 lg:p-10 shadow-[0_14px_40px_rgba(0,0,0,0.6)]"
-          >
-            {/* Inset double-line hairline border */}
-            <div className="pointer-events-none absolute inset-1.5 border border-[#8A6D3B]/45" />
+          {/* Optional Lead Post-Mortem Slot: ONLY rendered if explicitly flagged with bespoke multi-paragraph analysis */}
+          {leadPostMortemIncident && (
+            <article
+              aria-label="Lead Post-Mortem Analysis"
+              className="relative bg-[#111726] border border-[#C5A059]/60 p-6 sm:p-8 lg:p-10 shadow-[0_14px_40px_rgba(0,0,0,0.6)]"
+            >
+              <div className="pointer-events-none absolute inset-1.5 border border-[#8A6D3B]/45" />
+              <span className="pointer-events-none absolute top-1 left-1 w-3.5 h-3.5 border-t-2 border-l-2 border-[#C5A059]" />
+              <span className="pointer-events-none absolute top-1 right-1 w-3.5 h-3.5 border-t-2 border-r-2 border-[#C5A059]" />
+              <span className="pointer-events-none absolute bottom-1 left-1 w-3.5 h-3.5 border-b-2 border-l-2 border-[#C5A059]" />
+              <span className="pointer-events-none absolute bottom-1 right-1 w-3.5 h-3.5 border-b-2 border-r-2 border-[#C5A059]" />
 
-            {/* Burnished Brass Corner Brackets */}
-            <span className="pointer-events-none absolute top-1 left-1 w-3.5 h-3.5 border-t-2 border-l-2 border-[#C5A059]" />
-            <span className="pointer-events-none absolute top-1 right-1 w-3.5 h-3.5 border-t-2 border-r-2 border-[#C5A059]" />
-            <span className="pointer-events-none absolute bottom-1 left-1 w-3.5 h-3.5 border-b-2 border-l-2 border-[#C5A059]" />
-            <span className="pointer-events-none absolute bottom-1 right-1 w-3.5 h-3.5 border-b-2 border-r-2 border-[#C5A059]" />
-
-            <div className="relative z-10">
-              {/* Dateline */}
-              <div className="pb-3.5 mb-4 border-b border-[#8A6D3B]/45 font-mono text-xs uppercase tracking-[0.16em] text-[#94A3B8]">
-                <span className="text-[#C5A059]">
-                  {formatLeadDateline(leadIncident.publishedAt)}
-                </span>
-                <span className="mx-2.5 text-[#8A6D3B]">·</span>
-                <span className="text-[#F3EFE6]">
-                  SOURCE: {leadIncident.sourceFeed}
-                </span>
-                <span className="mx-2.5 text-[#8A6D3B]">·</span>
-                <span>{leadIncident.domainSector.toUpperCase()}</span>
-              </div>
-
-              {/* Large Serif Headline */}
-              <Link
-                href={`/incidents/${leadIncident.slug}`}
-                className="block group/lead"
-              >
-                <h2 className="font-display italic text-2xl sm:text-3xl lg:text-[32px] text-[#F3EFE6] group-hover/lead:text-[#C5A059] transition-colors leading-tight">
-                  {leadIncident.title}
-                </h2>
-              </Link>
-
-              {/* Two-Column Internal Split */}
-              <div className="mt-6 pt-6 border-t border-[#8A6D3B]/35 grid grid-cols-1 lg:grid-cols-12 gap-7 lg:gap-9 items-stretch">
-                {/* Left (The Facts & Systems Lens) */}
-                <div className="lg:col-span-6 flex flex-col justify-between space-y-5">
-                  <div className="space-y-3">
-                    <div className="font-display text-xs uppercase tracking-[0.18em] text-[#C5A059]">
-                      The Facts &amp; Systems Lens
-                    </div>
-                    <p className="font-serif text-base sm:text-[17px] text-[#F3EFE6]/90 leading-relaxed">
-                      {leadIncident.executiveSummary}
-                    </p>
+              <div className="relative z-10 space-y-4">
+                <div className="pb-3.5 border-b border-[#8A6D3B]/45 font-mono text-xs uppercase tracking-[0.16em] text-[#94A3B8] flex items-center justify-between">
+                  <div>
+                    <span className="text-[#C5A059]">
+                      {formatLeadDateline(leadPostMortemIncident.publishedAt)}
+                    </span>
+                    <span className="mx-2 text-[#8A6D3B]">•</span>
+                    <span className="text-[#F3EFE6]">
+                      {leadPostMortemIncident.sourceFeed}
+                    </span>
                   </div>
+                  <span className="text-[#C5A059]">LEAD POST-MORTEM</span>
+                </div>
 
-                  {/* Two clean, non-numerical diagnostic stamps */}
-                  <div className="pt-4 border-t border-[#8A6D3B]/30 flex flex-wrap items-center gap-3 font-serif text-xs sm:text-sm">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        openRubricInspector({ tool: leadIncident.primaryTool })
-                      }
-                      className="px-3 py-1.5 bg-[#0B0E14] border border-[#C5A059]/75 text-[#C5A059] hover:bg-[#C5A059]/15 transition-colors cursor-pointer"
-                    >
-                      [Working Tool: {leadIncident.primaryTool}]
-                    </button>
+                <Link
+                  href={`/incidents/${leadPostMortemIncident.slug}`}
+                  className="block group/lead"
+                >
+                  <h2 className="font-display italic text-2xl sm:text-3xl lg:text-[32px] text-[#F3EFE6] group-hover/lead:text-[#C5A059] transition-colors leading-tight">
+                    {leadPostMortemIncident.title}
+                  </h2>
+                </Link>
+
+                <div className="font-serif text-base sm:text-[17px] text-[#F3EFE6]/90 leading-relaxed space-y-4">
+                  {leadPostMortemIncident.leadPostMortemAnalysis
+                    ?.split(/\n\s*\n/)
+                    .map((para, idx) => (
+                      <p key={idx}>{para}</p>
+                    ))}
+                </div>
+
+                <div className="pt-4 border-t border-[#8A6D3B]/35 flex items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2 text-xs font-serif">
                     <button
                       type="button"
                       onClick={() =>
                         openRubricInspector({
-                          failureMode: leadIncident.sreFailureMode,
+                          tool: leadPostMortemIncident.primaryTool,
                         })
                       }
-                      className="px-3 py-1.5 bg-[#0B0E14] border border-[#8A6D3B]/75 text-[#F3EFE6] hover:border-[#C5A059] transition-colors cursor-pointer"
+                      className="px-2.5 py-1 bg-[#0B0E14] border border-[#C5A059]/60 text-[#C5A059] hover:bg-[#C5A059]/15 transition-colors cursor-pointer"
                     >
-                      [Failure Mode:{" "}
-                      {SHORT_FAILURE_LABELS[leadIncident.sreFailureMode] ||
-                        leadIncident.sreFailureMode}
+                      [{leadPostMortemIncident.primaryTool}]
+                    </button>
+                    <span className="text-[#8A6D3B] font-bold">·</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openRubricInspector({
+                          failureMode: leadPostMortemIncident.sreFailureMode,
+                        })
+                      }
+                      className="px-2.5 py-1 bg-[#0B0E14] border border-[#8A6D3B]/55 text-[#94A3B8] hover:text-[#F3EFE6] hover:border-[#C5A059]/60 transition-colors cursor-pointer"
+                    >
+                      [
+                      {SHORT_FAILURE_LABELS[
+                        leadPostMortemIncident.sreFailureMode
+                      ] || leadPostMortemIncident.sreFailureMode}
                       ]
                     </button>
                   </div>
-                </div>
-
-                {/* Right (The Trestleboard Inquiry) */}
-                <div className="lg:col-span-6 flex flex-col justify-between bg-[#0B0E14]/75 border border-[#C5A059]/55 p-5 sm:p-6 relative">
-                  <div className="pointer-events-none absolute inset-1 border border-[#8A6D3B]/30" />
-
-                  <div className="relative z-10 space-y-4">
-                    <div className="font-display text-xs uppercase tracking-[0.18em] text-[#C5A059] border-b border-[#8A6D3B]/35 pb-2">
-                      The Trestleboard Inquiry
-                    </div>
-
-                    <div className="space-y-3.5">
-                      {leadIncident.questions.slice(0, 2).map((q, idx) => (
-                        <blockquote
-                          key={idx}
-                          className="pl-3.5 border-l-2 border-[#C5A059]/75 font-serif italic text-[15px] sm:text-base text-[#F3EFE6] leading-relaxed"
-                        >
-                          &ldquo;{q}&rdquo;
-                        </blockquote>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="relative z-10 pt-5 mt-5 border-t border-[#8A6D3B]/35 flex justify-end">
-                    <Link
-                      href={`/incidents/${leadIncident.slug}`}
-                      className="font-serif text-sm sm:text-[15px] text-[#C5A059] hover:text-[#F3EFE6] transition-colors"
-                    >
-                      Read Full Brief &amp; Inquiries →
-                    </Link>
-                  </div>
+                  <Link
+                    href={`/incidents/${leadPostMortemIncident.slug}`}
+                    className="font-serif text-sm text-[#C5A059] hover:text-[#F3EFE6] transition-colors"
+                  >
+                    Read Brief →
+                  </Link>
                 </div>
               </div>
-            </div>
-          </article>
-
-          {/* 2. The Secondary Broadsheet Grid (6 Stories in a Balanced 2-Column × 3-Row Grid) */}
-          {secondaryIncidents.length > 0 && (
-            <section aria-label="Secondary Broadsheet Dispatches">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-7">
-                {secondaryIncidents.map((incident) => (
-                  <IncidentCard key={incident.id} incident={incident} />
-                ))}
-              </div>
-            </section>
+            </article>
           )}
+
+          {/* 2-Column Incident Grid */}
+          <section aria-label="Trestleboard Incident Grid">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-7">
+              {gridIncidents.map((incident) => (
+                <IncidentCard key={incident.id} incident={incident} />
+              ))}
+            </div>
+          </section>
 
           {/* E. PAGINATION BUTTON */}
           <div className="pt-6 flex justify-center">
@@ -535,3 +518,4 @@ export function TrestleboardClient({
     </div>
   );
 }
+

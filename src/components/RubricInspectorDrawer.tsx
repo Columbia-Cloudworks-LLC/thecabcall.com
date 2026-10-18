@@ -104,7 +104,7 @@ export function RubricInspectorDrawer() {
               </p>
               <div className="mt-3 pt-3 border-t border-[#8A6D3B]/30">
                 <span className="font-mono text-[10px] uppercase tracking-wider text-[#94A3B8] block">
-                  System-1 (Jev) Classifier Prompt Gate:
+                  Diagnostic Classification Criteria:
                 </span>
                 <p className="font-mono text-xs text-[#94A3B8] mt-1 leading-relaxed">
                   {toolSpec.jevClassifierCriteria}

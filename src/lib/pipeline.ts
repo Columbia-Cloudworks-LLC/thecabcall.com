@@ -1,4 +1,10 @@
 import {
+  buildOrSanitizeArticleDiagnostics,
+  joinClauseWithTransition,
+  sanitizeStringConcatenation,
+  validateAndNormalizeIncidentSummary,
+} from "./sanitize";
+import {
   DomainSectorId,
   getSreFailureModeSpec,
   getWorkingToolSpec,
@@ -104,20 +110,32 @@ export function parseRssXml(xml: string, sourceFeed: string): RawFeedItem[] {
 
     const title = titleMatch ? stripHtmlToPlainText(titleMatch[1]) : "";
     const link = linkMatch ? stripHtmlToPlainText(linkMatch[1]) : "";
-    const description = descMatch ? stripHtmlToPlainText(descMatch[1]) : title;
+    const description = descMatch ? stripHtmlToPlainText(descMatch[1]) : "";
     const pubDate = pubDateMatch
       ? new Date(stripHtmlToPlainText(pubDateMatch[1])).toISOString()
       : new Date().toISOString();
 
-    if (title && link) {
-      items.push({
-        title,
-        link,
-        description,
-        pubDate,
-        sourceFeed,
-      });
+    if (!title || !link) {
+      continue;
     }
+
+    const validation = validateAndNormalizeIncidentSummary({
+      title,
+      sourceFeed,
+      rawExcerpt: description,
+      logWarnings: true,
+    });
+    if (!validation.valid) {
+      continue;
+    }
+
+    items.push({
+      title,
+      link,
+      description: validation.cleanedDescription,
+      pubDate,
+      sourceFeed,
+    });
   }
   return items;
 }
@@ -298,28 +316,36 @@ export async function synthesizeIncidentBriefSystem2(
       .replace(/^-|-$/g, "")
       .slice(0, 64) + `-${sequenceNumber}`;
 
-  const cleanDesc =
-    item.description && item.description !== item.title
-      ? item.description
-      : `Primary source telemetry ingested from ${item.sourceFeed} reporting on "${item.title}".`;
+  const validation = validateAndNormalizeIncidentSummary({
+    id: sequenceNumber,
+    title: item.title,
+    sourceFeed: item.sourceFeed,
+    rawExcerpt: item.description,
+    logWarnings: false,
+  });
 
-  const executiveSummary = `${cleanDesc.slice(0, 240)}${cleanDesc.length > 240 ? "..." : ""} Classified under ${classification.primaryTool} (${Math.round(classification.toolProbabilities[classification.primaryTool] * 100)}%) and ${classification.sreFailureMode}.`;
+  const executiveSummary =
+    validation.executiveSummary ||
+    sanitizeStringConcatenation(validation.cleanedDescription);
+  const socraticBrief =
+    validation.factualBriefParagraph ||
+    sanitizeStringConcatenation(validation.cleanedDescription);
 
-  const socraticBrief = `Source telemetry from ${item.sourceFeed} ("${item.title}") entered the Change Advisory Board ingestion pipeline for structural review. ${cleanDesc}\n\nEvaluated strictly as an active systems event rather than a partisan narrative, the core operational tension centers on ${toolSpec.sreEquivalent.toLowerCase()} within the ${classification.domainSector} sector. No speculative outcomes are assumed prior to full post-mortem verification.`;
+  const diagnostics = buildOrSanitizeArticleDiagnostics({
+    title: item.title,
+    sourceFeed: item.sourceFeed,
+    factualSummary: socraticBrief,
+    primaryTool: classification.primaryTool,
+    secondaryTool: classification.secondaryTool,
+    sreFailureMode: classification.sreFailureMode,
+  });
 
-  const diagnosticApplication = `Jev assigned a ${classification.toolProbabilities[classification.primaryTool].toFixed(2)} primary probability to ${classification.primaryTool} paired with ${classification.sreFailureMode}, with secondary weighting on ${classification.secondaryTool} (${classification.toolProbabilities[classification.secondaryTool].toFixed(2)}). ${toolSpec.sreDefinition} Meanwhile, ${failureSpec.summary} Applying ${classification.primaryTool} alongside ${secondarySpec.id} frames the inquiry around verifiable system state rather than reactive commentary.`;
-
-  const proportionalityCheck = {
-    noiseOverblown: `Reactive headline framing around "${item.title}" that treats an isolated component event as an irreversible collapse or a simplistic morality play.`,
-    structuralSignal: `${failureSpec.systemsDefinition} Specifically, the requirement for ${toolSpec.sreEquivalent.toLowerCase()}.`,
-  };
-
-  const questions = [
-    toolSpec.diagnosticQuestionPattern,
-    `Using ${classification.primaryTool}, what measurable gap exists between the stated architectural or policy specification and the live production reality exposed in this report?`,
-    `If we apply ${classification.secondaryTool} to this event, how does ${secondarySpec.sreEquivalent.toLowerCase()} alter our reading of the downstream blast radius?`,
-    `What concrete telemetry or post-mortem artifact is still missing before an impartial observer can judge whether this system is recovering or accumulating deeper ${classification.sreFailureMode.toLowerCase()}?`,
-  ];
+  const diagnosticApplication = sanitizeStringConcatenation(
+    `${toolSpec.sreDefinition} ${joinClauseWithTransition(
+      "Meanwhile",
+      failureSpec.summary
+    )} Applying ${classification.primaryTool} alongside ${secondarySpec.id} frames the inquiry around verifiable system state rather than reactive commentary.`
+  );
 
   return {
     id: `inc-${sequenceNumber}`,
@@ -340,8 +366,11 @@ export async function synthesizeIncidentBriefSystem2(
     executiveSummary,
     socraticBrief,
     diagnosticApplication,
-    proportionalityCheck,
-    questions,
+    proportionalityCheck: {
+      noiseOverblown: diagnostics.noiseOverblown,
+      structuralSignal: diagnostics.structuralSignal,
+    },
+    questions: diagnostics.questions,
     classifierLatencyMs: classification.latencyMs,
   };
 }
@@ -367,15 +396,23 @@ export async function runIngestionPipeline(options?: {
   const candidateItems: RawFeedItem[] = [];
 
   if (options?.customArticle) {
-    candidateItems.push({
+    const validation = validateAndNormalizeIncidentSummary({
       title: options.customArticle.title,
-      description: options.customArticle.description,
       sourceFeed: options.customArticle.sourceFeed || "LIVE TELEMETRY INPUT",
-      link:
-        options.customArticle.link ||
-        `https://thecabcall.com/telemetry/${Date.now()}`,
-      pubDate: new Date().toISOString(),
+      rawExcerpt: options.customArticle.description,
+      logWarnings: true,
     });
+    if (validation.valid) {
+      candidateItems.push({
+        title: options.customArticle.title,
+        description: validation.cleanedDescription,
+        sourceFeed: options.customArticle.sourceFeed || "LIVE TELEMETRY INPUT",
+        link:
+          options.customArticle.link ||
+          `https://thecabcall.com/telemetry/${Date.now()}`,
+        pubDate: new Date().toISOString(),
+      });
+    }
   } else {
     for (const feed of TARGET_RSS_FEEDS) {
       try {
@@ -461,11 +498,11 @@ export function generateWeeklyRollupEpisode(): PodcastEpisode {
 
   const [inc1, inc2, inc3] = topIncidents;
 
-  const weeklyTelemetry = `If you watched the feeds this week, you saw separate institutions across ${inc1?.domainSector || "infrastructure"} and ${inc2?.domainSector || "finance"} hit the same structural constraint. Across ${posture.totalEvaluatedWindow} items evaluated by our classifier over the past seven days, ${posture.noiseRejectionRate}% were dropped as low-signal noise at the ingestion gate. Among the high-confidence incidents that passed, the common thread wasn't exotic sabotage—it was ${posture.topFailureMode.toLowerCase()}. In our telemetry this week, ${posture.dominantTool} led every other working tool at ${posture.dominantToolPercentage}% of primary classifications. From ${inc1?.incidentCode || "#CAB-2026-1042"} (${inc1?.title.slice(0, 68) || "SCADA segmentation drift"}...) to ${inc2?.incidentCode || "#CAB-2026-1041"}, the week's telemetry exposed a widening gap between filed compliance paperwork and live production state.`;
+  const weeklyTelemetry = `${posture.dominantTool} leads this week's Trestleboard at ${posture.dominantToolPercentage}% of primary classifications, with ${posture.topFailureMode} emerging as the primary failure mode across ${posture.totalIncidentsWindow} active dispatches. Three anchor incidents set the weekly docket: ${inc1?.incidentCode || "#CAB-2026-1042"} ("${inc1?.title || "SCADA segmentation drift"}"), ${inc2?.incidentCode || "#CAB-2026-1041"} ("${inc2?.title || "Standby TLS certificate halt"}"), and ${inc3?.incidentCode || "#CAB-2026-1040"} ("${inc3?.title || "BGP routing sync outage"}"). Across each sector, live operational environments quietly diverged from their chartered specifications.`;
 
   const separatingSignalFromPanic = `The commentary cycle wants you to treat every one of these disclosures as a total system collapse or a partisan morality play. Good systems architecture tells us otherwise: a localized component fault isn't a core outage, and an audit disclosure is diagnostic telemetry, not an active breach. Look closely at ${inc1?.incidentCode || "#CAB-2026-1042"} and ${inc2?.incidentCode || "#CAB-2026-1041"}. Pundits immediately amplified worst-case speculation, while overlooking the actual engineering lesson: ${inc1?.proportionalityCheck.structuralSignal || "paper attestations cannot replace continuous state verification"}. We saw the exact same signal-to-noise inversion in ${inc3?.incidentCode || "#CAB-2026-1040"}, where hours of public attention focused on blaming a single operator at the keyboard while ignoring the upstream budget decisions that removed the staging guardrails in the first place.`;
 
-  const forwardPosture = `Here is how to place the tools on the trestleboard for the coming seven days. First, for the leadership and engineering teams walking into remediation reviews on ${inc1?.incidentCode || "#CAB-2026-1042"}, start with The Common Gavel—chipping away defensive PR spin and vendor blame so the root cause can be isolated without ego—and follow immediately with ${posture.dominantTool} to reconcile the written specification with the live routing table. Second, apply The Plumb to every synthetic health check in your own stack so green dashboards reflect real production boundaries. Finally, for those of us observing from the outside, keep The 24-Inch Gauge on your own cognitive error budget: do not spend hours on an active incident that hasn't published its verified post-mortem yet.`;
+  const forwardPosture = `Here is how to place the tools on the trestleboard for the coming seven days. First, for the leadership and engineering teams walking into remediation reviews on ${inc1?.incidentCode || "#CAB-2026-1042"}, start with Common Gavel—chipping away defensive PR spin and vendor blame so the root cause can be isolated without ego—and follow immediately with ${posture.dominantTool} to reconcile the written specification with the live routing table. Second, apply The Plumb to every synthetic health check in your own stack so green dashboards reflect real production boundaries. Finally, for those of us observing from the outside, keep the 24-Inch Gauge on your own cognitive error budget: do not spend hours on an active incident that hasn't published its verified post-mortem yet.`;
 
   const fullTranscript = `[00:00 — THE WEEKLY TELEMETRY]\n${weeklyTelemetry}\n\n[01:15 — SEPARATING SIGNAL FROM PANIC]\n${separatingSignalFromPanic}\n\n[03:30 — THE FORWARD POSTURE / TOOLS ON THE TRESTLEBOARD]\n${forwardPosture}`;
 
@@ -475,7 +512,7 @@ export function generateWeeklyRollupEpisode(): PodcastEpisode {
     episodeNumber: nextEpisodeNum,
     series: "weekly_rollup",
     title: `CAB Weekly Brief #${nextEpisodeNum}: ${posture.dominantTool} (${posture.dominantToolPercentage}%), ${posture.topFailureMode}, and Next Week's Trestleboard`,
-    summary: `Automated 5-minute Friday Change Advisory Board rollup synthesizing ${posture.totalIncidentsWindow} high-signal incidents. Dominant Working Tool: ${posture.dominantTool} (${posture.dominantToolPercentage}%). Primary SRE Anti-Pattern: ${posture.topFailureMode}.`,
+    summary: `Friday 5-minute Change Advisory Board synthesis led by ${posture.dominantTool} (${posture.dominantToolPercentage}%) and ${posture.topFailureMode} across ${posture.totalIncidentsWindow} active dispatches.`,
     publishedAt: new Date().toISOString(),
     durationSeconds: 300,
     durationFormatted: "05:00",
@@ -518,3 +555,4 @@ export function generateWeeklyRollupEpisode(): PodcastEpisode {
 
   return episode;
 }
+

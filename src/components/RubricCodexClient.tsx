@@ -40,7 +40,7 @@ export function RubricCodexClient() {
           Moral Craftsmanship Paired with Systems Engineering
         </h1>
         <p className="font-serif text-base text-[#94A3B8] mt-2 max-w-4xl leading-relaxed">
-          To keep our System-1 zero-shot classifier sharp and prevent overlapping probability distributions, each of the Six Working Tools of Freemasonry is mapped to a mutually exclusive Site Reliability Engineering lens and diagnostic inquiry pattern.
+          To keep diagnostic evaluations sharp and prevent overlapping analytical lenses, each of the Six Working Tools of Freemasonry is mapped to a mutually exclusive Site Reliability Engineering lens and diagnostic inquiry pattern.
         </p>
       </div>
 
@@ -156,12 +156,12 @@ export function RubricCodexClient() {
             </div>
           </div>
 
-          {/* Exact Classifier Prompt & Paired Failure Mode */}
+          {/* Exact Diagnostic Rubric & Paired Failure Mode */}
           <div className="p-5 bg-[#0B0E14] border border-[#8A6D3B]/50 space-y-3">
             <div className="flex items-center justify-between font-mono text-xs text-[#C5A059]">
               <span className="inline-flex items-center gap-2 uppercase">
                 <Terminal className="w-4 h-4" />
-                <span>Exact System-1 Classifier Prompt Payload</span>
+                <span>Diagnostic Classification Rubric Payload</span>
               </span>
               <span className="text-[#10B981]">MUTUALLY EXCLUSIVE RUBRIC</span>
             </div>

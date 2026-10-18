@@ -1,6 +1,13 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
+  buildOrSanitizeArticleDiagnostics,
+  joinClauseWithTransition,
+  sanitizeStringConcatenation,
+  SummaryValidationResult,
+  validateAndNormalizeIncidentSummary,
+} from "./sanitize";
+import {
   DomainSectorId,
   getSreFailureModeSpec,
   getWorkingToolSpec,
@@ -94,8 +101,82 @@ export function makeIncidentSlug(title: string, id: number): string {
   return `${base || "incident"}-d1-${id}`;
 }
 
+export function extractStoredQuestionsPayload(questionsJson: string | null): {
+  executiveSummary: string | null;
+  noiseOverblown: string | null;
+  structuralSignal: string | null;
+  questions: string[];
+  isLeadPostMortem: boolean;
+  leadPostMortemAnalysis: string | null;
+} {
+  if (!questionsJson) {
+    return {
+      executiveSummary: null,
+      noiseOverblown: null,
+      structuralSignal: null,
+      questions: [],
+      isLeadPostMortem: false,
+      leadPostMortemAnalysis: null,
+    };
+  }
+
+  try {
+    const parsedQ = JSON.parse(questionsJson);
+    if (Array.isArray(parsedQ)) {
+      return {
+        executiveSummary: null,
+        noiseOverblown: null,
+        structuralSignal: null,
+        questions: parsedQ.map((q) => String(q)),
+        isLeadPostMortem: false,
+        leadPostMortemAnalysis: null,
+      };
+    }
+    if (parsedQ && typeof parsedQ === "object") {
+      return {
+        executiveSummary:
+          typeof parsedQ.executive_summary === "string" &&
+          parsedQ.executive_summary.trim()
+            ? parsedQ.executive_summary.trim()
+            : null,
+        noiseOverblown:
+          parsedQ.proportionality_check &&
+          typeof parsedQ.proportionality_check.noise_overblown === "string"
+            ? parsedQ.proportionality_check.noise_overblown.trim()
+            : null,
+        structuralSignal:
+          parsedQ.proportionality_check &&
+          typeof parsedQ.proportionality_check.structural_signal === "string"
+            ? parsedQ.proportionality_check.structural_signal.trim()
+            : null,
+        questions: Array.isArray(parsedQ.questions)
+          ? parsedQ.questions.map((q: unknown) => String(q))
+          : [],
+        isLeadPostMortem: Boolean(parsedQ.is_lead_post_mortem),
+        leadPostMortemAnalysis:
+          typeof parsedQ.lead_post_mortem_analysis === "string" &&
+          parsedQ.lead_post_mortem_analysis.trim()
+            ? parsedQ.lead_post_mortem_analysis.trim()
+            : null,
+      };
+    }
+  } catch {
+    // Ignore malformed questions_json
+  }
+
+  return {
+    executiveSummary: null,
+    noiseOverblown: null,
+    structuralSignal: null,
+    questions: [],
+    isLeadPostMortem: false,
+    leadPostMortemAnalysis: null,
+  };
+}
+
 export function mapD1RowToIncidentArticle(
-  row: TelemetryArticleRow
+  row: TelemetryArticleRow,
+  prevalidated?: SummaryValidationResult
 ): IncidentArticle {
   const primaryTool = mapJevToolToWorkingToolId(row.primary_tool);
   const secondaryTool = mapJevToolToWorkingToolId(
@@ -141,71 +222,47 @@ export function mapD1RowToIncidentArticle(
   }
 
   const primarySpec = getWorkingToolSpec(primaryTool);
-  const secondarySpec = getWorkingToolSpec(secondaryTool);
   const failureSpec = getSreFailureModeSpec(sreFailureMode);
 
-  let executiveSummary = `${row.raw_excerpt.slice(0, 220)}${
-    row.raw_excerpt.length > 220 ? "..." : ""
-  } Evaluated via Jev (jev-1.14.0) under ${primaryTool} and ${sreFailureMode}.`;
-  let socraticBrief =
-    row.socratic_brief ||
-    `Primary source dispatch from ${row.source_feed} ("${row.title}") triaged by the Change Advisory Board System-1 gate at ${Math.round(
-      row.is_systemic_prob * 100
-    )}% systemic probability.\n\n${row.raw_excerpt}\n\nClassified under ${primaryTool} and ${sreFailureMode}, this event remains in active post-incident review awaiting full operational telemetry.`;
-  let proportionalityCheck = {
-    noiseOverblown: `Reactive headline spin surrounding "${row.title}" that treats an active operational friction point as a morality play.`,
-    structuralSignal: `${failureSpec.systemsDefinition} Specifically, the requirement for ${primarySpec.sreEquivalent.toLowerCase()}.`,
-  };
-  let questions: string[] = [
-    primarySpec.diagnosticQuestionPattern,
-    `Applying ${primaryTool} to "${row.title}", where did live execution diverge from the stated policy or architectural specification?`,
-    `When ${secondaryTool} is weighed alongside ${primaryTool}, how does ${secondarySpec.sreEquivalent.toLowerCase()} reshape the downstream blast radius?`,
-    `What unverified post-mortem telemetry is still needed to determine whether this incident reflects an isolated fault or systemic ${sreFailureMode.toLowerCase()}?`,
-  ];
+  const storedPayload = extractStoredQuestionsPayload(row.questions_json);
 
-  if (row.questions_json) {
-    try {
-      const parsedQ = JSON.parse(row.questions_json);
-      if (Array.isArray(parsedQ)) {
-        questions = parsedQ.map((q) => String(q));
-      } else if (parsedQ && typeof parsedQ === "object") {
-        if (typeof parsedQ.executive_summary === "string" && parsedQ.executive_summary.trim()) {
-          executiveSummary = parsedQ.executive_summary.trim();
-        }
-        if (
-          parsedQ.proportionality_check &&
-          typeof parsedQ.proportionality_check === "object"
-        ) {
-          proportionalityCheck = {
-            noiseOverblown:
-              parsedQ.proportionality_check.noise_overblown ||
-              proportionalityCheck.noiseOverblown,
-            structuralSignal:
-              parsedQ.proportionality_check.structural_signal ||
-              proportionalityCheck.structuralSignal,
-          };
-        }
-        if (Array.isArray(parsedQ.questions) && parsedQ.questions.length > 0) {
-          questions = parsedQ.questions.map((q: unknown) => String(q));
-        }
-      }
-    } catch {
-      // Ignore malformed questions_json
-    }
-  }
+  const validation =
+    prevalidated ||
+    validateAndNormalizeIncidentSummary({
+      id: row.id,
+      title: row.title,
+      sourceFeed: row.source_feed,
+      rawExcerpt: row.raw_excerpt,
+      executiveSummary: storedPayload.executiveSummary,
+      socraticBrief: row.socratic_brief,
+      logWarnings: false,
+    });
 
-  const primaryProb = defaultProbs[primaryTool] || row.jev_confidence || 0.45;
-  const secondaryProb = defaultProbs[secondaryTool] || 0.22;
+  const executiveSummary =
+    validation.executiveSummary ||
+    sanitizeStringConcatenation(validation.cleanedDescription);
+  const socraticBrief =
+    validation.factualBriefParagraph ||
+    sanitizeStringConcatenation(validation.cleanedDescription);
 
-  const diagnosticApplication = `System-1 TypeSafe Jev (jev-1.14.0) assigned a ${primaryProb.toFixed(
-    2
-  )} primary weight to ${primaryTool} paired with ${sreFailureMode} (systemic probability ${(
-    row.is_systemic_prob * 100
-  ).toFixed(0)}%), with secondary weighting on ${secondaryTool} (${secondaryProb.toFixed(
-    2
-  )}). ${primarySpec.sreDefinition} Concurrently, ${
-    failureSpec.summary
-  } Applying ${primaryTool} alongside ${secondaryTool} anchors the review in verifiable operational state rather than speculative commentary.`;
+  const diagnostics = buildOrSanitizeArticleDiagnostics({
+    title: row.title,
+    sourceFeed: row.source_feed,
+    factualSummary: socraticBrief,
+    primaryTool,
+    secondaryTool,
+    sreFailureMode,
+    existingNoise: storedPayload.noiseOverblown,
+    existingSignal: storedPayload.structuralSignal,
+    existingQuestions: storedPayload.questions,
+  });
+
+  const diagnosticApplication = sanitizeStringConcatenation(
+    `${primarySpec.sreDefinition} ${joinClauseWithTransition(
+      "Concurrently",
+      failureSpec.summary
+    )} Applying ${primaryTool} alongside ${secondaryTool} anchors the review in verifiable operational state rather than speculative commentary.`
+  );
 
   const incidentNumber = 2000 + row.id;
 
@@ -230,9 +287,14 @@ export function mapD1RowToIncidentArticle(
     executiveSummary,
     socraticBrief,
     diagnosticApplication,
-    proportionalityCheck,
-    questions,
+    proportionalityCheck: {
+      noiseOverblown: diagnostics.noiseOverblown,
+      structuralSignal: diagnostics.structuralSignal,
+    },
+    questions: diagnostics.questions,
     classifierLatencyMs: 112 + (row.id % 37),
+    isLeadPostMortem: storedPayload.isLeadPostMortem,
+    leadPostMortemAnalysis: storedPayload.leadPostMortemAnalysis || undefined,
   };
 }
 
@@ -247,6 +309,24 @@ export interface D1EpisodeRow {
   duration_seconds: number;
   file_size_bytes: number;
   published_at: string;
+}
+
+function sanitizeEpisodeProse(text: string): string {
+  if (!text) return "";
+  return sanitizeStringConcatenation(
+    text
+      .replace(
+        /Across the past \d+ days of automated ingestion,\s*our System-1 TypeSafe Jev classifier evaluated \d+ dispatches across the active US feeds,\s*rejecting [\d.]+%\s*\(\d+ items\)\s*as non-systemic noise at the ingestion gate and promoting \d+ high-signal incidents for System-2 review\.\s*/gi,
+        ""
+      )
+      .replace(
+        /Across \d+ (?:high-signal )?items evaluated by our classifier over the past seven days,\s*[\d.]+% were dropped as low-signal noise at the ingestion gate\.\s*/gi,
+        ""
+      )
+      .replace(/\s*\([\d.]+% noise rejection across \d+ items\)/gi, "")
+      .replace(/Why [\d.]+% of wire traffic was discarded as noise,\s*how/gi, "How")
+      .replace(/\bJev's telemetry\b/gi, "operational telemetry")
+  );
 }
 
 function parseTranscriptSections(
@@ -266,9 +346,11 @@ function parseTranscriptSections(
   }
 
   return {
-    weeklyTelemetry: (part1Match?.[1] || "").trim(),
-    separatingSignalFromPanic: (part2Match?.[1] || "").trim(),
-    forwardPosture: (part3Match?.[1] || "").trim(),
+    weeklyTelemetry: sanitizeEpisodeProse((part1Match?.[1] || "").trim()),
+    separatingSignalFromPanic: sanitizeEpisodeProse(
+      (part2Match?.[1] || "").trim()
+    ),
+    forwardPosture: sanitizeEpisodeProse((part3Match?.[1] || "").trim()),
   };
 }
 
@@ -334,7 +416,9 @@ export function mapD1RowToPodcastEpisode(
     toolApplied: inc.primaryTool,
   }));
 
-  const transcript = row.transcript || row.summary;
+  const cleanSummary = sanitizeEpisodeProse(row.summary);
+  const rawTranscript = row.transcript || row.summary;
+  const cleanTranscript = sanitizeEpisodeProse(rawTranscript);
   const isLegacy =
     row.slug.startsWith("legacy-") ||
     row.title.toLowerCase().includes("legacy archive") ||
@@ -346,9 +430,9 @@ export function mapD1RowToPodcastEpisode(
     episodeNumber,
     series: isLegacy ? "legacy_archive" : "weekly_rollup",
     title: row.title,
-    summary: row.summary,
-    transcript,
-    transcriptSections: parseTranscriptSections(transcript),
+    summary: cleanSummary,
+    transcript: cleanTranscript,
+    transcriptSections: parseTranscriptSections(rawTranscript),
     audioUrl: row.audio_url,
     durationSeconds,
     durationFormatted: `${mins}:${secs}`,
@@ -579,6 +663,8 @@ function emptyD1Snapshot(sqlitePath: string | null = null): LocalD1Snapshot {
   };
 }
 
+const loggedQuarantineHashes = new Set<string>();
+
 function buildSnapshotFromRows(
   allArticleRows: TelemetryArticleRow[],
   episodeRows: D1EpisodeRow[],
@@ -599,7 +685,28 @@ function buildSnapshotFromRows(
   const visibleRows = allArticleRows.filter(
     (r) => r.status === "synthesized" || r.status === "triaged"
   );
-  const incidents = visibleRows.map(mapD1RowToIncidentArticle);
+  const incidents: IncidentArticle[] = [];
+
+  for (const row of visibleRows) {
+    const stored = extractStoredQuestionsPayload(row.questions_json);
+    const shouldLog = !loggedQuarantineHashes.has(row.url_hash);
+    const validation = validateAndNormalizeIncidentSummary({
+      id: row.id,
+      title: row.title,
+      sourceFeed: row.source_feed,
+      rawExcerpt: row.raw_excerpt,
+      executiveSummary: stored.executiveSummary,
+      socraticBrief: row.socratic_brief,
+      logWarnings: shouldLog,
+    });
+
+    if (!validation.valid) {
+      loggedQuarantineHashes.add(row.url_hash);
+      continue;
+    }
+
+    incidents.push(mapD1RowToIncidentArticle(row, validation));
+  }
 
   const episodes = episodeRows.map((ep) =>
     mapD1RowToPodcastEpisode(ep, incidents)

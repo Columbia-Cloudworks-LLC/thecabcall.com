@@ -6,10 +6,12 @@ import {
 import { D1DatabaseLike } from "./ingest";
 import { JevSreFailureModeKey, JevWorkingToolKey } from "./jev";
 import {
+  buildDeterministicBoundedSynthesis,
   SRE_FAILURE_DISPLAY_NAMES,
   TelemetryArticleRow,
   WORKING_TOOL_DISPLAY_NAMES,
 } from "./synthesize";
+import { validateAndNormalizeIncidentSummary } from "../lib/sanitize";
 
 export interface R2ObjectLike {
   key: string;
@@ -157,17 +159,17 @@ export const ROLLUP_RESPONSE_SCHEMA = {
     summary: {
       type: "STRING",
       description:
-        "2-sentence show notes summary of this week's 5-minute CAB Weekly Brief telemetry rollup.",
+        "2-sentence show notes summary of this week's 5-minute CAB Weekly Brief leading with the dominant Working Tool, primary Failure Mode, and the 3 anchor incidents.",
     },
     weekly_telemetry: {
       type: "STRING",
       description:
-        "Part 1 [00:00 — THE WEEKLY TELEMETRY] (~180 words). Spoken podcast script opening with the telemetry aggregates (total evaluated, noise rejection rate %, dominant Working Tool %, top SRE failure mode) and introducing the top synthesized incidents.",
+        "Part 1 [00:00 — THE WEEKLY TELEMETRY] (~180 words). Spoken podcast script leading immediately with the dominant Working Tool, the primary Failure Mode, and the 3 anchor incidents for the week. Do NOT include ingestion-gate math ('evaluated X dispatches, rejecting Y% noise') or internal classifier names.",
     },
     separating_signal_from_panic: {
       type: "STRING",
       description:
-        "Part 2 [01:15 — SEPARATING SIGNAL FROM PANIC] (~350 words). Spoken podcast script executing the Proportionality Check across the top incidents: contrasting overblown commentary/panic against the actual structural engineering and governance signals.",
+        "Part 2 [01:15 — SEPARATING SIGNAL FROM PANIC] (~350 words). Spoken podcast script executing the Proportionality Check across the 3 anchor incidents: contrasting overblown commentary/panic against the actual structural engineering and governance signals.",
     },
     forward_posture: {
       type: "STRING",
@@ -201,19 +203,19 @@ const BASELINE_ARCHIVE_EPISODES: Array<{
     title:
       "CAB Weekly Brief #42: Configuration Drift (44% Square), Unpinned Certs, and Separated Signal",
     summary:
-      "Friday 5-minute systems retrospective covering October 10–16, 2026. Why 91.2% of wire traffic was discarded as noise, how unverified vendor exemptions in municipal utilities mirror unpinned TLS certificates in banking, and where to apply The Plumb and The Common Gavel over the next 7 days.",
+      "Friday 5-minute systems retrospective covering October 10–16, 2026. The Square (44%) and Configuration Drift dominate the Trestleboard across municipal water SCADA audits, regional banking TLS halts, and federal aviation routing outages.",
     published_at: "2026-10-16T12:00:00Z",
     duration_seconds: 304,
     file_size_bytes: 4864000,
     audio_url: "/audio/cab-weekly-brief-042.mp3",
     transcript: `[00:00 — THE WEEKLY TELEMETRY]
-If you watched the feeds this week, you saw three separate sectors—municipal water utilities, regional clearing banks, and federal aviation dispatch—hit the exact same structural wall. Across thirty-eight high-signal items evaluated by our classifier over the past seven days, the common thread wasn't malice or exotic external sabotage. It was silent configuration drift. In our telemetry this week, The Square led every other working tool at forty-four percent of primary classifications, followed by The Plumb at twenty-two percent. Whether it was fourteen water districts signing annual segmentation attestations while leaving vendor VPN bridges wide open (#CAB-2026-1042), or a SaaS platform whose auto-generated tests mocked out its own access controls (#CAB-2026-1036), institutions spent the week discovering that their live production environments had quietly drifted away from their written specifications.
+The Square leads this week's Trestleboard at forty-four percent of primary classifications, with Configuration Drift emerging as the primary failure mode across municipal water utilities, regional clearing banks, and federal aviation dispatch. Three anchor incidents set the weekly docket: fourteen water districts signing annual segmentation attestations while leaving vendor VPN bridges wide open (#CAB-2026-1042); a four-hour settlement halt across sixty-two credit unions triggered by an unpinned standby TLS certificate (#CAB-2026-1041); and a regional aviation routing outage traced to an unvalidated night-shift sync script (#CAB-2026-1040). Across all three sectors, live production environments had quietly drifted away from their written specifications.
 
 [01:15 — SEPARATING SIGNAL FROM PANIC]
 The outrage cycle wants you to treat every one of these disclosures as either an imminent collapse or a morality play with a convenient villain. Good systems architecture tells us otherwise: a noisy alert on an edge node isn't a core outage, and an audit finding is telemetry, not an attack. Look at Wednesday's four-hour settlement halt across sixty-two credit unions (#CAB-2026-1041). Social feeds immediately jumped to liquidity panic. In reality, not a single ledger was compromised; a warm-standby node rotated an intermediate TLS certificate that legacy middleware still had pinned, and synthetic health checks missed it because those probes bypassed the mutual-TLS proxy. The news cycle overblew the four-hour delay while missing the actual structural constraint: synthetic monitoring that bypasses the authentication boundary is worse than no monitoring at all, because it manufactures false confidence. We saw the exact same inversion in the transportation subcommittee hearing (#CAB-2026-1040), where three hours of cameras focused on a single night-shift technician who ran an unvalidated sync script, while burying Appendix C—which showed management had decommissioned the pre-production staging environment eight months ago to shave cloud hosting costs.
 
 [03:30 — THE FORWARD POSTURE / TOOLS ON THE TRESTLEBOARD]
-Here is how to set your posture on the trestleboard for the coming week. First, for the utility boards and regulatory staff walking into next week's remediation reviews on the SCADA audit, the work requires The Common Gavel before anything else—chipping away defensive PR language and vendor finger-pointing so teams can inspect why maintenance budgets forced reliance on undocumented remote tunnels. Second, as banks and clearing houses review their standby runbooks after Wednesday's TLS halt, apply The Plumb directly to the synthetic test suite: if a health check passes by skipping the hardest boundary in production, realign the check even if it drops your quarterly uptime graph below four nines. Finally, for all of us observing from the outside, keep The 24-Inch Gauge firmly on your own attention budget. Refuse to spend cognitive cycles on televised blame sessions that punish the last operator to touch the keyboard while the missing staging environment remains unfunded. Until the post-mortem addresses the system that permitted the error, treat the commentary as jitter.`,
+Here is how to set your posture on the trestleboard for the coming week. First, for the utility boards and regulatory staff walking into next week's remediation reviews on the SCADA audit, the work requires Common Gavel before anything else—chipping away defensive PR language and vendor finger-pointing so teams can inspect why maintenance budgets forced reliance on undocumented remote tunnels. Second, as banks and clearing houses review their standby runbooks after Wednesday's TLS halt, apply The Plumb directly to the synthetic test suite: if a health check passes by skipping the hardest boundary in production, realign the check even if it drops your quarterly uptime graph below four nines. Finally, for all of us observing from the outside, keep the 24-Inch Gauge firmly on your own attention budget. Refuse to spend cognitive cycles on televised blame sessions that punish the last operator to touch the keyboard while the missing staging environment remains unfunded. Until the post-mortem addresses the system that permitted the error, treat the commentary as jitter.`,
   },
   {
     episode_number: 41,
@@ -221,19 +223,19 @@ Here is how to set your posture on the trestleboard for the coming week. First, 
     title:
       "CAB Weekly Brief #41: Alert Fatigue in Clinical Workflows and Spreading the Trowel Across Port APIs",
     summary:
-      "Friday 5-minute systems retrospective covering October 3–9, 2026. Examining cognitive error budgets under The 24-Inch Gauge and how unilateral API schema cutovers fracture institutional trust.",
+      "Friday 5-minute systems retrospective covering October 3–9, 2026. Examining cognitive error budgets under the 24-Inch Gauge and how unilateral API schema cutovers fracture institutional trust.",
     published_at: "2026-10-09T12:00:00Z",
     duration_seconds: 292,
     file_size_bytes: 4672000,
     audio_url: "/audio/cab-weekly-brief-041.mp3",
     transcript: `[00:00 — THE WEEKLY TELEMETRY]
-Across our ingestion window this week, The 24-Inch Gauge and The Trowel accounted for nearly seventy percent of high-confidence classifications. Two systemic anti-patterns dominated the board: organizations treating operator attention as a free, inexhaustible buffer, and upstream authorities breaking shared interface contracts without backward-compatible mortar.
+The 24-Inch Gauge leads this week's Trestleboard at forty-one percent alongside Alert Fatigue & Signal Loss as the primary operational failure mode, anchored by clinical medication-alert override telemetry (#CAB-2026-1039), a fourteen-thousand-container port manifest stall (#CAB-2026-1038), and municipal pension COBOL batch exhaustion (#CAB-2026-1037). Across these three anchor incidents, organizations treated operator attention as a free, inexhaustible buffer while upstream authorities broke shared interface contracts without backward-compatible mortar.
 
 [01:15 — SEPARATING SIGNAL FROM PANIC]
 When the clinical informatics study (#CAB-2026-1039) showed physicians overriding ninety-four percent of medication pop-ups within two seconds, pundits called for stricter clinician training. Systems engineering points to the opposite conclusion: when compliance committees add 114 modal interrupts per shift to transfer legal liability downward, they exhaust the cognitive error budget and train operators to auto-dismiss everything. Similarly, the fourteen-thousand-container port backup (#CAB-2026-1038) wasn't a macroeconomic trade freeze—it was an unversioned JSON validator rejecting dry-freight manifests over an optional hazmat field.
 
 [03:30 — THE FORWARD POSTURE / TOOLS ON THE TRESTLEBOARD]
-Going into next week, apply The 24-Inch Gauge to every interruptive rule in your governance and alerting queues: if an alert does not require immediate human action, delete or demote it so true Tier-1 warnings regain their weight. And where your systems meet external partners, use The Trowel—version your schemas, run dual-read windows, and never let a strict parser halt physical throughput when a dead-letter queue can preserve flow.`,
+Going into next week, apply the 24-Inch Gauge to every interruptive rule in your governance and alerting queues: if an alert does not require immediate human action, delete or demote it so true Tier-1 warnings regain their weight. And where your systems meet external partners, use The Trowel—version your schemas, run dual-read windows, and never let a strict parser halt physical throughput when a dead-letter queue can preserve flow.`,
   },
   {
     episode_number: 12,
@@ -311,48 +313,184 @@ export async function ensureBaselineEpisodesSeeded(
       )
       .first<{ value: string }>();
 
-    if (flag?.value === "1") {
-      return;
-    }
+    if (flag?.value !== "1") {
+      for (const ep of BASELINE_ARCHIVE_EPISODES) {
+        await db
+          .prepare(
+            `INSERT OR IGNORE INTO episodes (
+              episode_number,
+              slug,
+              title,
+              summary,
+              transcript,
+              audio_url,
+              duration_seconds,
+              file_size_bytes,
+              published_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          )
+          .bind(
+            ep.episode_number,
+            ep.slug,
+            ep.title,
+            ep.summary,
+            ep.transcript,
+            ep.audio_url,
+            ep.duration_seconds,
+            ep.file_size_bytes,
+            ep.published_at
+          )
+          .run();
+      }
 
-    for (const ep of BASELINE_ARCHIVE_EPISODES) {
       await db
         .prepare(
-          `INSERT OR IGNORE INTO episodes (
-            episode_number,
-            slug,
-            title,
-            summary,
-            transcript,
-            audio_url,
-            duration_seconds,
-            file_size_bytes,
-            published_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        )
-        .bind(
-          ep.episode_number,
-          ep.slug,
-          ep.title,
-          ep.summary,
-          ep.transcript,
-          ep.audio_url,
-          ep.duration_seconds,
-          ep.file_size_bytes,
-          ep.published_at
+          `INSERT INTO system_settings (key, value, updated_at)
+           VALUES ('baseline_episodes_seeded_v1', '1', datetime('now'))
+           ON CONFLICT(key) DO UPDATE SET value = '1', updated_at = datetime('now')`
         )
         .run();
     }
 
-    await db
+    const sanitizedFlag = await db
       .prepare(
-        `INSERT INTO system_settings (key, value, updated_at)
-         VALUES ('baseline_episodes_seeded_v1', '1', datetime('now'))
-         ON CONFLICT(key) DO UPDATE SET value = '1', updated_at = datetime('now')`
+        "SELECT value FROM system_settings WHERE key = 'trestleboard_content_sanitized_v3'"
       )
-      .run();
+      .first<{ value: string }>();
+
+    if (sanitizedFlag?.value !== "1") {
+      // 1. Update baseline episodes (#42, #41) so they contain zero ingestion-gate math or classifier references
+      for (const ep of BASELINE_ARCHIVE_EPISODES) {
+        await db
+          .prepare(
+            `UPDATE episodes
+             SET title = ?, summary = ?, transcript = ?
+             WHERE slug = ?`
+          )
+          .bind(ep.title, ep.summary, ep.transcript, ep.slug)
+          .run();
+      }
+
+      // 2. Enrich 1-sentence standfirst RSS excerpts on verified news articles so they provide genuine 2-sentence factual summaries
+      const multiSentenceFactualStandfirsts: Record<number, string> = {
+        6: "Demonstrators across France converged with student unions on Saturday to protest rising living costs and public-sector budget cuts as the country's fiscal deficit deepens. Police deployed tear gas in several metropolitan centers after small fires and street scuffles broke out along the march routes.",
+        9: "Total campaign advertising expenditures have surpassed $10 billion during the current U.S. midterm election cycle across broadcast, cable, and digital platforms. The record spending surge arrives as household surveys continue to cite grocery and fuel inflation as voters' primary economic concern.",
+        10: "The major-party candidates for Minnesota's U.S. Senate seat met Friday for an hourlong televised debate hosted by MPR News. The exchange centered on state program oversight following recent fraud prosecutions, household affordability, and the economic impact of federal tariff and regulatory policies.",
+        11: "The White House has moved to waive newly enacted congressional sanctions against Russian energy exports ahead of next month's midterm elections. Administration officials cited concerns over domestic fuel price spikes, while lawmakers from both parties criticized the waiver as bypassing statutory mandates.",
+        12: "U.S. negotiators have floated a proposal that would permit expanded Russian natural gas shipments into European markets as part of a broader Ukraine cease-fire framework. European energy ministers expressed skepticism toward the plan, warning that renewed pipeline reliance would undermine continental security commitments.",
+        13: "Senator Darline Graham of South Carolina publicly disagreed with the administration's decision to exempt Russian entities from bipartisan sanctions legislation originally co-sponsored by her late brother, Senator Lindsey Graham. The rare intraparty break highlights growing Senate friction over executive waivers of congressionally mandated trade restrictions.",
+        14: "Campaign activity across four competitive congressional districts in Pennsylvania illustrates the demographic and economic fault lines shaping the national midterm map. Suburban ticket-splitting, industrial energy policy, and cost-of-living pressures have turned the commonwealth's swing seats into the primary bellwether for control of the House.",
+        15: "Organizers of the nationwide 'No Kings' demonstrations held coordinated weekend rallies aimed at converting protest turnout into early midterm ballot submissions. Event coordinators partnered with local voter-registration drives across swing states to emphasize mail-in and early in-person voting deadlines.",
+        17: "The Canadian federal government announced $720 million in short-term bridge financing for Canada Post to prevent the state-owned mail carrier from exhausting its cash reserves. Officials stated the emergency liquidity injection will sustain nationwide delivery operations while the corporation restructures its parcel and letter-mail cost model.",
+        18: "Amazon confirmed it is open to discussions with federal Canadian and provincial Quebec officials regarding its decision to close fulfillment operations across the French-speaking province. The planned facility closures are projected to eliminate approximately 1,700 permanent warehouse and logistics positions.",
+        19: "Target announced it is concluding its multiyear diversity, equity, and inclusion targets alongside its dedicated accelerator program for Black-owned retail suppliers. The Minneapolis-based retailer joins a broader wave of large U.S. corporations scaling back formal demographic procurement and hiring benchmarks.",
+        22: "Law enforcement officials reported that an armed parent intervened during the shooting outside Silver Rail Elementary School in Bend, Oregon, before police units arrived on scene. The intervention has renewed national debate over emergency response timelines, campus perimeter security, and the role of armed civilians during active-shooter incidents.",
+        24: "Hundreds of coordinated rallies billed as nonpartisan civic mobilization events took place across U.S. cities this weekend to encourage early voting ahead of the midterm elections. Organizers sought to channel nearly two years of demonstration networks into structured precinct turnout operations.",
+      };
+
+      for (const [idStr, factualStandfirst] of Object.entries(
+        multiSentenceFactualStandfirsts
+      )) {
+        await db
+          .prepare(
+            "UPDATE telemetry_articles SET raw_excerpt = ? WHERE id = ?"
+          )
+          .bind(factualStandfirst, Number(idStr))
+          .run();
+      }
+
+      // 3. Re-evaluate and sanitize all telemetry_articles rows
+      const allArticlesRes = await db
+        .prepare("SELECT * FROM telemetry_articles ORDER BY id ASC")
+        .all<TelemetryArticleRow>();
+      const allArticles = allArticlesRes.results || [];
+
+      let sanitizedArticleCount = 0;
+      let clearedMalformedBriefCount = 0;
+
+      for (const row of allArticles) {
+        const validation = validateAndNormalizeIncidentSummary({
+          id: row.id,
+          title: row.title,
+          sourceFeed: row.source_feed,
+          rawExcerpt: row.raw_excerpt,
+          logWarnings: false,
+        });
+
+        if (!validation.valid) {
+          // Strip any legacy Mad-Libs fallback string while preserving raw_excerpt so build/runtime normalization logs quarantine warnings
+          if (row.socratic_brief || row.questions_json) {
+            await db
+              .prepare(
+                "UPDATE telemetry_articles SET socratic_brief = NULL, questions_json = NULL WHERE id = ?"
+              )
+              .bind(row.id)
+              .run();
+            clearedMalformedBriefCount++;
+          }
+          continue;
+        }
+
+        if (row.status === "synthesized") {
+          const cleanSynthesis = buildDeterministicBoundedSynthesis(row);
+          const questionsPayload = JSON.stringify({
+            executive_summary: cleanSynthesis.executive_summary,
+            proportionality: {
+              noise: cleanSynthesis.proportionality_check.noise_overblown,
+              signal: cleanSynthesis.proportionality_check.structural_signal,
+            },
+            questions: cleanSynthesis.questions,
+            model: "editorial-sanitization-v2",
+            synthesized_at: new Date().toISOString(),
+          });
+
+          await db
+            .prepare(
+              "UPDATE telemetry_articles SET socratic_brief = ?, questions_json = ? WHERE id = ?"
+            )
+            .bind(cleanSynthesis.socratic_brief, questionsPayload, row.id)
+            .run();
+          sanitizedArticleCount++;
+        }
+      }
+
+      await appendAuditEntry(db, {
+        actorEmail: "system@thecabcall.com",
+        actorRole: "owner",
+        authMethod: "system_bootstrap",
+        actorIpHash: "SYSTEM_SANITIZATION_V2",
+        actionType: "editorial.content_sanitization",
+        targetType: "telemetry_articles",
+        targetId: "cabcall-db",
+        reason:
+          "Eliminated leaked pipeline jargon, Mad-Libs fallback strings, and ingestion-gate math across persisted D1 articles and baseline episodes.",
+        beforeState: {
+          version: "v1",
+          total_articles_inspected: allArticles.length,
+        },
+        afterState: {
+          version: "v2",
+          sanitized_article_count: sanitizedArticleCount,
+          cleared_malformed_brief_count: clearedMalformedBriefCount,
+        },
+        replayCommand: {
+          op: "sanitize_content_v2",
+          target_table: "telemetry_articles",
+          target_id: "cabcall-db",
+          invertible: false,
+        },
+      });
+
+      await db
+        .prepare(
+          `INSERT INTO system_settings (key, value, updated_at)
+           VALUES ('trestleboard_content_sanitized_v3', '1', datetime('now'))
+           ON CONFLICT(key) DO UPDATE SET value = '1', updated_at = datetime('now')`
+        )
+        .run();
+    }
   } catch (err) {
-    console.warn("[Rollup] Failed to seed baseline archive episodes:", err);
+    console.warn("[Rollup] Failed to seed or sanitize baseline archive episodes:", err);
   }
 }
 
@@ -530,7 +668,16 @@ export async function computeWeeklyAggregatesFromD1(
   const totalEvaluated = Math.max(rows.length, customSelectedRows.length);
   const droppedRows = rows.filter((r) => r.status === "dropped");
   const activeRows = rows.filter(
-    (r) => r.status === "synthesized" || r.status === "triaged"
+    (r) =>
+      (r.status === "synthesized" || r.status === "triaged") &&
+      validateAndNormalizeIncidentSummary({
+        id: r.id,
+        title: r.title,
+        sourceFeed: r.source_feed,
+        rawExcerpt: r.raw_excerpt,
+        socraticBrief: r.socratic_brief,
+        logWarnings: false,
+      }).valid
   );
 
   const noiseRejectionRatePct =
@@ -591,10 +738,10 @@ export async function computeWeeklyAggregatesFromD1(
   if (customSelectedRows.length > 0) {
     topIncidents = customSelectedRows.slice(0, 6);
   } else {
-    const synthesizedRows = rows
+    const synthesizedRows = activeRows
       .filter((r) => r.status === "synthesized")
       .sort((a, b) => b.is_systemic_prob - a.is_systemic_prob);
-    const triagedRows = rows
+    const triagedRows = activeRows
       .filter((r) => r.status === "triaged")
       .sort((a, b) => b.is_systemic_prob - a.is_systemic_prob);
 
@@ -645,15 +792,15 @@ function buildDeterministicRollupScript(
     ? ` Editorial Focus Directive for this docket: ${editorialFocusNote.trim()}.`
     : "";
 
-  const weekly_telemetry = `Welcome to the Friday Change Advisory Board Weekly Brief, Episode ${episodeNumber}. Across the past ${agg.windowDays} days of automated ingestion, our System-1 TypeSafe Jev classifier evaluated ${agg.totalEvaluated} dispatches across the active US feeds, rejecting ${agg.noiseRejectionRatePct}% (${agg.droppedCount} items) as non-systemic noise at the ingestion gate and promoting ${agg.triagedOrSynthesizedCount} high-signal incidents for System-2 review.${focusClause} Looking across the trestleboard this week, ${agg.dominantToolDisplay} led all Working Tools at ${agg.dominantToolPct}% of primary classifications, while ${agg.topSreFailureDisplay} emerged as the dominant operational failure mode. Three active incidents anchor our post-incident docket today: first, from ${inc1?.source_feed || "WSJ US Business"}, "${inc1?.title || "Institutional Capacity & Policy Drift"}", classified under ${WORKING_TOOL_DISPLAY_NAMES[inc1?.primary_tool || "square"]}; second, from ${inc2?.source_feed || "NYT HomePage"}, "${inc2?.title || "Cross-Silo Coordination Strain"}", flagged under ${WORKING_TOOL_DISPLAY_NAMES[inc2?.primary_tool || "level"]}; and third, "${inc3?.title || "Regulatory Execution Divergence"}", where ${SRE_FAILURE_DISPLAY_NAMES[inc3?.sre_failure_mode || "configuration_drift"]} exposed the gap between nominal policy and live production state.`;
+  const weekly_telemetry = `Welcome to the Friday Change Advisory Board Weekly Brief, Episode ${episodeNumber}. ${agg.dominantToolDisplay} leads this week's Trestleboard at ${agg.dominantToolPct}% of primary classifications, with ${agg.topSreFailureDisplay} emerging as the primary operational failure mode across ${agg.triagedOrSynthesizedCount} active dispatches.${focusClause} Three anchor incidents set our post-incident docket today: first, from ${inc1?.source_feed || "WSJ US Business"}, "${inc1?.title || "Institutional Capacity & Policy Drift"}", examined under ${WORKING_TOOL_DISPLAY_NAMES[inc1?.primary_tool || "square"]}; second, from ${inc2?.source_feed || "NYT HomePage"}, "${inc2?.title || "Cross-Silo Coordination Strain"}", evaluated under ${WORKING_TOOL_DISPLAY_NAMES[inc2?.primary_tool || "level"]}; and third, "${inc3?.title || "Regulatory Execution Divergence"}", where ${SRE_FAILURE_DISPLAY_NAMES[inc3?.sre_failure_mode || "configuration_drift"]} exposed the gap between nominal policy and live operational state.`;
 
-  const separating_signal_from_panic = `The 24-hour commentary cycle wants you to read each of these events as a morality play or an unprecedented institutional collapse. When we apply the Proportionality Check, a far more actionable systems pattern comes into focus. Take "${inc1?.title || "our lead dispatch"}" first. ${prop1?.noise_overblown || "Public commentary immediately fixated on headline optics and individual blame."} Yet the structural signal underneath is straightforward: ${prop1?.structural_signal || "when an institution defers structural reconciliation, live execution inevitably drifts from its chartered specification."} We see the exact same signal-to-noise inversion in "${inc2?.title || "our second incident"}". ${prop2?.noise_overblown || "Partisan observers treated the disruption as a sudden shock."} In reality, ${prop2?.structural_signal || "Jev's telemetry points directly to capacity exhaustion and asymmetric risk allocation that accumulated quietly across multiple quarters."} And in "${inc3?.title || "our third triaged event"}", the friction between ${WORKING_TOOL_DISPLAY_NAMES[inc3?.primary_tool || "trowel"]} and ${WORKING_TOOL_DISPLAY_NAMES[inc3?.secondary_tool || "common_gavel"]} demonstrates how quickly cross-group coordination fractures when upstream safeguards go untested in production. None of these incidents have completed a verified post-mortem, which means any sweeping verdict right now is premature jitter rather than verified engineering truth.`;
+  const separating_signal_from_panic = `The 24-hour commentary cycle wants you to read each of these events as a morality play or an unprecedented institutional collapse. When we apply the Proportionality Check, a far more actionable systems pattern comes into focus. Take "${inc1?.title || "our lead dispatch"}" first. ${prop1?.noise_overblown || "Public commentary immediately fixated on headline optics and individual blame."} Yet the structural signal underneath is straightforward: ${prop1?.structural_signal || "when an institution defers structural reconciliation, live execution inevitably drifts from its chartered specification."} We see the exact same signal-to-noise inversion in "${inc2?.title || "our second incident"}". ${prop2?.noise_overblown || "Partisan observers treated the disruption as a sudden shock."} In reality, ${prop2?.structural_signal || "operational telemetry points directly to capacity exhaustion and asymmetric risk allocation that accumulated quietly across multiple quarters."} And in "${inc3?.title || "our third triaged event"}", the friction between ${WORKING_TOOL_DISPLAY_NAMES[inc3?.primary_tool || "trowel"]} and ${WORKING_TOOL_DISPLAY_NAMES[inc3?.secondary_tool || "common_gavel"]} demonstrates how quickly cross-group coordination fractures when upstream safeguards go untested in production. None of these incidents have completed a verified post-mortem, which means any sweeping verdict right now is premature jitter rather than verified engineering truth.`;
 
-  const forward_posture = `As we set the trestleboard for the coming seven days, here is how to put the tools to work without waiting for the headlines to settle. First, when tracking the fallout around "${inc1?.title || "this week's policy and fiscal dispatches"}", bring ${agg.dominantToolDisplay} directly to the primary filings: watch whether leadership reconciles the live operational table with the written mandate, or merely issues another round of press assurances. Second, apply The Common Gavel to every congressional or corporate hearing on "${inc2?.title || "active institutional disputes"}"—strip away the defensive rhetoric and ask whether the people who architected the constraint are sharing the same horizontal plane of accountability on The Level as the citizens and workers absorbing the load. Finally, keep The 24-Inch Gauge on your own cognitive error budget this weekend: refuse to spend high-priority attention on outraged speculation while the core post-mortem telemetry is still being collected. Until next Friday, keep your telemetry clean and your horizons level.`;
+  const forward_posture = `As we set the trestleboard for the coming seven days, here is how to put the tools to work without waiting for the headlines to settle. First, when tracking the fallout around "${inc1?.title || "this week's policy and fiscal dispatches"}", bring ${agg.dominantToolDisplay} directly to the primary filings: watch whether leadership reconciles the live operational table with the written mandate, or merely issues another round of press assurances. Second, apply Common Gavel to every congressional or corporate hearing on "${inc2?.title || "active institutional disputes"}"—strip away the defensive rhetoric and ask whether the people who architected the constraint are sharing the same horizontal plane of accountability on The Level as the citizens and workers absorbing the load. Finally, keep the 24-Inch Gauge on your own cognitive error budget this weekend: refuse to spend high-priority attention on outraged speculation while the core post-mortem telemetry is still being collected. Until next Friday, keep your telemetry clean and your horizons level.`;
 
   return {
     title: `CAB Weekly Brief #${episodeNumber}: ${agg.dominantToolDisplay} (${agg.dominantToolPct}%), ${agg.topSreFailureDisplay}, and This Week's Trestleboard`,
-    summary: `Automated 5-minute Friday Change Advisory Board rollup synthesizing ${agg.triagedOrSynthesizedCount} high-signal incidents (${agg.noiseRejectionRatePct}% noise rejection across ${agg.totalEvaluated} items). Dominant Tool: ${agg.dominantToolDisplay} (${agg.dominantToolPct}%).`,
+    summary: `Friday 5-minute Change Advisory Board synthesis led by ${agg.dominantToolDisplay} (${agg.dominantToolPct}%) and ${agg.topSreFailureDisplay} across ${agg.triagedOrSynthesizedCount} active dispatches on the Trestleboard.`,
     weekly_telemetry,
     separating_signal_from_panic,
     forward_posture,
@@ -695,10 +842,9 @@ export async function generateRollupTranscriptWithGemini(
         }
       }
       return `${idx + 1}. "${inc.title}" (${inc.source_feed}, published ${inc.published_at})
-   - Jev Systemic Prob: ${inc.is_systemic_prob}, Confidence: ${inc.jev_confidence}
-   - Primary Tool: ${inc.primary_tool} (${WORKING_TOOL_DISPLAY_NAMES[inc.primary_tool]})
-   - Secondary Tool: ${inc.secondary_tool || "twenty_four_inch_gauge"}
-   - SRE Failure Mode: ${inc.sre_failure_mode} (${SRE_FAILURE_DISPLAY_NAMES[inc.sre_failure_mode]})${extra}`;
+   - Primary Tool: ${WORKING_TOOL_DISPLAY_NAMES[inc.primary_tool]}
+   - Secondary Tool: ${WORKING_TOOL_DISPLAY_NAMES[inc.secondary_tool || "twenty_four_inch_gauge"]}
+   - SRE Failure Mode: ${SRE_FAILURE_DISPLAY_NAMES[inc.sre_failure_mode]}${extra}`;
     })
     .join("\n\n");
 
@@ -707,9 +853,10 @@ Your audience consists of senior systems engineers, institutional leaders, and F
 
 HARD GOVERNANCE CONSTRAINTS (NON-NEGOTIABLE):
 1. ZERO DEFINITIONS RULE: NEVER define what a Square, Plumb, Level, 24-Inch Gauge, Common Gavel, Trowel, or SRE term is. Apply the tools directly in motion as active diagnostic verbs and instruments.
-2. PROPORTIONALITY CHECK: Explicitly contrast where public panic, cable-news outrage, or partisan commentary was overblown (jitter/noise) vs. the actual structural engineering or governance signal.
-3. EPISTEMIC HUMILITY & ZERO AI SLOP: Frame ongoing stories as active incidents awaiting full post-mortem verification. Never use AI clichés ("delve", "testament", "In today's fast-paced world", "stark reminder").
-4. SPOKEN CADENCE TARGET: ~750 words total across the 3 sections (~5 minutes at 150 WPM):
+2. ZERO PIPELINE JARGON: NEVER include ingestion-gate math ("evaluated X dispatches, rejecting Y% noise") or internal classifier names ("Jev", "System-1", "TypeSafe"). Lead immediately with the dominant Working Tool, the primary Failure Mode, and the 3 anchor incidents for the week.
+3. PROPORTIONALITY CHECK: Explicitly contrast where public panic, cable-news outrage, or partisan commentary was overblown (jitter/noise) vs. the actual structural engineering or governance signal.
+4. EPISTEMIC HUMILITY & ZERO AI SLOP: Frame ongoing stories as active incidents awaiting full post-mortem verification. Never use AI clichés ("delve", "testament", "In today's fast-paced world", "stark reminder").
+5. SPOKEN CADENCE TARGET: ~750 words total across the 3 sections (~5 minutes at 150 WPM):
    - weekly_telemetry: ~180 words
    - separating_signal_from_panic: ~350 words
    - forward_posture: ~220 words`;
@@ -718,20 +865,17 @@ HARD GOVERNANCE CONSTRAINTS (NON-NEGOTIABLE):
     ? `\nPRODUCER / EDITORIAL FOCUS NOTE FOR THIS EPISODE:\n${editorialFocusNote.trim()}\n`
     : "";
 
-  const userPrompt = `Generate Episode #${episodeNumber} of the Friday 5-Minute "CAB Weekly Brief" from the following live ${agg.windowDays}-day D1 database telemetry:
+  const userPrompt = `Generate Episode #${episodeNumber} of the Friday 5-Minute "CAB Weekly Brief" from the following ${agg.windowDays}-day Trestleboard state:
 
-${agg.windowDays}-DAY TELEMETRY AGGREGATES:
-- Total RSS Items Evaluated: ${agg.totalEvaluated}
-- High-Signal Incidents Promoted: ${agg.triagedOrSynthesizedCount}
-- Low-Signal Noise Dropped: ${agg.droppedCount} (${agg.noiseRejectionRatePct}% noise rejection rate)
+DOMINANT POSTURE:
 - Dominant Working Tool: ${agg.dominantToolDisplay} (${agg.dominantToolPct}%)
-- Tool Distribution: ${JSON.stringify(agg.toolDistribution)}
-- Top SRE Failure Mode: ${agg.topSreFailureDisplay}
+- Primary SRE Failure Mode: ${agg.topSreFailureDisplay}
+- Active Incidents on the Trestleboard: ${agg.triagedOrSynthesizedCount}
 ${focusDirectiveBlock}
-TOP SYNTHESIZED INCIDENTS ON THE TRESTLEBOARD:
+ANCHOR INCIDENTS FOR THE WEEK:
 ${incidentSummaries}
 
-Return valid JSON matching the required schema with "title", "summary", "weekly_telemetry" (~180 words), "separating_signal_from_panic" (~350 words), and "forward_posture" (~220 words). Do not include section header brackets inside the individual string fields; we will prepend the timestamp headers automatically.`;
+Return valid JSON matching the required schema with "title", "summary", "weekly_telemetry" (~180 words, leading immediately with the dominant Working Tool, primary Failure Mode, and 3 anchor incidents), "separating_signal_from_panic" (~350 words), and "forward_posture" (~220 words). Do not include section header brackets inside the individual string fields; we will prepend the timestamp headers automatically.`;
 
   const candidateModels = [
     "gemini-2.5-flash",

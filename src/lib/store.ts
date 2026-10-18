@@ -6,6 +6,10 @@ import {
 
 export { ensureD1Snapshot };
 import {
+  buildOrSanitizeArticleDiagnostics,
+  validateAndNormalizeIncidentSummary,
+} from "./sanitize";
+import {
   INITIAL_EPISODES,
   INITIAL_INCIDENTS,
   INITIAL_PIPELINE_RUNS,
@@ -20,6 +24,8 @@ import {
   PipelineRunRecord,
   PodcastEpisode,
   SystemPostureSummary,
+  WeeklyDocketItem,
+  WeeklyTrestleboardState,
 } from "./types";
 
 // Runtime state seeded with initial telemetry and extensible by live Cron / Manual pipeline triggers
@@ -33,6 +39,46 @@ const state: {
   pipelineRuns: [...INITIAL_PIPELINE_RUNS],
 };
 
+function normalizeAndValidateIncidentRecord(
+  inc: IncidentArticle
+): IncidentArticle | null {
+  const validation = validateAndNormalizeIncidentSummary({
+    id: inc.id,
+    title: inc.title,
+    sourceFeed: inc.sourceFeed,
+    rawExcerpt: inc.socraticBrief || inc.executiveSummary,
+    executiveSummary: inc.executiveSummary,
+    socraticBrief: inc.socraticBrief,
+  });
+
+  if (!validation.valid) {
+    return null;
+  }
+
+  const diagnostics = buildOrSanitizeArticleDiagnostics({
+    title: inc.title,
+    sourceFeed: inc.sourceFeed,
+    factualSummary: validation.factualBriefParagraph,
+    primaryTool: inc.primaryTool,
+    secondaryTool: inc.secondaryTool,
+    sreFailureMode: inc.sreFailureMode,
+    existingNoise: inc.proportionalityCheck?.noiseOverblown,
+    existingSignal: inc.proportionalityCheck?.structuralSignal,
+    existingQuestions: inc.questions,
+  });
+
+  return {
+    ...inc,
+    executiveSummary: validation.executiveSummary,
+    socraticBrief: validation.factualBriefParagraph,
+    proportionalityCheck: {
+      noiseOverblown: diagnostics.noiseOverblown,
+      structuralSignal: diagnostics.structuralSignal,
+    },
+    questions: diagnostics.questions,
+  };
+}
+
 export function getAllIncidents(): IncidentArticle[] {
   const d1 = readLocalD1Snapshot();
   const seenHashes = new Set<string>();
@@ -40,15 +86,21 @@ export function getAllIncidents(): IncidentArticle[] {
 
   for (const inc of d1.incidents) {
     if (!seenHashes.has(inc.urlHash)) {
-      seenHashes.add(inc.urlHash);
-      merged.push(inc);
+      const normalized = normalizeAndValidateIncidentRecord(inc);
+      if (normalized) {
+        seenHashes.add(inc.urlHash);
+        merged.push(normalized);
+      }
     }
   }
 
   for (const inc of state.incidents) {
     if (!seenHashes.has(inc.urlHash)) {
-      seenHashes.add(inc.urlHash);
-      merged.push(inc);
+      const normalized = normalizeAndValidateIncidentRecord(inc);
+      if (normalized) {
+        seenHashes.add(inc.urlHash);
+        merged.push(normalized);
+      }
     }
   }
 
@@ -77,8 +129,12 @@ export function hasUrlHash(urlHash: string): boolean {
 }
 
 export function insertIncident(incident: IncidentArticle): void {
-  if (!state.incidents.some((inc) => inc.urlHash === incident.urlHash)) {
-    state.incidents.unshift(incident);
+  const normalized = normalizeAndValidateIncidentRecord(incident);
+  if (!normalized) {
+    return;
+  }
+  if (!state.incidents.some((inc) => inc.urlHash === normalized.urlHash)) {
+    state.incidents.unshift(normalized);
   }
 }
 
@@ -163,8 +219,7 @@ export function recordPipelineRun(run: PipelineRunRecord): void {
 
 export function getSystemPostureSummary(): SystemPostureSummary {
   const d1 = readLocalD1Snapshot();
-  const activeIncidents =
-    d1.incidents.length > 0 ? d1.incidents : getAllIncidents();
+  const activeIncidents = getAllIncidents();
   const runs = getPipelineRuns().filter((r) => r.runType === "rss_ingest");
 
   const totalEvaluatedWindow =
@@ -234,3 +289,75 @@ export function getSystemPostureSummary(): SystemPostureSummary {
       Math.round((totalConfidence / totalIncidents) * 100) / 100,
   };
 }
+
+/**
+ * Constructs a single deeply-frozen immutable state object synchronizing the Weekly Brief Hero's
+ * top status badge, opening editorial prose, podcast card metadata, and 3-item Weekly Docket.
+ */
+export function buildWeeklyTrestleboardState(
+  incidents: IncidentArticle[],
+  posture: SystemPostureSummary,
+  pinnedEpisode: PodcastEpisode
+): WeeklyTrestleboardState {
+  const dominantTool = posture.dominantTool;
+  const dominantToolPercentage = posture.dominantToolPercentage;
+  const primaryFailureMode = posture.topFailureMode;
+  const activeIncidentCount = incidents.length;
+
+  const anchorIncidents: readonly WeeklyDocketItem[] = Object.freeze(
+    incidents.slice(0, 3).map((inc) =>
+      Object.freeze({
+        id: inc.id,
+        incidentCode: inc.incidentCode,
+        slug: inc.slug,
+        title: inc.title,
+        sourceFeed: inc.sourceFeed,
+        primaryTool: inc.primaryTool,
+        sreFailureMode: inc.sreFailureMode,
+      })
+    )
+  );
+
+  const [inc1, inc2, inc3] = anchorIncidents;
+  const anchor1Clause = inc1
+    ? `"${inc1.title}" (${inc1.sourceFeed})`
+    : "infrastructure compliance drift";
+  const anchor2Clause = inc2
+    ? `"${inc2.title}" (${inc2.sourceFeed})`
+    : "cross-boundary coordination strain";
+  const anchor3Clause = inc3
+    ? `"${inc3.title}" (${inc3.sourceFeed})`
+    : "deferred institutional capacity";
+
+  const episodeNumber = pinnedEpisode.episodeNumber || 43;
+
+  const heroTitle = `CAB Weekly Brief #${episodeNumber}: ${dominantTool} (${dominantToolPercentage}%), ${primaryFailureMode}, and This Week's Trestleboard`;
+
+  const heroOpeningProse = `${dominantTool} leads this week's Trestleboard at ${dominantToolPercentage}% of active classifications, with ${primaryFailureMode} emerging as the primary operational failure mode across ${activeIncidentCount} verified incidents. Three anchor dispatches set the post-incident docket: ${anchor1Clause}; ${anchor2Clause}; and ${anchor3Clause}. Across all three events, the structural signal separates reactive commentary from the underlying gap between formal institutional rules and live operational state.`;
+
+  const podcastDescription = `Five-minute Friday synthesis anchored by ${dominantTool} (${dominantToolPercentage}%) and ${primaryFailureMode} across ${activeIncidentCount} active dispatches on the Trestleboard.`;
+
+  return Object.freeze({
+    episodeNumber,
+    episodeSlug: pinnedEpisode.slug,
+    publishedAt: pinnedEpisode.publishedAt,
+    durationFormatted: pinnedEpisode.durationFormatted,
+    audioUrl: pinnedEpisode.audioUrl,
+    dominantTool,
+    dominantToolPercentage,
+    primaryFailureMode,
+    activeIncidentCount,
+    anchorIncidents,
+    heroTitle,
+    heroOpeningProse,
+    podcastDescription,
+  });
+}
+
+export function getWeeklyTrestleboardState(): WeeklyTrestleboardState {
+  const incidents = getAllIncidents();
+  const posture = getSystemPostureSummary();
+  const pinnedEpisode = getLatestWeeklyRollup();
+  return buildWeeklyTrestleboardState(incidents, posture, pinnedEpisode);
+}
+

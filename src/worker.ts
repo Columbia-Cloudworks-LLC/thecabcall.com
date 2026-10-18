@@ -261,6 +261,12 @@ const worker = {
     // Public Route: GET /api/snapshot (Returns live D1 telemetry_articles, episodes, and pipeline_runs)
     if (request.method === "GET" && url.pathname === "/api/snapshot") {
       try {
+        try {
+          await ensureBaselineEpisodesSeeded(env.DB);
+        } catch {
+          // ignore seed check failure
+        }
+
         const articlesRes = await env.DB.prepare(
           `SELECT * FROM telemetry_articles
            ORDER BY
@@ -272,7 +278,6 @@ const worker = {
 
         let episodes: Record<string, unknown>[] = [];
         try {
-          await ensureBaselineEpisodesSeeded(env.DB);
           const episodesRes = await env.DB.prepare(
             "SELECT * FROM episodes ORDER BY published_at DESC, episode_number DESC, id DESC"
           ).all<Record<string, unknown>>();

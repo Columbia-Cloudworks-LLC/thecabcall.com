@@ -9,6 +9,7 @@ import {
   JevEvaluationResult,
   JevWorkingToolKey,
 } from "./jev";
+import { validateAndNormalizeIncidentSummary } from "../lib/sanitize";
 
 export interface D1PreparedStatementLike {
   bind(...values: unknown[]): D1PreparedStatementLike;
@@ -1852,7 +1853,17 @@ export async function parseRssFeedItems(
           : cleanedContent;
     }
 
-    const rawExcerpt = truncateCleanly(combinedBody || title, 2500);
+    const validation = validateAndNormalizeIncidentSummary({
+      title,
+      sourceFeed,
+      rawExcerpt: combinedBody,
+      logWarnings: true,
+    });
+    if (!validation.valid) {
+      continue;
+    }
+
+    const rawExcerpt = truncateCleanly(validation.cleanedDescription, 2500);
 
     let publishedAt = new Date().toISOString();
     if (rawPubDate) {
@@ -2135,21 +2146,27 @@ export async function runD1IngestPipeline(options: {
       options.customArticle.link?.trim() ||
       `https://thecabcall.com/live-sim/${Date.now()}`;
     const urlHash = await computeUrlSha256(sourceUrl);
-    items = [
-      {
-        urlHash,
-        sourceFeed:
-          options.customArticle.sourceFeed?.trim() || "LIVE TELEMETRY SANDBOX",
-        title: options.customArticle.title.trim(),
-        sourceUrl,
-        rawExcerpt: truncateCleanly(
-          options.customArticle.description?.trim() ||
-            options.customArticle.title.trim(),
-          2500
-        ),
-        publishedAt: new Date().toISOString(),
-      },
-    ];
+    const customTitle = options.customArticle.title.trim();
+    const customFeed =
+      options.customArticle.sourceFeed?.trim() || "LIVE TELEMETRY SANDBOX";
+    const validation = validateAndNormalizeIncidentSummary({
+      title: customTitle,
+      sourceFeed: customFeed,
+      rawExcerpt: options.customArticle.description?.trim() || "",
+      logWarnings: true,
+    });
+    if (validation.valid) {
+      items = [
+        {
+          urlHash,
+          sourceFeed: customFeed,
+          title: customTitle,
+          sourceUrl,
+          rawExcerpt: truncateCleanly(validation.cleanedDescription, 2500),
+          publishedAt: new Date().toISOString(),
+        },
+      ];
+    }
   } else {
     const collected = await collectLatestUsRssItems(itemsPerFeed, options.db);
     items = collected.items;

@@ -5,6 +5,13 @@ import {
   JevSreFailureModeKey,
   JevWorkingToolKey,
 } from "./jev";
+import {
+  buildOrSanitizeArticleDiagnostics,
+  normalizeQuestionSentenceCase,
+  sanitizeStringConcatenation,
+  validateAndNormalizeIncidentSummary,
+} from "../lib/sanitize";
+import { SreFailureModeId, WorkingToolId } from "../lib/taxonomy";
 
 export interface TelemetryArticleRow {
   id: number;
@@ -62,8 +69,8 @@ export interface SynthesizeRunSummary {
 }
 
 export const WORKING_TOOL_DISPLAY_NAMES: Record<JevWorkingToolKey, string> = {
-  twenty_four_inch_gauge: "The 24-Inch Gauge",
-  common_gavel: "The Common Gavel",
+  twenty_four_inch_gauge: "24-Inch Gauge",
+  common_gavel: "Common Gavel",
   plumb: "The Plumb",
   square: "The Square",
   level: "The Level",
@@ -76,7 +83,25 @@ export const SRE_FAILURE_DISPLAY_NAMES: Record<JevSreFailureModeKey, string> = {
   untested_failover: "Single Point of Failure (SPOF) / Untested Failover",
   alert_fatigue: "Alert Fatigue & Signal Loss",
   blameless_postmortem_gap: "Blame Culture vs. Root-Cause Isolation",
-  capacity_exhaustion: "Technical & Institutional Debt / Capacity Exhaustion",
+  capacity_exhaustion: "Technical & Institutional Debt",
+};
+
+const JEV_TO_TAXONOMY_TOOL: Record<JevWorkingToolKey, WorkingToolId> = {
+  twenty_four_inch_gauge: "24-Inch Gauge",
+  common_gavel: "Common Gavel",
+  plumb: "The Plumb",
+  square: "The Square",
+  level: "The Level",
+  trowel: "The Trowel",
+};
+
+const JEV_TO_TAXONOMY_FAILURE: Record<JevSreFailureModeKey, SreFailureModeId> = {
+  configuration_drift: "Configuration Drift",
+  cascading_failure: "Cascading Failure",
+  untested_failover: "Single Point of Failure (SPOF) / Untested Failover",
+  alert_fatigue: "Alert Fatigue & Signal Loss",
+  blameless_postmortem_gap: "Blame Culture vs. Root-Cause Isolation",
+  capacity_exhaustion: "Technical & Institutional Debt",
 };
 
 export const SOCRATIC_SYNTHESIS_RESPONSE_SCHEMA = {
@@ -85,12 +110,12 @@ export const SOCRATIC_SYNTHESIS_RESPONSE_SCHEMA = {
     executive_summary: {
       type: "STRING",
       description:
-        "Exactly 2 concise, objective sentences summarizing the core operational event and the System-1 Jev classification without partisan framing or clichés.",
+        "Exactly 2 plain-English factual sentences summarizing the news event derived directly from the source article. Never mention classifier names, decimal weights, or pipeline jargon.",
     },
     socratic_brief: {
       type: "STRING",
       description:
-        "2 to 3 objective paragraphs separated by double newlines (\\n\\n) analyzing the operational tension, the verifiable facts, and why Jev's primary_tool and sre_failure_mode triggered. Frame strictly as an active systems incident awaiting full post-mortem telemetry.",
+        "1 concise, unvarnished factual paragraph (2 to 3 plain-English sentences) summarizing the verifiable facts of the news event. Do NOT include paragraphs reciting classifier weights or boilerplate caveats.",
     },
     proportionality_check: {
       type: "OBJECT",
@@ -98,12 +123,12 @@ export const SOCRATIC_SYNTHESIS_RESPONSE_SCHEMA = {
         noise_overblown: {
           type: "STRING",
           description:
-            "What reactive headline spin, partisan theater, or sensationalized panic in the commentary cycle is overblown jitter.",
+            "What reactive headline spin, partisan theater, or sensationalized panic in the commentary cycle is overblown media jitter for this specific story.",
         },
         structural_signal: {
           type: "STRING",
           description:
-            "The actual underlying architectural, governance, incentive, or capacity constraint exposed by this incident.",
+            "How the underlying architectural, governance, incentive, or capacity constraint applies specifically to the facts of this article, without repeating generic rubric definitions verbatim.",
         },
       },
       required: ["noise_overblown", "structural_signal"],
@@ -111,7 +136,7 @@ export const SOCRATIC_SYNTHESIS_RESPONSE_SCHEMA = {
     questions: {
       type: "ARRAY",
       description:
-        "3 to 4 sharp Socratic diagnostic questions anchored explicitly to Jev's primary_tool and secondary_tool.",
+        "Exactly 2 high-impact Socratic diagnostic questions in standard sentence case anchored to the primary and secondary Working Tools.",
       items: {
         type: "STRING",
       },
@@ -178,88 +203,90 @@ export function buildSystem2Prompt(row: TelemetryArticleRow): {
   const secondaryDisplay = WORKING_TOOL_DISPLAY_NAMES[secondaryTool];
   const sreDisplay = SRE_FAILURE_DISPLAY_NAMES[row.sre_failure_mode];
 
-  const systemInstruction = `You are the System-2 Bounded Socratic Synthesizer for Change Advisory Board (thecabcall.com), an automated Post-Incident Review (PIR) telemetry platform analyzing current events through Site Reliability Engineering (SRE) and the Working Tools of Freemasonry.
+  const systemInstruction = `You are the Post-Incident Review (PIR) editorial synthesizer for Change Advisory Board (thecabcall.com), analyzing current events through Site Reliability Engineering (SRE) and the Working Tools of Freemasonry.
 
 HARD GOVERNANCE CONSTRAINTS (NON-NEGOTIABLE):
-1. STRICT SYSTEM-1 BINDING: You are strictly bound by the System-1 TypeSafe Jev (jev-1.14.0) classification record provided below:
-   - Primary Working Tool: ${row.primary_tool} (${primaryDisplay}) — Criteria: ${JEV_WORKING_TOOL_CRITERIA[row.primary_tool]}
-   - Secondary Working Tool: ${secondaryTool} (${secondaryDisplay}) — Criteria: ${JEV_WORKING_TOOL_CRITERIA[secondaryTool]}
-   - SRE Failure Mode: ${row.sre_failure_mode} (${sreDisplay}) — Criteria: ${JEV_SRE_FAILURE_MODE_CRITERIA[row.sre_failure_mode]}
+1. STRICT CLASSIFICATION BINDING: You are bound by the following diagnostic classification:
+   - Primary Working Tool: ${primaryDisplay} — Criteria: ${JEV_WORKING_TOOL_CRITERIA[row.primary_tool]}
+   - Secondary Working Tool: ${secondaryDisplay} — Criteria: ${JEV_WORKING_TOOL_CRITERIA[secondaryTool]}
+   - SRE Failure Mode: ${sreDisplay} — Criteria: ${JEV_SRE_FAILURE_MODE_CRITERIA[row.sre_failure_mode]}
    - 6-Tool Probability Vector: ${JSON.stringify(toolProbs)}
-   You MAY NOT override, dispute, or replace Jev's labels. Your analysis and Socratic questions must directly operationalize these exact classifications.
 
-2. EPISTEMIC HUMILITY & ZERO AI SLOP CHARTER:
-   - Zero partisan punditry, zero moralizing conclusions, zero lecturing.
-   - Forbidden AI clichés: Never use phrases like "In today's fast-paced world", "delve", "testament", "stark reminder", "wake-up call", "tapestry", "underscores", or "crucial".
-   - Zero Definitions Rule: Do NOT recite dictionary or monitorial definitions of what a Square, Plumb, Level, Gauge, Gavel, or Trowel is. Apply the tools directly as diagnostic instruments in motion.
-   - Pending Post-Mortem Framing: Treat this news story strictly as an active systems incident with incomplete telemetry awaiting full post-mortem verification.`;
+2. ZERO PIPELINE JARGON & ZERO DEFINITIONS RULE:
+   - NEVER mention internal classifier names ("Jev", "TypeSafe Jev", "jev-1.14.0", "System-1", "ingestion gate") or raw decimal weights ("0.61 primary weight") anywhere in your output.
+   - NEVER use Mad-Libs templates like "{Source} reports on '{Headline}', exposing an active operational friction point...".
+   - Do NOT recite dictionary or monitorial definitions of what a Square, Plumb, Level, Gauge, Gavel, or Trowel is.
+   - Zero partisan punditry, zero moralizing conclusions, zero AI clichés ("delve", "testament", "stark reminder", "wake-up call", "underscores").`;
 
-  const userPrompt = `Synthesize a bounded System-2 Socratic Incident Brief for the following triaged telemetry record:
+  const userPrompt = `Synthesize a Post-Incident Review brief for the following source dispatch:
 
 ARTICLE METADATA:
 - Headline: ${row.title}
 - Source Feed: ${row.source_feed}
 - Published At: ${row.published_at}
 - Source URL: ${row.source_url}
-- Raw Telemetry Excerpt:
+- Source Excerpt:
 """
 ${row.raw_excerpt}
 """
 
-LOCKED SYSTEM-1 JEV CLASSIFICATION (jev-1.14.0):
-- Systemic Event Probability: ${row.is_systemic_prob}
-- Jev Confidence: ${row.jev_confidence}
-- Primary Working Tool: ${row.primary_tool} (${primaryDisplay})
-- Secondary Working Tool: ${secondaryTool} (${secondaryDisplay})
-- SRE Failure Mode: ${row.sre_failure_mode} (${sreDisplay})
-- 6-Tool Probability Distribution: ${JSON.stringify(toolProbs)}
+CLASSIFICATION LENS:
+- Primary Working Tool: ${primaryDisplay}
+- Secondary Working Tool: ${secondaryDisplay}
+- SRE Failure Mode: ${sreDisplay}
 
 Return ONLY valid JSON matching the required schema with:
-1. "executive_summary": 2 concise sentences stating the operational event and how ${primaryDisplay} and ${sreDisplay} diagnose the core constraint.
-2. "socratic_brief": 2 to 3 objective paragraphs (separated by "\\n\\n") analyzing the factual operational tension, why Jev's ${primaryDisplay} (${Math.round((toolProbs[row.primary_tool] || row.jev_confidence) * 100)}%) and ${sreDisplay} triggered alongside ${secondaryDisplay}, and what post-mortem telemetry remains unverified.
-3. "proportionality_check": { "noise_overblown": "...", "structural_signal": "..." } contrasting reactive media/political jitter against the structural engineering/governance signal.
-4. "questions": 3 to 4 sharp Socratic diagnostic questions anchored explicitly to ${primaryDisplay} and ${secondaryDisplay}.`;
+1. "executive_summary": 2 plain-English factual sentences summarizing what happened in the news event based on the source excerpt. No classifier names or percentages.
+2. "socratic_brief": 1 concise, unvarnished factual paragraph (2 to 3 plain-English sentences) stating the facts of the incident. Do not include a second or third paragraph reciting tool weights or telemetry caveats.
+3. "proportionality_check": { "noise_overblown": "...", "structural_signal": "..." } where "structural_signal" explains how the structural constraint (${sreDisplay} under ${primaryDisplay}) applies specifically to the facts of this article rather than repeating a generic rubric definition.
+4. "questions": Exactly 2 high-impact Socratic diagnostic questions in standard sentence case anchored to ${primaryDisplay} and ${secondaryDisplay}.`;
 
   return { systemInstruction, userPrompt };
 }
 
-function buildDeterministicBoundedSynthesis(
+export function buildDeterministicBoundedSynthesis(
   row: TelemetryArticleRow
 ): SocraticSynthesisOutput {
-  const secondaryTool: JevWorkingToolKey =
+  const secondaryToolKey: JevWorkingToolKey =
     row.secondary_tool || "twenty_four_inch_gauge";
-  const toolProbs = parseToolProbabilitiesFromJevRaw(
-    row.jev_raw_json,
-    row.primary_tool,
-    secondaryTool
-  );
-  const primaryDisplay = WORKING_TOOL_DISPLAY_NAMES[row.primary_tool];
-  const secondaryDisplay = WORKING_TOOL_DISPLAY_NAMES[secondaryTool];
-  const sreDisplay = SRE_FAILURE_DISPLAY_NAMES[row.sre_failure_mode];
-  const primaryPct = Math.round(
-    (toolProbs[row.primary_tool] || row.jev_confidence || 0.45) * 100
-  );
-  const secondaryPct = Math.round((toolProbs[secondaryTool] || 0.22) * 100);
+  const primaryTool = JEV_TO_TAXONOMY_TOOL[row.primary_tool] || "The Square";
+  const secondaryTool =
+    JEV_TO_TAXONOMY_TOOL[secondaryToolKey] || "24-Inch Gauge";
+  const sreFailureMode =
+    JEV_TO_TAXONOMY_FAILURE[row.sre_failure_mode] || "Configuration Drift";
 
-  const excerptSentence = row.raw_excerpt
-    .split(/(?<=[.!?])\s+/)
-    .slice(0, 2)
-    .join(" ")
-    .trim();
+  const validation = validateAndNormalizeIncidentSummary({
+    id: row.id,
+    title: row.title,
+    sourceFeed: row.source_feed,
+    rawExcerpt: row.raw_excerpt,
+    logWarnings: false,
+  });
+
+  const executiveSummary =
+    validation.executiveSummary ||
+    sanitizeStringConcatenation(validation.cleanedDescription);
+  const factualBriefParagraph =
+    validation.factualBriefParagraph ||
+    sanitizeStringConcatenation(validation.cleanedDescription);
+
+  const diagnostics = buildOrSanitizeArticleDiagnostics({
+    title: row.title,
+    sourceFeed: row.source_feed,
+    factualSummary: factualBriefParagraph,
+    primaryTool,
+    secondaryTool,
+    sreFailureMode,
+  });
 
   return {
-    executive_summary: `${row.source_feed} reports on "${row.title}", exposing an active operational friction point scored at ${Math.round(row.is_systemic_prob * 100)}% systemic probability by Jev. Bound to ${primaryDisplay} (${primaryPct}%) and ${sreDisplay}, the incident highlights a measurable gap between nominal institutional posture and live production constraints.`,
-    socratic_brief: `Telemetry ingested from ${row.source_feed} ("${row.title}") entered the Change Advisory Board review queue as an active systems incident. ${excerptSentence || row.raw_excerpt}\n\nUnder System-1 Jev evaluation, the primary diagnostic weight settled on ${primaryDisplay} (${primaryPct}%) paired with ${sreDisplay}, while ${secondaryDisplay} (${secondaryPct}%) registered as the secondary constraint. Specifically, the operational tension reflects ${JEV_WORKING_TOOL_CRITERIA[row.primary_tool].toLowerCase()} compounded by ${JEV_SRE_FAILURE_MODE_CRITERIA[row.sre_failure_mode].toLowerCase()}\n\nBecause this event remains an active incident with incomplete public telemetry, premature moralizing or partisan conclusions are suspended. A complete post-mortem requires verifying the upstream decision logs, resource boundaries, and interface contracts between the primary actors.`,
+    executive_summary: executiveSummary,
+    socratic_brief: factualBriefParagraph,
     proportionality_check: {
-      noise_overblown: `Reactive commentary framing "${row.title}" as an isolated personality clash or sudden catastrophe rather than examining the upstream operational incentives.`,
-      structural_signal: `${sreDisplay}: ${JEV_SRE_FAILURE_MODE_CRITERIA[row.sre_failure_mode]} Examined through ${primaryDisplay} and ${secondaryDisplay}, the structural constraint lies in how the system absorbs load and enforces accountability across boundaries.`,
+      noise_overblown: diagnostics.noiseOverblown,
+      structural_signal: diagnostics.structuralSignal,
     },
-    questions: [
-      `Applying ${primaryDisplay} to "${row.title}", where did actual operational execution or resource allocation diverge from the stated institutional specification?`,
-      `How does ${sreDisplay} explain the propagation of this incident before automated or procedural safeguards intervened?`,
-      `When we bring ${secondaryDisplay} alongside ${primaryDisplay}, what secondary friction in incentives, communication silos, or accountability emerges across the affected stakeholders?`,
-      `What concrete post-mortem telemetry must be disclosed before an impartial observer can verify whether this remediation addresses the root architecture rather than surface symptoms?`,
-    ],
+    questions: diagnostics.questions,
   };
 }
 
@@ -283,8 +310,8 @@ export async function callGeminiStructuredSynthesis(
   const { systemInstruction, userPrompt } = buildSystem2Prompt(row);
 
   const candidateModels = [
-    "gemini-3.8-flash",
     "gemini-2.5-flash",
+    "gemini-3.8-flash",
     "gemini-flash-latest",
   ];
 
@@ -345,19 +372,60 @@ export async function callGeminiStructuredSynthesis(
         typeof parsed.socratic_brief === "string" &&
         parsed.proportionality_check &&
         Array.isArray(parsed.questions) &&
-        parsed.questions.length >= 3
+        parsed.questions.length >= 2
       ) {
+        const secondaryToolKey: JevWorkingToolKey =
+          row.secondary_tool || "twenty_four_inch_gauge";
+        const primaryTool =
+          JEV_TO_TAXONOMY_TOOL[row.primary_tool] || "The Square";
+        const secondaryTool =
+          JEV_TO_TAXONOMY_TOOL[secondaryToolKey] || "24-Inch Gauge";
+        const sreFailureMode =
+          JEV_TO_TAXONOMY_FAILURE[row.sre_failure_mode] ||
+          "Configuration Drift";
+
+        const validation = validateAndNormalizeIncidentSummary({
+          id: row.id,
+          title: row.title,
+          sourceFeed: row.source_feed,
+          rawExcerpt: row.raw_excerpt,
+          executiveSummary: parsed.executive_summary,
+          socraticBrief: parsed.socratic_brief,
+          logWarnings: false,
+        });
+
+        const cleanExec =
+          validation.executiveSummary ||
+          sanitizeStringConcatenation(parsed.executive_summary.trim());
+        const cleanBrief =
+          validation.factualBriefParagraph ||
+          sanitizeStringConcatenation(
+            parsed.socratic_brief.split(/\n\s*\n/)[0].trim()
+          );
+
+        const diagnostics = buildOrSanitizeArticleDiagnostics({
+          title: row.title,
+          sourceFeed: row.source_feed,
+          factualSummary: cleanBrief,
+          primaryTool,
+          secondaryTool,
+          sreFailureMode,
+          existingNoise: parsed.proportionality_check.noise_overblown,
+          existingSignal: parsed.proportionality_check.structural_signal,
+          existingQuestions: parsed.questions.map((q) =>
+            normalizeQuestionSentenceCase(String(q))
+          ),
+        });
+
         return {
           synthesis: {
-            executive_summary: parsed.executive_summary.trim(),
-            socratic_brief: parsed.socratic_brief.trim(),
+            executive_summary: cleanExec,
+            socratic_brief: cleanBrief,
             proportionality_check: {
-              noise_overblown:
-                parsed.proportionality_check.noise_overblown?.trim() || "",
-              structural_signal:
-                parsed.proportionality_check.structural_signal?.trim() || "",
+              noise_overblown: diagnostics.noiseOverblown,
+              structural_signal: diagnostics.structuralSignal,
             },
-            questions: parsed.questions.slice(0, 4).map((q) => String(q).trim()),
+            questions: diagnostics.questions,
           },
           modelUsed: modelName,
         };
@@ -419,6 +487,33 @@ export async function runSynthesizePipeline(options: {
   const results = await Promise.all(
     rows.map(async (row) => {
       try {
+        // Defensive validation gate: quarantine rows that lack a valid 2-to-3 sentence factual summary
+        const validation = validateAndNormalizeIncidentSummary({
+          id: row.id,
+          title: row.title,
+          sourceFeed: row.source_feed,
+          rawExcerpt: row.raw_excerpt,
+          logWarnings: true,
+        });
+        if (!validation.valid) {
+          await options.db
+            .prepare(
+              `UPDATE telemetry_articles SET status = 'dropped' WHERE id = ?`
+            )
+            .bind(row.id)
+            .run();
+          return {
+            ok: false as const,
+            error: {
+              id: row.id,
+              title: row.title,
+              error:
+                validation.reason ||
+                "Quarantined by defensive summary validation gate.",
+            },
+          };
+        }
+
         const secondaryTool: JevWorkingToolKey =
           row.secondary_tool || "twenty_four_inch_gauge";
         const { synthesis, modelUsed } = await callGeminiStructuredSynthesis(

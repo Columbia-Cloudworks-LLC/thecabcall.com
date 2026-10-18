@@ -7,7 +7,6 @@ import {
   ExternalLink,
   Scale,
   Compass,
-  Cpu,
   AlertTriangle,
   CheckCircle2,
 } from "lucide-react";
@@ -16,11 +15,14 @@ import {
   getWorkingToolSpec,
   WORKING_TOOLS,
 } from "@/lib/taxonomy";
+import {
+  normalizeQuestionSentenceCase,
+  sanitizeStringConcatenation,
+} from "@/lib/sanitize";
 import { IncidentArticle } from "@/lib/types";
 import { useTelemetry } from "./TelemetryContext";
 import {
   BrassSectionDivider,
-  ToolRadarChart,
   WorkingToolEngraving,
 } from "./MasonicEngravings";
 
@@ -36,11 +38,27 @@ export function IncidentBriefClient({
   const primaryToolSpec = getWorkingToolSpec(incident.primaryTool);
   const failureSpec = getSreFailureModeSpec(incident.sreFailureMode);
 
-  const sortedProbabilities = WORKING_TOOLS.map((t) => ({
+  // Only display Working Tools that scored above 10% (Primary and Secondary tools), hiding near-zero tail noise
+  const significantProbabilities = WORKING_TOOLS.map((t) => ({
     tool: t.id,
     numeral: t.numeral,
     prob: incident.toolProbabilities[t.id] || 0,
-  })).sort((a, b) => b.prob - a.prob);
+  }))
+    .filter((item) => Math.round(item.prob * 100) > 10)
+    .sort((a, b) => b.prob - a.prob);
+
+  // Section I: Strictly 1 concise paragraph of unvarnished factual summary
+  const singleFactualParagraph = sanitizeStringConcatenation(
+    incident.socraticBrief
+      .split(/\n\s*\n/)
+      .map((p) => p.trim())
+      .filter(Boolean)[0] || incident.executiveSummary
+  );
+
+  // Section III: Strictly 2 highest-impact Socratic questions in standard sentence case
+  const topTwoQuestions = incident.questions
+    .slice(0, 2)
+    .map(normalizeQuestionSentenceCase);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
@@ -55,8 +73,6 @@ export function IncidentBriefClient({
         </Link>
         <div className="flex items-center gap-3 text-[#94A3B8]">
           <span>INCIDENT ID: {incident.incidentCode}</span>
-          <span>|</span>
-          <span>SHA-HASH: {incident.urlHash.slice(0, 12)}</span>
         </div>
       </div>
 
@@ -67,15 +83,12 @@ export function IncidentBriefClient({
           <div className="tracing-board-frame p-5 sm:p-6 space-y-5">
             <div className="border-b border-[#8A6D3B]/40 pb-3">
               <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#C5A059]">
-                TELEMETRY SPEC SHEET // SYSTEM-1 JEV GATE
+                TELEMETRY SPEC SHEET
               </span>
               <div className="flex items-baseline justify-between mt-1">
                 <h2 className="font-mono text-lg font-bold text-[#F3EFE6]">
                   {incident.incidentCode}
                 </h2>
-                <span className="font-mono text-xs px-2 py-0.5 bg-[#10B981]/15 border border-[#10B981]/45 text-[#10B981]">
-                  CONFIDENCE: {Math.round(incident.jevConfidence * 100)}%
-                </span>
               </div>
             </div>
 
@@ -103,11 +116,7 @@ export function IncidentBriefClient({
                     )}`}
                     className="hover:underline font-semibold"
                   >
-                    {incident.primaryTool} (
-                    {(
-                      incident.toolProbabilities[incident.primaryTool] || 0
-                    ).toFixed(2)}
-                    )
+                    {incident.primaryTool}
                   </Link>
                   <button
                     type="button"
@@ -149,13 +158,13 @@ export function IncidentBriefClient({
               </div>
             </div>
 
-            {/* Full Probability Distribution Bar Chart across all 6 Working Tools */}
+            {/* Simplified Probability Vector: Only Working Tools scoring > 10% */}
             <div className="pt-2 border-t border-[#8A6D3B]/35">
               <span className="font-mono text-[10px] uppercase tracking-wider text-[#C5A059] block mb-2.5">
-                Jev 6-Tool Probability Vector
+                Working Tool Alignment (&gt;10%)
               </span>
-              <div className="space-y-2">
-                {sortedProbabilities.map((item, idx) => {
+              <div className="space-y-2.5">
+                {significantProbabilities.map((item, idx) => {
                   const pct = Math.round(item.prob * 100);
                   return (
                     <div key={item.tool}>
@@ -171,10 +180,12 @@ export function IncidentBriefClient({
                         </button>
                         <span
                           className={
-                            idx === 0 ? "text-[#C5A059] font-bold" : "text-[#94A3B8]"
+                            idx === 0
+                              ? "text-[#C5A059] font-bold"
+                              : "text-[#94A3B8]"
                           }
                         >
-                          {item.prob.toFixed(2)} ({pct}%)
+                          {pct}%
                         </span>
                       </div>
                       <div className="h-2 w-full bg-[#0B0E14] border border-[#8A6D3B]/40 mt-0.5">
@@ -182,9 +193,7 @@ export function IncidentBriefClient({
                           className={
                             idx === 0
                               ? "h-full bg-[#C5A059]"
-                              : idx === 1
-                              ? "h-full bg-[#8A6D3B]"
-                              : "h-full bg-[#94A3B8]/40"
+                              : "h-full bg-[#8A6D3B]"
                           }
                           style={{ width: `${Math.max(4, pct)}%` }}
                         />
@@ -195,41 +204,20 @@ export function IncidentBriefClient({
               </div>
             </div>
 
-            {/* Radar Chart */}
-            <div className="pt-3 border-t border-[#8A6D3B]/35">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-[#94A3B8] block text-center mb-1">
-                Hexagonal Rubric Geometry
-              </span>
-              <ToolRadarChart probabilities={incident.toolProbabilities} />
-            </div>
-
-            {/* Source & Ingestion Metadata */}
+            {/* Source & Published Metadata */}
             <div className="pt-3 border-t border-[#8A6D3B]/35 space-y-2 font-mono text-xs">
               <div className="flex justify-between">
                 <span className="text-[#94A3B8]">SOURCE FEED:</span>
                 <span className="text-[#F3EFE6]">{incident.sourceFeed}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[#94A3B8]">DOMAIN SECTOR:</span>
-                <Link
-                  href={`/knowledge-graph?sector=${encodeURIComponent(
-                    incident.domainSector
-                  )}`}
-                  className="text-[#C5A059] hover:underline text-right"
-                >
-                  {incident.domainSector}
-                </Link>
-              </div>
-              <div className="flex justify-between">
                 <span className="text-[#94A3B8]">PUBLISHED AT:</span>
                 <span className="text-[#F3EFE6]">
-                  {new Date(incident.publishedAt).toISOString().slice(0, 16).replace("T", " ")} UTC
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-[#94A3B8]">CLASSIFIER LATENCY:</span>
-                <span className="text-[#10B981]">
-                  {incident.classifierLatencyMs}ms (1-Pass)
+                  {new Date(incident.publishedAt)
+                    .toISOString()
+                    .slice(0, 16)
+                    .replace("T", " ")}{" "}
+                  UTC
                 </span>
               </div>
               <div className="pt-2">
@@ -247,14 +235,14 @@ export function IncidentBriefClient({
           </div>
         </aside>
 
-        {/* RIGHT COLUMN (8 cols): Socratic Brief, Diagnostic Lens, & The Trestleboard Inquiry */}
+        {/* RIGHT COLUMN (8 cols): Post-Incident Review Main Column */}
         <div className="lg:col-span-8 space-y-8">
-          {/* Article Title Header */}
+          {/* Article Title Header (flows directly into Section I without introductory blockquote) */}
           <div className="tracing-board-frame p-6 sm:p-8">
             <div className="flex flex-wrap items-center gap-2 font-mono text-xs text-[#C5A059] mb-3">
               <span>POST-INCIDENT REVIEW (PIR)</span>
               <span>•</span>
-              <span>{incident.domainSector.toUpperCase()}</span>
+              <span>{incident.sourceFeed}</span>
               <span>•</span>
               <span>SECONDARY TOOL: {incident.secondaryTool.toUpperCase()}</span>
             </div>
@@ -262,34 +250,28 @@ export function IncidentBriefClient({
             <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl text-[#F3EFE6] leading-tight">
               {incident.title}
             </h1>
-
-            <p className="font-serif italic text-base sm:text-lg text-[#C5A059]/95 mt-4 border-l-2 border-[#C5A059] pl-4">
-              {incident.executiveSummary}
-            </p>
           </div>
 
-          {/* Section I: Facts of the Incident (The Socratic Brief) */}
+          {/* Section I: Facts of the Incident (Strictly 1 concise factual paragraph) */}
           <section className="bg-[#111726] border border-[#8A6D3B]/45 p-6 sm:p-8 space-y-4">
             <div className="flex items-center justify-between border-b border-[#8A6D3B]/35 pb-3">
               <div className="flex items-center gap-2">
                 <Scale className="w-4 h-4 text-[#C5A059]" />
                 <h2 className="font-display text-xl text-[#F3EFE6] uppercase tracking-wider">
-                  I. Facts of the Incident (The Socratic Brief)
+                  I. Facts of the Incident
                 </h2>
               </div>
               <span className="font-mono text-[11px] text-[#94A3B8]">
-                ZERO PUNDITRY // SOURCED TELEMETRY
+                SOURCED DISPATCH
               </span>
             </div>
 
-            <div className="font-serif text-base sm:text-[17px] text-[#F3EFE6]/90 leading-relaxed space-y-4">
-              {incident.socraticBrief.split("\n\n").map((para, idx) => (
-                <p key={idx}>{para}</p>
-              ))}
+            <div className="font-serif text-base sm:text-[17px] text-[#F3EFE6]/90 leading-relaxed">
+              <p>{singleFactualParagraph}</p>
             </div>
           </section>
 
-          {/* Section II: The Diagnostic Lens (Working Tool + SRE Principle Application) */}
+          {/* Section II: The Diagnostic Lens (Opens directly with Red/Green contrast cards + footer box) */}
           <section className="bg-[#111726] border border-[#8A6D3B]/45 p-6 sm:p-8 space-y-5">
             <div className="flex items-center justify-between border-b border-[#8A6D3B]/35 pb-3">
               <div className="flex items-center gap-2">
@@ -313,18 +295,14 @@ export function IncidentBriefClient({
               </button>
             </div>
 
-            <p className="font-serif text-base sm:text-[17px] text-[#F3EFE6]/90 leading-relaxed">
-              {incident.diagnosticApplication}
-            </p>
-
             {/* Proportionality Check: Noise/Jitter vs. Signal/Capacity */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="p-4 bg-[#0B0E14] border border-[#EF4444]/40">
                 <div className="flex items-center gap-2 font-mono text-xs uppercase text-[#EF4444] mb-2">
                   <AlertTriangle className="w-3.5 h-3.5" />
                   <span>Overblown Media Jitter (Noise)</span>
                 </div>
-                <p className="text-sm text-[#94A3B8] leading-relaxed">
+                <p className="font-serif text-sm sm:text-[15px] text-[#94A3B8] leading-relaxed">
                   {incident.proportionalityCheck.noiseOverblown}
                 </p>
               </div>
@@ -334,13 +312,13 @@ export function IncidentBriefClient({
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span>Underlying Structural Constraint (Signal)</span>
                 </div>
-                <p className="text-sm text-[#F3EFE6]/90 leading-relaxed">
+                <p className="font-serif text-sm sm:text-[15px] text-[#F3EFE6]/90 leading-relaxed">
                   {incident.proportionalityCheck.structuralSignal}
                 </p>
               </div>
             </div>
 
-            {/* Dual-Axis Reference Strip */}
+            {/* Compact Working Tool / SRE Equivalent Definition Footer Box */}
             <div className="p-4 bg-[#0B0E14]/80 border border-[#8A6D3B]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4 font-mono text-xs">
               <div>
                 <span className="text-[#C5A059] block">
@@ -361,7 +339,7 @@ export function IncidentBriefClient({
             </div>
           </section>
 
-          {/* Section III: The Trestleboard Inquiry (Socratic Questions inside Ornate Brass Box) */}
+          {/* Section III: The Trestleboard Inquiry (2 Highest-Impact Questions in Standard Sentence Case) */}
           <section className="relative bg-[#0B0E14] border-2 border-[#C5A059] p-6 sm:p-8 shadow-[0_0_45px_rgba(197,160,89,0.12)]">
             <div className="pointer-events-none absolute inset-2 border border-[#8A6D3B]/60" />
 
@@ -374,7 +352,7 @@ export function IncidentBriefClient({
                   Questions for Fair &amp; Consistent Judgment
                 </h2>
                 <p className="font-mono text-xs text-[#94A3B8] mt-1">
-                  The pipeline does not propose a partisan verdict. Apply{" "}
+                  This review does not propose a partisan verdict. Apply{" "}
                   <strong className="text-[#C5A059]">
                     {incident.primaryTool}
                   </strong>{" "}
@@ -387,7 +365,7 @@ export function IncidentBriefClient({
               </div>
 
               <ol className="space-y-4">
-                {incident.questions.map((q, index) => (
+                {topTwoQuestions.map((q, index) => (
                   <li
                     key={index}
                     className="p-4 bg-[#111726] border border-[#8A6D3B]/50 flex items-start gap-4"
@@ -395,7 +373,7 @@ export function IncidentBriefClient({
                     <span className="font-mono text-sm font-bold px-2.5 py-1 bg-[#0B0E14] border border-[#C5A059] text-[#C5A059] shrink-0">
                       Q{index + 1}
                     </span>
-                    <p className="font-display text-base sm:text-lg text-[#F3EFE6] leading-relaxed">
+                    <p className="font-serif text-base sm:text-lg text-[#F3EFE6] leading-relaxed normal-case">
                       {q}
                     </p>
                   </li>
@@ -432,3 +410,4 @@ export function IncidentBriefClient({
     </div>
   );
 }
+

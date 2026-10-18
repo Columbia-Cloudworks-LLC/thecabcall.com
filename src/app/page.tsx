@@ -1,6 +1,7 @@
 import React from "react";
 import { ensureD1Snapshot, triggerAutoRefreshIfStale } from "@/lib/d1-bridge";
 import {
+  buildWeeklyTrestleboardState,
   getAllIncidents,
   getLatestWeeklyRollup,
   getSystemPostureSummary,
@@ -15,12 +16,18 @@ export default async function TrestleboardPage() {
   const incidents = getAllIncidents();
   const posture = getSystemPostureSummary();
   const pinnedEpisode = getLatestWeeklyRollup();
+  const weeklyState = buildWeeklyTrestleboardState(
+    incidents,
+    posture,
+    pinnedEpisode
+  );
 
   return (
     <TrestleboardClient
       initialIncidents={incidents}
-      posture={posture}
+      weeklyState={weeklyState}
       pinnedEpisode={pinnedEpisode}
     />
   );
 }
+

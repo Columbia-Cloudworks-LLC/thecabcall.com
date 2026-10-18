@@ -257,10 +257,10 @@ export function KnowledgeGraphClient({
             </select>
           </div>
 
-          {/* Confidence Gate Slider */}
+          {/* Signal Alignment Gate Slider */}
           <div className="flex items-center justify-between gap-3 bg-[#0B0E14] border border-[#8A6D3B]/50 px-3 py-2 font-mono text-xs">
             <span className="text-[#94A3B8] shrink-0">
-              Min Jev Confidence:{" "}
+              Min Signal Alignment:{" "}
               <strong className="text-[#C5A059]">{minConfidence}%</strong>
             </span>
             <input
@@ -310,7 +310,7 @@ export function KnowledgeGraphClient({
                 <th className="p-3.5">Event Headline</th>
                 <th className="p-3.5">Primary Working Tool</th>
                 <th className="p-3.5">SRE Failure Mode</th>
-                <th className="p-3.5 text-right">Jev Conf</th>
+                <th className="p-3.5 text-right">Alignment</th>
                 <th className="p-3.5 text-right">PIR</th>
               </tr>
             </thead>
@@ -348,9 +348,7 @@ export function KnowledgeGraphClient({
                       }
                       className="px-2 py-1 bg-[#0B0E14] border border-[#C5A059]/70 text-[#C5A059] hover:bg-[#C5A059]/15 cursor-pointer"
                     >
-                      {inc.primaryTool} (
-                      {(inc.toolProbabilities[inc.primaryTool] || 0).toFixed(2)}
-                      ) [?]
+                      {inc.primaryTool} [?]
                     </button>
                   </td>
                   <td className="p-3.5 whitespace-nowrap">

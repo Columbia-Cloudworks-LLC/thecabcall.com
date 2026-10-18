@@ -31,8 +31,36 @@ export interface IncidentArticle {
   socraticBrief: string; // Full multi-paragraph objective summary of the facts
   diagnosticApplication: string; // Breakdown of why the primary Working Tool and SRE lens triggered
   proportionalityCheck: ProportionalityCheck;
-  questions: string[]; // 3 to 4 structured Socratic questions
+  questions: string[]; // 2 high-impact structured Socratic questions in sentence case
   classifierLatencyMs: number;
+  isLeadPostMortem?: boolean; // Only render full-width Lead Post-Mortem card when explicitly flagged
+  leadPostMortemAnalysis?: string; // Bespoke multi-paragraph analysis required for Lead Post-Mortem slot
+}
+
+export interface WeeklyDocketItem {
+  readonly id: string;
+  readonly incidentCode: string;
+  readonly slug: string;
+  readonly title: string;
+  readonly sourceFeed: string;
+  readonly primaryTool: WorkingToolId;
+  readonly sreFailureMode: SreFailureModeId;
+}
+
+export interface WeeklyTrestleboardState {
+  readonly episodeNumber: number;
+  readonly episodeSlug: string;
+  readonly publishedAt: string;
+  readonly durationFormatted: string;
+  readonly audioUrl: string;
+  readonly dominantTool: WorkingToolId;
+  readonly dominantToolPercentage: number;
+  readonly primaryFailureMode: SreFailureModeId;
+  readonly activeIncidentCount: number;
+  readonly anchorIncidents: readonly WeeklyDocketItem[];
+  readonly heroTitle: string;
+  readonly heroOpeningProse: string;
+  readonly podcastDescription: string;
 }
 
 export interface EpisodeIncidentMarker {

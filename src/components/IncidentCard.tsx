@@ -42,7 +42,6 @@ export function IncidentCard({ incident }: { incident: IncidentArticle }) {
   const datelinePrefix = formatBroadsheetDateline(incident.publishedAt);
   const shortFailureLabel =
     SHORT_FAILURE_LABELS[incident.sreFailureMode] || incident.sreFailureMode;
-  const featuredQuestion = incident.questions[0] || "";
 
   return (
     <article className="group relative bg-[#111726]/90 border border-[#8A6D3B]/45 p-6 sm:p-7 transition-all duration-300 hover:border-[#C5A059]/80 hover:shadow-[0_12px_36px_rgba(0,0,0,0.65)] flex flex-col justify-between">
@@ -56,13 +55,11 @@ export function IncidentCard({ incident }: { incident: IncidentArticle }) {
       <span className="pointer-events-none absolute bottom-1 right-1 w-2.5 h-2.5 border-b border-r border-[#C5A059]/60 group-hover:border-[#C5A059] transition-colors" />
 
       <div className="relative z-10">
-        {/* Top Row: Dateline & Source */}
+        {/* Metadata Header: Strictly {Date} • {Source} */}
         <div className="pb-3 mb-3.5 border-b border-[#8A6D3B]/35 font-mono text-[11px] uppercase tracking-[0.14em] text-[#94A3B8]">
           <span className="text-[#C5A059]">{datelinePrefix}</span>
-          <span className="mx-2 text-[#8A6D3B]">·</span>
+          <span className="mx-2 text-[#8A6D3B]">•</span>
           <span className="text-[#F3EFE6]/90">{incident.sourceFeed}</span>
-          <span className="mx-2 text-[#8A6D3B]">·</span>
-          <span>{incident.domainSector.toUpperCase()}</span>
         </div>
 
         {/* Crisp Serif Headline */}
@@ -75,19 +72,10 @@ export function IncidentCard({ incident }: { incident: IncidentArticle }) {
           </h3>
         </Link>
 
-        {/* Summary: 2-3 sentences of objective facts */}
+        {/* 2-Sentence Plain-English Factual Summary */}
         <p className="font-serif text-[15px] text-[#F3EFE6]/85 mt-3.5 leading-relaxed">
           {incident.executiveSummary}
         </p>
-
-        {/* Featured Socratic Question in a subtle left-bordered blockquote */}
-        {featuredQuestion && (
-          <blockquote className="mt-4 pl-4 py-1 border-l-2 border-[#C5A059]/70 bg-[#0B0E14]/45 pr-3">
-            <p className="font-serif italic text-sm sm:text-[15px] text-[#F3EFE6]/95 leading-relaxed">
-              &ldquo;{featuredQuestion}&rdquo;
-            </p>
-          </blockquote>
-        )}
       </div>
 
       {/* Footer Row: Strictly Aligned at the Bottom of Every Card */}
@@ -99,7 +87,7 @@ export function IncidentCard({ incident }: { incident: IncidentArticle }) {
             className="px-2.5 py-1 bg-[#0B0E14] border border-[#C5A059]/60 text-[#C5A059] hover:bg-[#C5A059]/15 transition-colors cursor-pointer"
             title={`Examine ${incident.primaryTool} in The Rubric`}
           >
-            {incident.primaryTool}
+            [{incident.primaryTool}]
           </button>
           <span className="text-[#8A6D3B] font-bold">·</span>
           <button
@@ -110,7 +98,7 @@ export function IncidentCard({ incident }: { incident: IncidentArticle }) {
             className="px-2.5 py-1 bg-[#0B0E14] border border-[#8A6D3B]/55 text-[#94A3B8] hover:text-[#F3EFE6] hover:border-[#C5A059]/60 transition-colors cursor-pointer"
             title={`Examine ${shortFailureLabel} in The Rubric`}
           >
-            {shortFailureLabel}
+            [{shortFailureLabel}]
           </button>
         </div>
 
