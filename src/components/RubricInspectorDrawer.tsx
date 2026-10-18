@@ -43,7 +43,9 @@ export function RubricInspectorDrawer() {
               THE RUBRIC // DIAGNOSTIC CODEX
             </span>
             <h2 className="font-display text-2xl text-[#F3EFE6] mt-1">
-              {toolSpec ? toolSpec.id : failureSpec?.id}
+              {toolSpec
+                ? toolSpec.id
+                : failureSpec?.craftTitle || failureSpec?.id}
             </h2>
           </div>
           <button
@@ -84,7 +86,7 @@ export function RubricInspectorDrawer() {
             <div className="p-4 bg-[#111726]/80 border border-[#8A6D3B]/40">
               <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-[#10B981]">
                 <Cpu className="w-3.5 h-3.5" />
-                <span>SRE / Systems Architecture Equivalent</span>
+                <span>Shop-Floor &amp; Operational Equivalent</span>
               </div>
               <p className="text-sm font-semibold text-[#F3EFE6] mt-1.5">
                 {toolSpec.sreEquivalent}
@@ -144,7 +146,7 @@ export function RubricInspectorDrawer() {
               </span>
             </div>
             <h3 className="font-display text-lg text-[#F3EFE6]">
-              {failureSpec.id}
+              {failureSpec.craftTitle}
             </h3>
             <p className="text-sm text-[#F3EFE6]/90 leading-relaxed">
               {failureSpec.summary}
@@ -152,7 +154,7 @@ export function RubricInspectorDrawer() {
             <div className="p-3.5 bg-[#111726] border border-[#8A6D3B]/40 space-y-2">
               <p className="text-xs text-[#94A3B8]">
                 <strong className="text-[#F3EFE6] font-mono uppercase">
-                  Systems Mechanics:{" "}
+                  Shop-Floor Mechanics:{" "}
                 </strong>
                 {failureSpec.systemsDefinition}
               </p>
@@ -170,7 +172,7 @@ export function RubricInspectorDrawer() {
               onClick={closeRubricInspector}
               className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-wider px-3.5 py-2 border border-[#C5A059]/60 text-[#C5A059] hover:bg-[#C5A059]/10 transition-colors"
             >
-              <span>Filter Archive by {failureSpec.id}</span>
+              <span>Filter Archive by {failureSpec.craftShortLabel}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>

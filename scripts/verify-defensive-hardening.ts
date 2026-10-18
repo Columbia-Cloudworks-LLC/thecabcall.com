@@ -38,8 +38,12 @@ import {
   mapDtoToCraftLexicon,
 } from "../src/lib/dto.ts";
 import {
+  getSreFailureModeSpec,
+  getWorkingToolSpec,
   mapFailureModeToCraftLexicon,
   mapWorkingToolToCraftLexicon,
+  SRE_FAILURE_MODES,
+  WORKING_TOOLS,
 } from "../src/lib/taxonomy.ts";
 import worker, { type ExecutionContextLike } from "../src/worker.ts";
 
@@ -984,8 +988,105 @@ async function runVerificationSuite() {
     }
   }
 
+  // Verify Issue #14: Shop-Floor & Operative Craft Failure Mode Translations
+  const expectedCraftFailureModes: Array<{
+    id: string;
+    craftTitle: string;
+    craftShortLabel: string;
+    summarySubstring: string;
+  }> = [
+    {
+      id: "Configuration Drift",
+      craftTitle: "Drifting Off-Square (Configuration Drift)",
+      craftShortLabel: "Drifting Off-Square",
+      summarySubstring:
+        "Drifting Off-Square (Configuration Drift): When day-to-day actions quietly wander away from the written rules without anyone calling a halt to re-measure.",
+    },
+    {
+      id: "Cascading Failure",
+      craftTitle: "Chain-Reaction Breakdown (Cascading Failure)",
+      craftShortLabel: "Chain-Reaction Breakdown",
+      summarySubstring:
+        "Chain-Reaction Breakdown (Cascading Failure): When one cracked timber or missed handoff overloads the next support in line because no firebreaks were built between them.",
+    },
+    {
+      id: "Alert Fatigue & Signal Loss",
+      craftTitle: "Crying Wolf / Drowning in Noise (Alert Fatigue)",
+      craftShortLabel: "Crying Wolf / Drowning in Noise",
+      summarySubstring:
+        "Crying Wolf / Drowning in Noise (Alert Fatigue): When a shop is flooded with so many false alarms and petty warnings that the crew stops listening right before a real hazard hits.",
+    },
+    {
+      id: "Single Point of Failure (SPOF) / Untested Failover",
+      craftTitle: "One Weak Link / Untested Backup (Single Point of Failure)",
+      craftShortLabel: "One Weak Link / Untested Backup",
+      summarySubstring:
+        "One Weak Link / Untested Backup (Single Point of Failure): Betting the whole structure on a single load-bearing pin—or trusting an emergency backup plan that has never been tested under real weight.",
+    },
+    {
+      id: "Blame Culture vs. Root-Cause Isolation",
+      craftTitle: "Scapegoating vs. Fixing the Trap (Blame Culture)",
+      craftShortLabel: "Scapegoating vs. Fixing the Trap",
+      summarySubstring:
+        "Scapegoating vs. Fixing the Trap (Blame Culture): Firing the last worker who touched the lever instead of fixing the broken guardrails that set them up to fail.",
+    },
+    {
+      id: "Technical & Institutional Debt",
+      craftTitle: "Deferred Maintenance (Institutional Debt)",
+      craftShortLabel: "Deferred Maintenance",
+      summarySubstring:
+        "Deferred Maintenance (Institutional Debt): Taking an easy shortcut today that weakens the foundation tomorrow, until the overdue repairs cost more than the original build.",
+    },
+  ];
+
+  for (const expectedMode of expectedCraftFailureModes) {
+    const spec = getSreFailureModeSpec(expectedMode.id);
+    assert.equal(spec.id, expectedMode.id);
+    assert.equal(spec.craftTitle, expectedMode.craftTitle);
+    assert.equal(spec.craftShortLabel, expectedMode.craftShortLabel);
+    assert.equal(spec.summary, expectedMode.summarySubstring);
+    assert.ok(
+      !/retry storms|bulkhead isolation|declarative specification/i.test(
+        spec.systemsDefinition
+      ),
+      `systemsDefinition for ${spec.id} must not contain high-friction IT jargon`
+    );
+    // Backward and forward alias resolution
+    assert.equal(
+      mapFailureModeToCraftLexicon(expectedMode.craftTitle),
+      expectedMode.id
+    );
+    assert.equal(
+      mapFailureModeToCraftLexicon(expectedMode.craftShortLabel),
+      expectedMode.id
+    );
+  }
+
+  for (const tool of WORKING_TOOLS) {
+    assert.ok(
+      !/declarative specification|carry the pager|SLAs\/SLOs|error budget/i.test(
+        `${tool.sreEquivalent} ${tool.sreDefinition}`
+      ),
+      `WORKING_TOOLS[${tool.id}] operational descriptions must use accessible shop-floor craft language`
+    );
+  }
+
+  // Safe fallback checks for getSreFailureModeSpec & getWorkingToolSpec
+  const fallbackFailure = getSreFailureModeSpec("TOTALLY_UNKNOWN_LEGACY_MODE");
+  assert.ok(fallbackFailure, "getSreFailureModeSpec must never return undefined");
+  assert.equal(fallbackFailure.id, "Structural Friction");
+  assert.ok(
+    fallbackFailure.craftTitle.includes("Drifting Off-Square") &&
+      fallbackFailure.summary.includes("Drifting Off-Square"),
+    "Fallback failure spec must include Drifting Off-Square / Structural Friction craft guidance"
+  );
+
+  const fallbackTool = getWorkingToolSpec("TOTALLY_UNKNOWN_LEGACY_TOOL");
+  assert.ok(fallbackTool, "getWorkingToolSpec must never return undefined");
+  assert.equal(fallbackTool.id, "The Square");
+
   console.log(
-    "  ✓ Craft Lexicon mapper, 'Structural Friction' safe fallback, and plain-spoken UI labels verified."
+    "  ✓ Craft Lexicon mapper, shop-floor Failure Mode translations, 'Structural Friction' safe fallback, and plain-spoken UI labels verified."
   );
   console.log(
     "\n=== ALL 6 DEFENSIVE HARDENING & CRAFT LEXICON OBJECTIVES PASSED (100%) ==="

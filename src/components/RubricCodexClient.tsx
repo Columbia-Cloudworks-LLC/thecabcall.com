@@ -141,11 +141,11 @@ export function RubricCodexClient() {
               </p>
             </div>
 
-            {/* Right Side: Site Reliability Engineering Equivalent */}
+            {/* Right Side: Shop-Floor & Operational Equivalent */}
             <div className="p-5 bg-[#0B0E14] border border-[#10B981]/45 space-y-3">
               <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-[#10B981]">
                 <Cpu className="w-4 h-4" />
-                <span>SRE / Systems Equivalent</span>
+                <span>Shop-Floor &amp; Operational Equivalent</span>
               </div>
               <h3 className="font-display text-base text-[#F3EFE6]">
                 {activeTool.sreEquivalent}
@@ -167,9 +167,13 @@ export function RubricCodexClient() {
             </div>
             <div className="p-4 bg-[#111726] border border-[#8A6D3B]/40 space-y-2.5">
               <div className="font-display text-sm text-[#F3EFE6]">
-                Paired Failure Axis: {pairedFailure.id}
+                Paired Failure Axis: {pairedFailure.id} —{" "}
+                {pairedFailure.craftShortLabel}
               </div>
-              <p className="font-serif text-sm text-[#94A3B8] leading-relaxed">
+              <p className="font-serif text-sm text-[#F3EFE6]/90 leading-relaxed">
+                {pairedFailure.summary}
+              </p>
+              <p className="font-serif text-xs text-[#94A3B8] leading-relaxed pt-2 border-t border-[#8A6D3B]/30">
                 {activeTool.jevClassifierCriteria}
               </p>
             </div>
@@ -186,7 +190,7 @@ export function RubricCodexClient() {
             <tr className="bg-[#0B0E14] border-b border-[#C5A059]/50 font-mono text-xs uppercase text-[#C5A059]">
               <th className="p-4">Working Tool</th>
               <th className="p-4">Moral / Philosophical Lens</th>
-              <th className="p-4">SRE / Systems Equivalent</th>
+              <th className="p-4">Shop-Floor / Operational Equivalent</th>
               <th className="p-4">Diagnostic Question Pattern</th>
             </tr>
           </thead>
@@ -222,7 +226,7 @@ export function RubricCodexClient() {
             key={mode.id}
             className="p-5 bg-[#111726] border border-[#8A6D3B]/45 flex flex-col justify-between space-y-4"
           >
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               <div className="flex items-center justify-between font-mono text-xs">
                 <span className="text-[#F59E0B] font-semibold uppercase">
                   Structural Failure Mode
@@ -232,10 +236,16 @@ export function RubricCodexClient() {
                 </span>
               </div>
               <h3 className="font-display text-lg text-[#F3EFE6]">
-                {mode.id}
+                {mode.craftTitle}
               </h3>
               <p className="text-xs text-[#F3EFE6]/90 leading-relaxed">
                 {mode.summary}
+              </p>
+              <p className="text-xs text-[#94A3B8] leading-relaxed pt-2 border-t border-[#8A6D3B]/30">
+                <strong className="font-mono text-[#10B981] uppercase">
+                  Shop-Floor Mechanics:{" "}
+                </strong>
+                {mode.systemsDefinition}
               </p>
               <p className="text-xs text-[#94A3B8] leading-relaxed pt-2 border-t border-[#8A6D3B]/30">
                 <strong className="font-mono text-[#C5A059] uppercase">
@@ -250,7 +260,7 @@ export function RubricCodexClient() {
               className="inline-flex items-center gap-1.5 font-mono text-xs text-[#C5A059] hover:underline pt-2"
             >
               <BookOpen className="w-3.5 h-3.5" />
-              <span>Filter Archive by {mode.id} →</span>
+              <span>Filter Archive by {mode.craftShortLabel} →</span>
             </Link>
           </div>
         ))}

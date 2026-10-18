@@ -41,30 +41,40 @@ const WORKING_TOOL_OPTIONS: { value: WorkingToolId; label: string }[] = [
 ];
 
 const FAILURE_MODE_OPTIONS: { value: SreFailureModeId; label: string }[] = [
-  { value: "Configuration Drift", label: "Configuration Drift" },
-  { value: "Cascading Failure", label: "Cascading Failure" },
-  { value: "Alert Fatigue & Signal Loss", label: "Alert Fatigue" },
+  {
+    value: "Configuration Drift",
+    label: "Drifting Off-Square (Configuration Drift)",
+  },
+  {
+    value: "Cascading Failure",
+    label: "Chain-Reaction Breakdown (Cascading Failure)",
+  },
+  {
+    value: "Alert Fatigue & Signal Loss",
+    label: "Crying Wolf / Drowning in Noise (Alert Fatigue)",
+  },
   {
     value: "Single Point of Failure (SPOF) / Untested Failover",
-    label: "Single Point of Failure",
+    label: "One Weak Link / Untested Backup (Single Point of Failure)",
   },
   {
     value: "Blame Culture vs. Root-Cause Isolation",
-    label: "Blame Culture",
+    label: "Scapegoating vs. Fixing the Trap (Blame Culture)",
   },
   {
     value: "Technical & Institutional Debt",
-    label: "Institutional Debt",
+    label: "Deferred Maintenance (Institutional Debt)",
   },
 ];
 
 const SHORT_FAILURE_LABELS: Record<SreFailureModeId, string> = {
-  "Configuration Drift": "Configuration Drift",
-  "Cascading Failure": "Cascading Failure",
-  "Alert Fatigue & Signal Loss": "Alert Fatigue",
-  "Single Point of Failure (SPOF) / Untested Failover": "Untested Failover",
-  "Blame Culture vs. Root-Cause Isolation": "Blame Culture",
-  "Technical & Institutional Debt": "Institutional Debt",
+  "Configuration Drift": "Drifting Off-Square",
+  "Cascading Failure": "Chain-Reaction Breakdown",
+  "Alert Fatigue & Signal Loss": "Crying Wolf / Drowning in Noise",
+  "Single Point of Failure (SPOF) / Untested Failover":
+    "One Weak Link / Untested Backup",
+  "Blame Culture vs. Root-Cause Isolation": "Scapegoating vs. Fixing the Trap",
+  "Technical & Institutional Debt": "Deferred Maintenance",
   "Structural Friction": "Structural Friction",
 };
 

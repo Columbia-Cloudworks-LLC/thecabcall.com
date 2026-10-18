@@ -17,6 +17,7 @@ import {
   PublicIncidentDto,
 } from "@/lib/dto";
 import {
+  getSreFailureModeSpec,
   getWorkingToolSpec,
 } from "@/lib/taxonomy";
 import {
@@ -52,6 +53,7 @@ export function IncidentBriefClient({
 
   const primaryToolSpec = getWorkingToolSpec(incident.primaryTool);
   const secondaryToolSpec = getWorkingToolSpec(incident.secondaryTool);
+  const failureSpec = getSreFailureModeSpec(incident.sreFailureMode);
   const ledgerEntryLabel = formatCraftLedgerEntry(incident.incidentCode);
 
   // Section I: Strictly 1 concise paragraph of unvarnished factual summary
@@ -187,7 +189,7 @@ export function IncidentBriefClient({
                     )}`}
                     className="hover:underline"
                   >
-                    {incident.sreFailureMode}
+                    {failureSpec.craftTitle}
                   </Link>
                   <button
                     type="button"
@@ -201,6 +203,9 @@ export function IncidentBriefClient({
                     [?]
                   </button>
                 </div>
+                <p className="font-serif text-xs text-[#94A3B8] mt-1.5 leading-relaxed">
+                  {failureSpec.summary}
+                </p>
               </div>
             </div>
 
@@ -340,7 +345,7 @@ export function IncidentBriefClient({
                 <Compass className="w-4 h-4 text-[#C5A059]" />
                 <h2 className="font-display text-xl text-[#F3EFE6] uppercase tracking-wider">
                   II. The Diagnostic Lens: {incident.primaryTool} &amp;{" "}
-                  {incident.sreFailureMode}
+                  {failureSpec.craftTitle}
                 </h2>
               </div>
               <button
@@ -446,7 +451,8 @@ export function IncidentBriefClient({
                       {rel.title}
                     </h3>
                     <span className="font-mono text-[11px] text-[#94A3B8] mt-2 block">
-                      Failure Mode: {rel.sreFailureMode}
+                      Failure Mode:{" "}
+                      {getSreFailureModeSpec(rel.sreFailureMode).craftTitle}
                     </span>
                   </Link>
                 ))}

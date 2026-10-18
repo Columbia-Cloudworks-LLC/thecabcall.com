@@ -12,6 +12,9 @@ import {
 } from "lucide-react";
 import {
   DOMAIN_SECTORS,
+  getSreFailureModeSpec,
+  mapFailureModeToCraftLexicon,
+  mapWorkingToolToCraftLexicon,
   SRE_FAILURE_MODES,
   WORKING_TOOLS,
 } from "@/lib/taxonomy";
@@ -34,11 +37,18 @@ export function KnowledgeGraphClient({
   const searchParams = useSearchParams();
   const { openRubricInspector } = useTelemetry();
 
+  const rawToolParam = searchParams.get("tool");
+  const rawFailureParam = searchParams.get("failure");
+
   const [selectedTool, setSelectedTool] = useState<string>(
-    searchParams.get("tool") || "ALL"
+    rawToolParam && rawToolParam !== "ALL"
+      ? mapWorkingToolToCraftLexicon(rawToolParam)
+      : "ALL"
   );
   const [selectedFailure, setSelectedFailure] = useState<string>(
-    searchParams.get("failure") || "ALL"
+    rawFailureParam && rawFailureParam !== "ALL"
+      ? mapFailureModeToCraftLexicon(rawFailureParam)
+      : "ALL"
   );
   const [selectedSector, setSelectedSector] = useState<string>(
     searchParams.get("sector") || "ALL"
@@ -185,13 +195,17 @@ export function KnowledgeGraphClient({
                           isFailureSelected ? "ALL" : failure.id
                         )
                       }
+                      title={failure.summary}
                       className={`p-2.5 border border-[#8A6D3B]/40 cursor-pointer transition-colors ${
                         isFailureSelected
                           ? "bg-[#F59E0B]/25 text-[#F3EFE6] font-bold"
                           : "bg-[#0B0E14] text-[#F3EFE6] hover:bg-[#111726]"
                       }`}
                     >
-                      <span>{failure.id}</span>
+                      <div>{failure.craftShortLabel}</div>
+                      <div className="text-[10px] text-[#94A3B8] font-normal">
+                        {failure.id}
+                      </div>
                     </td>
                     {WORKING_TOOLS.map((tool) => {
                       const count = getCellCount(tool.id, failure.id);
@@ -349,9 +363,10 @@ export function KnowledgeGraphClient({
                           failureMode: inc.sreFailureMode,
                         })
                       }
-                      className="px-2 py-1 bg-[#0B0E14] border border-[#F59E0B]/50 text-[#F59E0B] hover:bg-[#F59E0B]/15 cursor-pointer"
+                      title={getSreFailureModeSpec(inc.sreFailureMode).summary}
+                      className="px-2 py-1 bg-[#0B0E14] border border-[#F59E0B]/50 text-[#F59E0B] hover:bg-[#F59E0B]/15 cursor-pointer text-left"
                     >
-                      {inc.sreFailureMode}
+                      {getSreFailureModeSpec(inc.sreFailureMode).craftTitle}
                     </button>
                   </td>
                   <td className="p-3.5 text-right whitespace-nowrap">

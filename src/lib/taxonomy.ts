@@ -49,6 +49,8 @@ export interface WorkingToolSpec {
 
 export interface SreFailureModeSpec {
   id: SreFailureModeId;
+  craftTitle: string;
+  craftShortLabel: string;
   shortCode: string;
   severity: "nominal" | "warning" | "critical";
   summary: string;
@@ -62,14 +64,14 @@ export const WORKING_TOOLS: WorkingToolSpec[] = [
     id: "24-Inch Gauge",
     shortName: "24-Inch Gauge",
     numeral: "I",
-    moralLens: "Time allocation, prioritization, and resource stewardship",
+    moralLens: "Time allocation, prioritization, and wise stewardship of effort",
     moralDefinition:
       "An instrument used by operative masons to measure and lay out their work; symbolically dividing the twenty-four hours of the day into structured allocations for duty, service, and refreshment so that finite human attention is never squandered on the trivial.",
-    sreEquivalent: "Capacity planning, toil reduction, & error budgets",
+    sreEquivalent: "Budgeting crew hours, cutting busywork, & guarding reserves",
     sreDefinition:
-      "Quantifying finite engineering and institutional bandwidth. When an organization spends 90% of its cycles fighting reactive interrupts instead of retiring systemic risk, its error budget is exhausted before the primary incident even begins.",
+      "Measuring a shop's finite time and attention. When an organization spends ninety percent of its day chasing noisy interruptions instead of fixing known hazards on the shop floor, its reserves are exhausted before the real emergency even begins.",
     diagnosticQuestionPattern:
-      "Where was attention spent versus where the real systemic risk lived?",
+      "Where did the crew spend its time and money compared to where the real hazard lived?",
     jevClassifierCriteria:
       "Assign highest probability when the core tension involves misallocated finite resources, neglected capacity planning, reactive firefighting over structural stewardship, or exhausting attention budgets on low-impact theater.",
     pairedFailureMode: "Alert Fatigue & Signal Loss",
@@ -79,14 +81,14 @@ export const WORKING_TOOLS: WorkingToolSpec[] = [
     id: "Common Gavel",
     shortName: "Common Gavel",
     numeral: "II",
-    moralLens: "Stripping away vices, superfluities, and ego",
+    moralLens: "Stripping away vanity, defensive spin, and rough edges",
     moralDefinition:
       "Used by operative masons to break off the rough and superfluous corners of stones, the better to fit them for the builder's use; morally divesting the mind and conscience of partisan vanity, defensive posture, and emotional reactivity.",
-    sreEquivalent: "Blameless post-mortems, root-cause isolation, & scope pruning",
+    sreEquivalent: "Honest shop-floor reviews, finding the real flaw, & trimming clutter",
     sreDefinition:
-      "Separating human operator error from underlying architectural defects. Removing defensive PR narratives, political scapegoating, and superfluous complexity so the raw causal chain of an outage can be inspected without distortion.",
+      "Separating an honest human slip-up from a flawed shop design. Chipping away defensive excuses, finger-pointing, and needless complexity so the true cause of a breakdown can be laid bare and fixed at the root.",
     diagnosticQuestionPattern:
-      "What emotional noise or political theater needs to be chipped away to see the raw failure?",
+      "What partisan spin or finger-pointing needs to be chipped away to see the actual flaw?",
     jevClassifierCriteria:
       "Assign highest probability when the event centers on scapegoating an individual operator, defensive PR spin obscuring a technical or policy failure, scope creep, or emotional punditry masking a straightforward root cause.",
     pairedFailureMode: "Blame Culture vs. Root-Cause Isolation",
@@ -96,14 +98,14 @@ export const WORKING_TOOLS: WorkingToolSpec[] = [
     id: "The Plumb",
     shortName: "The Plumb",
     numeral: "III",
-    moralLens: "Upright conduct and integrity under pressure",
+    moralLens: "Upright conduct and standing straight under pressure",
     moralDefinition:
       "An instrument used to try perpendiculars; demonstrating whether a wall rises true to gravity or leans dangerously toward collapse under unseen load. It demands unyielding uprightness when commercial or political incentives urge a quiet compromise.",
-    sreEquivalent: "Adherence to SLAs/SLOs, compliance rigor, & operational honesty",
+    sreEquivalent: "Holding the line on safety standards, honest reporting, & tested backups",
     sreDefinition:
-      "Refusing to falsify telemetry, silence a failing health check, or lower safety thresholds just to ship on schedule. Maintaining vertical alignment with stated reliability standards when executive or market pressure peaks.",
+      "Refusing to doctor the gauge readings, silence a warning bell, or lower safety margins just to meet a deadline. Standing straight by the building code when money or politics pushes for a quiet shortcut.",
     diagnosticQuestionPattern:
-      "Did the actors hold the line when incentives pushed them to cut corners?",
+      "Did the builders hold the line on safety and honesty when pressure mounted to cut corners?",
     jevClassifierCriteria:
       "Assign highest probability when actors faced pressure to bypass safety gates, suppress inconvenient telemetry, dilute regulatory or engineering standards, or prioritize short-term optics over vertical integrity.",
     pairedFailureMode: "Single Point of Failure (SPOF) / Untested Failover",
@@ -113,14 +115,14 @@ export const WORKING_TOOLS: WorkingToolSpec[] = [
     id: "The Square",
     shortName: "The Square",
     numeral: "IV",
-    moralLens: "Morality, fair dealing, and squaring actions with stated values",
+    moralLens: "Fair dealing and squaring daily actions with written promises",
     moralDefinition:
       "A right-angled instrument of ninety degrees used to test whether dressed ashlar stones will join without gap or fracture. It measures whether an institution's actual conduct in the field forms a true right angle with its chartered promises.",
-    sreEquivalent: "Spec vs. production reality, configuration drift, & auditability",
+    sreEquivalent: "Matching field work to the blueprint, catching drift, & open books",
     sreDefinition:
-      "Continuous verification that the live production environment matches the declarative specification. Detecting silent, unmonitored divergence between written policy/contracts and how the system actually executes under load.",
+      "Checking on the job site that the actual work matches the written blueprint and public promise. Catching the quiet, unmeasured drift between what an institution says on paper and what it actually does under load.",
     diagnosticQuestionPattern:
-      "How far did actual execution drift from the stated policy or social contract?",
+      "How far did day-to-day actions on the ground drift from the written rules and public promises?",
     jevClassifierCriteria:
       "Assign highest probability when there is measurable divergence between an institution's stated charter/contract/spec and its actual production execution, undocumented workarounds, or broken public covenants.",
     pairedFailureMode: "Configuration Drift",
@@ -130,14 +132,14 @@ export const WORKING_TOOLS: WorkingToolSpec[] = [
     id: "The Level",
     shortName: "The Level",
     numeral: "V",
-    moralLens: "Equality, shared mortality, and accountability across hierarchies",
+    moralLens: "Shared footing, equal standards, and accountability across ranks",
     moralDefinition:
       "An instrument used to lay horizontals and prove that all surfaces rest upon an equal plane. It reminds leadership and citizenry alike that hierarchy confers stewardship, not immunity from the laws of consequence.",
-    sreEquivalent: "Shared on-call burden, democratization of data, & flat incident command",
+    sreEquivalent: "Shared accountability, equal footing, & paying down deferred maintenance",
     sreDefinition:
-      "Ensuring that those who architect and approve high-risk systems carry the pager when those systems fail. Preventing asymmetric risk where executives capture the upside of velocity while externalizing outage costs onto end users or frontline staff.",
+      "Making sure the leaders who approve a risky shortcut stand on the same floor and bear the same cost when it gives way—rather than pocketing short-term savings while passing the hazard onto frontline workers and the public.",
     diagnosticQuestionPattern:
-      "Are the people who designed the fragile system bearing the same cost as the end users?",
+      "Are the decision-makers who approved the shortcut bearing the same risk as the people on the ground?",
     jevClassifierCriteria:
       "Assign highest probability when a failure exposes asymmetric accountability—where system architects, executives, or regulators are insulated from the downstream consequences borne by citizens, operators, or customers.",
     pairedFailureMode: "Technical & Institutional Debt",
@@ -147,14 +149,14 @@ export const WORKING_TOOLS: WorkingToolSpec[] = [
     id: "The Trowel",
     shortName: "The Trowel",
     numeral: "VI",
-    moralLens: "Spreading the cement of affection and uniting disparate parts",
+    moralLens: "Spreading the cement that binds separate crews into one work",
     moralDefinition:
       "Used by operative masons to spread the mortar which unites an entire edifice into one common mass of stone; representing the institutional trust, transparent protocols, and mutual goodwill that prevent independent components from shearing apart under stress.",
-    sreEquivalent: "Cross-team incident response, API contracts, & institutional trust",
+    sreEquivalent: "Clear handoffs between crews, solid joints, & mutual trust",
     sreDefinition:
-      "Maintaining well-defined interface contracts, clear handoff protocols, and high-trust communication channels across organizational silos so a localized fault does not cascade across boundaries.",
+      "Spreading strong mortar between separate work crews—through clear handoffs, honest communication, and well-built firebreaks—so a crack in one wall does not bring down the whole building.",
     diagnosticQuestionPattern:
-      "What connective tissue broke down between silos, and what binds the recovery together?",
+      "Where did communication break down between separate crews, and what mortar will hold the repair together?",
     jevClassifierCriteria:
       "Assign highest probability when an incident stems from fractured communication between agencies or teams, broken interface contracts, siloed telemetry, or the erosion of public and inter-institutional trust.",
     pairedFailureMode: "Cascading Failure",
@@ -165,77 +167,100 @@ export const WORKING_TOOLS: WorkingToolSpec[] = [
 export const SRE_FAILURE_MODES: SreFailureModeSpec[] = [
   {
     id: "Configuration Drift",
+    craftTitle: "Drifting Off-Square (Configuration Drift)",
+    craftShortLabel: "Drifting Off-Square",
     shortCode: "CFG-DRIFT",
     severity: "warning",
     summary:
-      "Slow, unmonitored divergence between how a system is supposed to work and how it actually runs in production.",
+      "Drifting Off-Square (Configuration Drift): When day-to-day actions quietly wander away from the written rules without anyone calling a halt to re-measure.",
     systemsDefinition:
-      "Occurs when ad-hoc hotfixes, manual overrides, and undocumented exceptions accumulate over time without reconciliation against the canonical specification.",
+      "Happens when quick field workarounds, unrecorded favors, and temporary shortcuts pile up over time until the actual work on the shop floor no longer matches the blueprint.",
     civicManifestation:
-      "Agencies, corporations, or courts operating under informal norms that quietly contradict statutory language or public charters until an audit or crisis exposes the gap.",
+      "Agencies, companies, or courts operating by unwritten backroom habits that quietly contradict their public rules until an inspection or breakdown exposes the gap.",
     defaultPairedTool: "The Square",
   },
   {
     id: "Cascading Failure",
+    craftTitle: "Chain-Reaction Breakdown (Cascading Failure)",
+    craftShortLabel: "Chain-Reaction Breakdown",
     shortCode: "CASCADE-01",
     severity: "critical",
     summary:
-      "A localized failure knocking out downstream dependencies due to tight coupling or lack of circuit breakers.",
+      "Chain-Reaction Breakdown (Cascading Failure): When one cracked timber or missed handoff overloads the next support in line because no firebreaks were built between them.",
     systemsDefinition:
-      "When one degraded node overwhelms adjacent services via retry storms, shared resource exhaustion, or missing bulkhead isolation.",
+      "When a single overloaded joint or stalled work crew throws its full weight onto neighboring supports without shutoff valves or firebreaks to contain the damage.",
     civicManifestation:
-      "A regional supply-chain disruption, liquidity shock, or inter-agency communication breakdown propagating rapidly across sectors that lacked independent buffers.",
+      "A local supply bottleneck, credit squeeze, or communication breakdown spreading rapidly across neighboring shops and towns that had no independent reserves.",
     defaultPairedTool: "The Trowel",
   },
   {
     id: "Alert Fatigue & Signal Loss",
+    craftTitle: "Crying Wolf / Drowning in Noise (Alert Fatigue)",
+    craftShortLabel: "Crying Wolf / Drowning in Noise",
     shortCode: "SIG-LOSS",
     severity: "warning",
     summary:
-      "Drowning in low-priority noise until a critical structural warning is ignored.",
+      "Crying Wolf / Drowning in Noise (Alert Fatigue): When a shop is flooded with so many false alarms and petty warnings that the crew stops listening right before a real hazard hits.",
     systemsDefinition:
-      "When poorly tuned thresholds flood operators with thousands of non-actionable pages, conditioning teams to mute or ignore the telemetry stream right before a genuine catastrophe.",
+      "When overly touchy bells ring all day over harmless vibrations, training workers to ignore or unplug the warning horn right before a genuine structural crack gives way.",
     civicManifestation:
-      "24-hour outrage cycles and sensationalist media jitter consuming public attention while high-consequence structural warnings sit unexamined in public filings.",
+      "Round-the-clock partisan shouting and sensational headlines exhausting public attention while serious, documented warnings sit unread in public records.",
     defaultPairedTool: "24-Inch Gauge",
   },
   {
     id: "Single Point of Failure (SPOF) / Untested Failover",
+    craftTitle: "One Weak Link / Untested Backup (Single Point of Failure)",
+    craftShortLabel: "One Weak Link / Untested Backup",
     shortCode: "SPOF-FAIL",
     severity: "critical",
     summary:
-      "Relying on one fragile bottleneck or assuming a backup plan works without ever running a game-day drill.",
+      "One Weak Link / Untested Backup (Single Point of Failure): Betting the whole structure on a single load-bearing pin—or trusting an emergency backup plan that has never been tested under real weight.",
     systemsDefinition:
-      "Architectural dependence on a single component, vendor, or human gatekeeper, paired with nominal redundancy that has never been validated under realistic production load.",
+      "Hanging an entire operation on a single supplier, bridge, or keyholder while relying on a spare generator or backup plan that has only ever existed on paper.",
     civicManifestation:
-      "Critical public infrastructure, grid interconnects, or statutory oversight mechanisms that exist on paper but fail immediately when called upon during an active stress event.",
+      "Critical public utilities, supply lines, or safety checks that look redundant on a chart but seize up the moment an emergency puts them under real load.",
     defaultPairedTool: "The Plumb",
   },
   {
     id: "Blame Culture vs. Root-Cause Isolation",
+    craftTitle: "Scapegoating vs. Fixing the Trap (Blame Culture)",
+    craftShortLabel: "Scapegoating vs. Fixing the Trap",
     shortCode: "BLAME-ISO",
     severity: "warning",
     summary:
-      "Punishing the operator who pressed the button instead of fixing the flawed system that allowed the error.",
+      "Scapegoating vs. Fixing the Trap (Blame Culture): Firing the last worker who touched the lever instead of fixing the broken guardrails that set them up to fail.",
     systemsDefinition:
-      "Treating human error as the conclusion of an investigation rather than the starting point. Firing the last person to touch the keyboard guarantees the next operator will hit the exact same trap.",
+      "Treating a worker's slip-up as the end of the inquiry instead of the starting clue. Punishing the last person on shift guarantees the next worker will walk into the exact same trap.",
     civicManifestation:
-      "Public hearings and corporate press releases that sacrifice a frontline official to appease headlines while leaving defective incentives and guardrails untouched.",
+      "Public hearings and press releases that sacrifice a low-level clerk to satisfy the crowd while leaving broken rules and bad incentives untouched.",
     defaultPairedTool: "Common Gavel",
   },
   {
     id: "Technical & Institutional Debt",
+    craftTitle: "Deferred Maintenance (Institutional Debt)",
+    craftShortLabel: "Deferred Maintenance",
     shortCode: "INST-DEBT",
     severity: "critical",
     summary:
-      "Deferring necessary maintenance for short-term velocity until the interest payments cause an outage.",
+      "Deferred Maintenance (Institutional Debt): Taking an easy shortcut today that weakens the foundation tomorrow, until the overdue repairs cost more than the original build.",
     systemsDefinition:
-      "Trading long-term resilience for immediate feature delivery or cost reduction, accumulating fragile legacy dependencies until routine operations become hazardous.",
+      "Putting off routine upkeep and patching worn timbers with baling wire to hit a short-term deadline, letting hidden rot spread until everyday work becomes unsafe.",
     civicManifestation:
-      "Decades of deferred physical infrastructure upkeep, underfunded oversight, or kicked fiscal cans compounding into acute systemic instability.",
+      "Decades of skipped bridge repairs, hollowed-out oversight, and postponed bills piling up until a routine storm triggers a major collapse.",
     defaultPairedTool: "The Level",
   },
 ];
+
+export const SHORT_FAILURE_LABELS: Record<SreFailureModeId, string> = {
+  "Configuration Drift": "Drifting Off-Square",
+  "Cascading Failure": "Chain-Reaction Breakdown",
+  "Alert Fatigue & Signal Loss": "Crying Wolf / Drowning in Noise",
+  "Single Point of Failure (SPOF) / Untested Failover":
+    "One Weak Link / Untested Backup",
+  "Blame Culture vs. Root-Cause Isolation": "Scapegoating vs. Fixing the Trap",
+  "Technical & Institutional Debt": "Deferred Maintenance",
+  "Structural Friction": "Structural Friction",
+};
 
 export const DOMAIN_SECTORS: DomainSectorId[] = [
   "Public Policy & Governance",
@@ -247,14 +272,16 @@ export const DOMAIN_SECTORS: DomainSectorId[] = [
 
 export const STRUCTURAL_FRICTION_FALLBACK_SPEC: SreFailureModeSpec = {
   id: "Structural Friction",
+  craftTitle: "Structural Friction (Drifting Off-Square)",
+  craftShortLabel: "Structural Friction",
   shortCode: "",
   severity: "warning",
   summary:
-    "Underlying operational or institutional strain where formal design and field execution pull against one another.",
+    "Drifting Off-Square (Structural Friction): When day-to-day actions quietly wander away from the written rules, creating strain across the work before a full inspection is called.",
   systemsDefinition:
-    "Occurs when unmapped dependencies, informal workarounds, or competing operational pressures introduce friction across system boundaries.",
+    "Happens when unmapped handoffs, informal workarounds, or competing pressures cause different parts of a shop or institution to pull against one another.",
   civicManifestation:
-    "Public institutions, infrastructure operators, or governing bodies experiencing structural strain awaiting full inspection.",
+    "Public institutions, utilities, or governing bodies experiencing operational strain between their stated mission and field reality.",
   defaultPairedTool: "The Square",
 };
 
@@ -277,13 +304,22 @@ const FAILURE_MODE_ALIAS_MAP: Record<string, SreFailureModeId> = {
   "configuration drift": "Configuration Drift",
   configuration_drift: "Configuration Drift",
   "cfg-drift": "Configuration Drift",
+  "drifting off-square": "Configuration Drift",
+  "drifting off-square (configuration drift)": "Configuration Drift",
   "cascading failure": "Cascading Failure",
   cascading_failure: "Cascading Failure",
   "cascade-01": "Cascading Failure",
+  "chain-reaction breakdown": "Cascading Failure",
+  "chain-reaction breakdown (cascading failure)": "Cascading Failure",
   "alert fatigue & signal loss": "Alert Fatigue & Signal Loss",
   "alert fatigue": "Alert Fatigue & Signal Loss",
   alert_fatigue: "Alert Fatigue & Signal Loss",
   "sig-loss": "Alert Fatigue & Signal Loss",
+  "crying wolf / drowning in noise": "Alert Fatigue & Signal Loss",
+  "crying wolf": "Alert Fatigue & Signal Loss",
+  "drowning in noise": "Alert Fatigue & Signal Loss",
+  "crying wolf / drowning in noise (alert fatigue)":
+    "Alert Fatigue & Signal Loss",
   "single point of failure (spof) / untested failover":
     "Single Point of Failure (SPOF) / Untested Failover",
   "single point of failure":
@@ -291,17 +327,32 @@ const FAILURE_MODE_ALIAS_MAP: Record<string, SreFailureModeId> = {
   "untested failover": "Single Point of Failure (SPOF) / Untested Failover",
   untested_failover: "Single Point of Failure (SPOF) / Untested Failover",
   "spof-fail": "Single Point of Failure (SPOF) / Untested Failover",
+  "one weak link / untested backup":
+    "Single Point of Failure (SPOF) / Untested Failover",
+  "one weak link": "Single Point of Failure (SPOF) / Untested Failover",
+  "untested backup": "Single Point of Failure (SPOF) / Untested Failover",
+  "one weak link / untested backup (single point of failure)":
+    "Single Point of Failure (SPOF) / Untested Failover",
   "blame culture vs. root-cause isolation":
     "Blame Culture vs. Root-Cause Isolation",
   "blame culture": "Blame Culture vs. Root-Cause Isolation",
   blameless_postmortem_gap: "Blame Culture vs. Root-Cause Isolation",
   "blame-iso": "Blame Culture vs. Root-Cause Isolation",
+  "scapegoating vs. fixing the trap":
+    "Blame Culture vs. Root-Cause Isolation",
+  scapegoating: "Blame Culture vs. Root-Cause Isolation",
+  "fixing the trap": "Blame Culture vs. Root-Cause Isolation",
+  "scapegoating vs. fixing the trap (blame culture)":
+    "Blame Culture vs. Root-Cause Isolation",
   "technical & institutional debt": "Technical & Institutional Debt",
   "institutional debt": "Technical & Institutional Debt",
   capacity_exhaustion: "Technical & Institutional Debt",
   "inst-debt": "Technical & Institutional Debt",
+  "deferred maintenance": "Technical & Institutional Debt",
+  "deferred maintenance (institutional debt)": "Technical & Institutional Debt",
   "structural friction": "Structural Friction",
   structural_friction: "Structural Friction",
+  "structural friction (drifting off-square)": "Structural Friction",
 };
 
 export function stripRawFailureShortCodes(
@@ -360,19 +411,27 @@ export function formatCraftLedgerEntry(
 }
 
 export function getWorkingToolSpec(id: string | null | undefined): WorkingToolSpec {
-  const mapped = mapWorkingToolToCraftLexicon(id);
-  return (
-    WORKING_TOOLS.find((t) => t.id === mapped) || WORKING_TOOLS[3] // Default to The Square
-  );
+  try {
+    const mapped = mapWorkingToolToCraftLexicon(id);
+    return (
+      WORKING_TOOLS.find((t) => t.id === mapped) || WORKING_TOOLS[3] // Default to The Square
+    );
+  } catch {
+    return WORKING_TOOLS[3];
+  }
 }
 
 export function getSreFailureModeSpec(
   id: string | null | undefined
 ): SreFailureModeSpec {
-  const mapped = mapFailureModeToCraftLexicon(id);
-  return (
-    SRE_FAILURE_MODES.find((f) => f.id === mapped) ||
-    STRUCTURAL_FRICTION_FALLBACK_SPEC
-  );
+  try {
+    const mapped = mapFailureModeToCraftLexicon(id);
+    return (
+      SRE_FAILURE_MODES.find((f) => f.id === mapped) ||
+      STRUCTURAL_FRICTION_FALLBACK_SPEC
+    );
+  } catch {
+    return STRUCTURAL_FRICTION_FALLBACK_SPEC;
+  }
 }
 

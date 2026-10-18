@@ -8,16 +8,20 @@ import {
   PublicIncidentDto,
 } from "@/lib/dto";
 import { IncidentArticle } from "@/lib/types";
-import { SreFailureModeId } from "@/lib/taxonomy";
+import {
+  getSreFailureModeSpec,
+  SreFailureModeId,
+} from "@/lib/taxonomy";
 import { useTelemetry } from "./TelemetryContext";
 
 const SHORT_FAILURE_LABELS: Record<SreFailureModeId, string> = {
-  "Configuration Drift": "Configuration Drift",
-  "Cascading Failure": "Cascading Failure",
-  "Alert Fatigue & Signal Loss": "Alert Fatigue",
-  "Single Point of Failure (SPOF) / Untested Failover": "Untested Failover",
-  "Blame Culture vs. Root-Cause Isolation": "Blame Culture",
-  "Technical & Institutional Debt": "Institutional Debt",
+  "Configuration Drift": "Drifting Off-Square",
+  "Cascading Failure": "Chain-Reaction Breakdown",
+  "Alert Fatigue & Signal Loss": "Crying Wolf / Drowning in Noise",
+  "Single Point of Failure (SPOF) / Untested Failover":
+    "One Weak Link / Untested Backup",
+  "Blame Culture vs. Root-Cause Isolation": "Scapegoating vs. Fixing the Trap",
+  "Technical & Institutional Debt": "Deferred Maintenance",
   "Structural Friction": "Structural Friction",
 };
 
@@ -57,8 +61,9 @@ export function IncidentCard({
   }
 
   const datelinePrefix = formatBroadsheetDateline(incident.publishedAt);
+  const failureSpec = getSreFailureModeSpec(incident.sreFailureMode);
   const shortFailureLabel =
-    SHORT_FAILURE_LABELS[incident.sreFailureMode] || "Structural Friction";
+    SHORT_FAILURE_LABELS[incident.sreFailureMode] || failureSpec.craftShortLabel;
 
   return (
     <article className="group relative bg-[#111726]/90 border border-[#8A6D3B]/45 p-6 sm:p-7 transition-all duration-300 hover:border-[#C5A059]/80 hover:shadow-[0_12px_36px_rgba(0,0,0,0.65)] flex flex-col justify-between">
