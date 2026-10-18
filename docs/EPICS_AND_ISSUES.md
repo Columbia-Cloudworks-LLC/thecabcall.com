@@ -53,6 +53,13 @@
 - [x] **Issue #18 ([GitHub Issue #18](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/18)): [Navigation / Krug] Implement 'You Are Here' Street Signs & Sidebar Visual Hierarchy**
 - [x] **Issue #19 ([GitHub Issue #19](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/19)): [Verification] Add a 'Banned Jargon & Krug Usability Gate' to the PowerShell Test Harness**
 
+### Admin Dashboard Redesign — "The Editor's Study" Epic ([GitHub Issue #21](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/21) — Issues #22 to #26)
+- [ ] **Issue #22 ([GitHub Issue #22](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/22)): [Admin UI 1/5] Navigation Consolidation & Header De-cluttering (`AdminShellNav.tsx`, `AdminLayout`)**
+- [ ] **Issue #23 ([GitHub Issue #23](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/23)): [Admin UI 2/5] Overview Tab Simplification & Plain-English Action Cards (`AdminOverviewClient.tsx`)**
+- [ ] **Issue #24 ([GitHub Issue #24](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/24)): [Admin UI 3/5] Podcast Studio Overhaul — Compact List & Slide-Out Inspector Drawer (`AdminEpisodesClient.tsx`)**
+- [ ] **Issue #25 ([GitHub Issue #25](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/25)): [Admin UI 4/5] Unified "Editorial & Feeds" Workspace (`AdminIncidentsClient.tsx`, `AdminFeedsClient.tsx`, `AdminFiltersClient.tsx`)**
+- [ ] **Issue #26 ([GitHub Issue #26](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/26)): [Admin UI 5/5] Aesthetic Polish & Micro-Interactions ("Delight" Pass across `globals.css` & `Admin*.tsx`)**
+
 ---
 
 # Epic #1: Repository Baseline, Clean Build & Git Synchronization
@@ -520,3 +527,56 @@
 - **Verification:**
   - Verify `https://thecabcall.com/feed.xml`, `https://thecabcall.com/feeds/incidents.xml`, and `https://thecabcall.com/feeds/incidents.json` return `200 OK` with valid XML/JSON, reflect settings modified in `/admin/publishing`, include `<media:content>` images and de-alarmed titles, and log `outbound_feed.update` in `audit_ledger`.
 - **Human Action Gate:** None.
+
+---
+
+# Epic #21: Admin Dashboard Redesign — "The Editor's Study" (Simplification & UI Polish — Issues #22 – #26)
+
+- **GitHub Epic:** [#21](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/21)
+- **Objective:** Transform `/admin` from an overcrowded 3 AM NOC database terminal into **"The Editor's Study"**—a calm, cohesive, plain-English editorial command desk matching the public Trestleboard aesthetic (`#0B0E14` Deep Obsidian, `#111726` Lodge Room, `#C5A059` / `#8A6D3B` Burnished Brass, `Cinzel` & `Newsreader` serif typography, architectural corner brackets) while preserving 100% of our cryptographic `audit_ledger` guarantees.
+
+### Issue #22 (Sub-Issue 1): Navigation Consolidation & Header De-cluttering
+- **GitHub Issue:** [#22](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/22)
+- **Status:** `[ ] Pending`
+- **Target Files:** `src/components/AdminShellNav.tsx`, `src/app/admin/layout.tsx`, `src/components/SiteHeader.tsx`, `src/components/AdminOverviewClient.tsx`
+- **Deliverables:**
+  1. Consolidate the 8 scrolling tabs in `ADMIN_NAV_TABS` (`src/components/AdminShellNav.tsx`) into 4 clean, non-scrolling tabs: `Overview` (`/admin`), `Editorial & Feeds` (`/admin/incidents`), `Podcast Studio` (`/admin/episodes`), and `Settings & Audit` (`/admin/audit`).
+  2. Strip noisy telemetry metadata (`Owner Lock`, OAuth method badges, `jev-1.14.0`, `gemini-2.5-flash`) from the header; replace with a single compact status badge next to `Public Site ↗` and `Sign Out`, and only surface an alert banner if an actual error or chain verification failure (`chainIntegrity.valid === false`) occurs.
+  3. Apply `font-display` (`Cinzel`) typography and subtle Burnished Brass (`#C5A059` / `#8A6D3B`) accents to the admin header.
+
+### Issue #23 (Sub-Issue 2): Overview Tab Simplification & Plain-English Action Cards
+- **GitHub Issue:** [#23](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/23)
+- **Status:** `[ ] Pending`
+- **Target Files:** `src/components/AdminOverviewClient.tsx`, `src/app/admin/page.tsx`
+- **Deliverables:**
+  1. Redesign the 4 Quick-Action cards into tactile, plain-English editorial triggers (`"Fetch Latest News"`, `"Synthesize Case Briefs"`, `"Generate Weekly Episode"`, `"Verify Ledger"`), removing `POST /api/...` labels and `STAGE 1–5` jargon, with clean loading states and inline feedback.
+  2. Condense the 6 giant KPI cards into a single compact 5-metric horizontal summary strip (**Active Stories**, **Monitored Feeds**, **Filter Rules**, **Published Episodes**, **Ledger Status**).
+  3. Remove the 20-row SHA-256 `Recent Audit Trail Events` table and raw `PIPELINE_RUNS` table from Overview; replace with a 5-item plain-English **"Recent Activity & Pipeline Runs"** feed with a subtle checkmark badge revealing hash/latency details only on hover.
+
+### Issue #24 (Sub-Issue 3): Podcast Studio Overhaul (Compact List & Slide-Out Inspector Drawer)
+- **GitHub Issue:** [#24](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/24)
+- **Status:** `[ ] Pending`
+- **Target Files:** `src/components/AdminEpisodesClient.tsx`, `src/app/admin/episodes/page.tsx`
+- **Deliverables:**
+  1. Replace bloated vertical episode cards with a sleek, scannable episode list/grid showing Episode #, Title, Series Badge (`Weekly Brief` vs `Legacy Archive`), Publish Date, Duration, and a 2-line truncated description (`line-clamp-2`).
+  2. Implement a slide-out side inspector drawer when clicking an episode to handle playback (single shared audio player), full description/transcript editing, metadata inspection (`r2Key`, `fileSizeBytes`), and deletion.
+  3. Remove the redundant `"Recent Episode Lifecycle Events"` log at the bottom of `/admin/episodes`.
+
+### Issue #25 (Sub-Issue 4): Unified "Editorial & Feeds" Workspace
+- **GitHub Issue:** [#25](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/25)
+- **Status:** `[ ] Pending`
+- **Target Files:** `src/app/admin/incidents/page.tsx`, `src/components/AdminIncidentsClient.tsx`, `src/components/AdminFeedsClient.tsx`, `src/components/AdminFiltersClient.tsx`, `src/app/admin/feeds/page.tsx`, `src/app/admin/filters/page.tsx`, `src/app/admin/transforms/page.tsx`
+- **Deliverables:**
+  1. Create a unified editorial workspace where stories ("Incidents") are the primary view, styled with the readability of the public site.
+  2. Provide clean collapsible drawers or segmented sub-views for managing the 5 RSS sources and Triage Rules without leaving the editorial context.
+  3. Replace raw internal jargon (`P(systemic) >= 0.70`, `jev-1.14.0`, `Headline De-escalation`, `Drop_Keyword_Regex`) with clear, human-readable labels (**"Minimum Relevance Score"**, **"Editorial Tone & Filtering"**, **"Calm Headline Rewrite"**).
+
+### Issue #26 (Sub-Issue 5): Aesthetic Polish & Micro-Interactions ("Delight" Pass)
+- **GitHub Issue:** [#26](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/26)
+- **Status:** `[ ] Pending`
+- **Target Files:** `src/app/globals.css`, `src/components/AdminShellNav.tsx`, `src/components/AdminOverviewClient.tsx`, `src/components/AdminEpisodesClient.tsx`, `src/components/AdminIncidentsClient.tsx`, `src/components/AdminFeedsClient.tsx`, `src/components/AdminFiltersClient.tsx`, `src/components/AdminUsersClient.tsx`, `src/components/AdminAuditClient.tsx`, `src/components/AdminLoginClient.tsx`
+- **Deliverables:**
+  1. Align `/admin` CSS tokens with the public Trestleboard palette (`#0B0E14` obsidian surfaces, `#111726` lodge room cards, `#C5A059` / `#8A6D3B` burnished brass highlights, `#F3EFE6` parchment text, subtle corner brackets on primary containers).
+  2. Reserve `font-mono` strictly for actual code/IDs/hashes inside tooltips or the advanced audit view—use clean `font-display` (`Cinzel`), `font-serif` (`Newsreader`), and `font-sans` (`Inter`) pairings for all primary labels and tables.
+  3. Add smooth transitions for tab switching, drawer opening, and pipeline trigger buttons.
+
