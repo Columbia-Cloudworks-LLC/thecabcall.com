@@ -25,6 +25,19 @@ import {
   verifyAdminSession,
 } from "./pipeline/auth";
 import {
+  attachIncidentImage,
+  ensureEditorialPipelineSchema,
+  generateIncidentTelemetrySvgCard,
+  getAdminIncidentById,
+  ImageSourceType,
+  listAdminIncidentsAndTransforms,
+  listPipelineTransforms,
+  overrideIncidentBriefAndClassification,
+  rewriteIncidentTitle,
+  updatePipelineTransform,
+  uploadAdminMediaToR2,
+} from "./pipeline/editorial";
+import {
   createIngestFeed,
   createIngestFilter,
   D1DatabaseLike,
@@ -159,7 +172,7 @@ function inferWorkerDomainSector(
 function mapWorkerRowToPublicIncidentDto(
   row: TelemetryArticleRow
 ): PublicIncidentDto | null {
-  if (row.status !== "synthesized") {
+  if (row.status !== "synthesized" || Number(row.is_hidden ?? 0) === 1) {
     return null;
   }
 
@@ -220,12 +233,40 @@ function mapWorkerRowToPublicIncidentDto(
     .replace(/^-|-$/g, "")
     .slice(0, 64);
 
+  const hasImageUrl =
+    typeof row.image_url === "string" && row.image_url.trim().length > 0;
+  const effectiveImageUrl = hasImageUrl
+    ? row.image_url!.trim()
+    : `/media/card-d1-${row.id}.svg`;
+  const effectiveImageSourceType: PublicIncidentDto["imageSourceType"] =
+    hasImageUrl
+      ? (row.image_source_type as PublicIncidentDto["imageSourceType"]) || "rss"
+      : "svg_card";
+  const effectiveImageAlt =
+    typeof row.image_alt === "string" && row.image_alt.trim().length > 0
+      ? row.image_alt.trim()
+      : `${primaryTool} · ${sreFailureMode} telemetry blueprint for ${row.title}`;
+  const effectiveImageCaption =
+    typeof row.image_caption === "string" && row.image_caption.trim().length > 0
+      ? row.image_caption.trim()
+      : `Blueprint Card · ${primaryTool} / ${sreFailureMode}`;
+
   return projectPublicIncidentDto({
     id: `d1-inc-${row.id}`,
     incidentCode: `#CAB-2026-${2000 + row.id}`,
     slug: `${slugBase || "incident"}-d1-${row.id}`,
     sourceFeed: row.source_feed.toUpperCase(),
     title: row.title,
+    originalTitle:
+      typeof row.original_title === "string" && row.original_title.trim().length > 0
+        ? row.original_title.trim()
+        : row.title,
+    titleRewritten: Number(row.title_rewritten ?? 0) === 1,
+    titleRewriteReason:
+      typeof row.title_rewrite_reason === "string" &&
+      row.title_rewrite_reason.trim().length > 0
+        ? row.title_rewrite_reason.trim()
+        : undefined,
     sourceUrl: row.source_url,
     publishedAt: row.published_at,
     domainSector: inferWorkerDomainSector(
@@ -248,6 +289,11 @@ function mapWorkerRowToPublicIncidentDto(
       typeof parsedQ?.lead_post_mortem_analysis === "string"
         ? parsedQ.lead_post_mortem_analysis
         : undefined,
+    imageUrl: effectiveImageUrl,
+    imageAlt: effectiveImageAlt,
+    imageCaption: effectiveImageCaption,
+    imageSourceType: effectiveImageSourceType,
+    isPinned: Number(row.is_pinned ?? 0) === 1,
   });
 }
 
@@ -479,6 +525,7 @@ const worker = {
       try {
         try {
           await ensureBaselineEpisodesSeeded(env.DB);
+          await ensureEditorialPipelineSchema(env.DB);
         } catch {
           // ignore seed check failure
         }
@@ -486,8 +533,8 @@ const worker = {
         const articlesRes = await env.DB.prepare(
           `SELECT ${TELEMETRY_ARTICLES_SYNTHESIS_COLUMNS}
            FROM telemetry_articles
-           WHERE status = 'synthesized'
-           ORDER BY published_at DESC, id DESC`
+           WHERE status = 'synthesized' AND is_hidden = 0
+           ORDER BY is_pinned DESC, published_at DESC, id DESC`
         ).all<TelemetryArticleRow>();
         const articleRows = articlesRes.results || [];
 
@@ -599,6 +646,105 @@ const worker = {
         headers: {
           ...baseHeaders,
           "Content-Length": String(totalSize),
+        },
+      });
+    }
+
+    // Public Route: GET /media/:filename (Serves R2 media objects or dynamically generates Masonic/SRE Blueprint SVG cards)
+    if (
+      (request.method === "GET" || request.method === "HEAD") &&
+      url.pathname.startsWith("/media/")
+    ) {
+      const filename = decodeURIComponent(
+        url.pathname.slice("/media/".length)
+      ).trim();
+      if (!filename || filename.includes("..") || filename.includes("/")) {
+        return jsonResponse({ error: "Invalid media filename" }, 400);
+      }
+
+      // Check if this is a dynamic SVG card request: card-d1-<id>.svg or card-<id>.svg
+      const cardMatch = filename.match(/^card-(?:d1-)?(\d+)\.svg$/i);
+      if (cardMatch) {
+        const incidentId = parseInt(cardMatch[1], 10);
+        try {
+          await ensureEditorialPipelineSchema(env.DB);
+          const incidentLookup = await getAdminIncidentById(env.DB, incidentId);
+          if (incidentLookup) {
+            const rec = incidentLookup.record;
+            const svg = generateIncidentTelemetrySvgCard({
+              incidentCode: rec.incidentCode,
+              title: rec.title,
+              sourceFeed: rec.sourceFeed,
+              publishedAt: rec.publishedAt,
+              primaryTool: rec.primaryTool,
+              secondaryTool: rec.secondaryTool,
+              sreFailureMode: rec.sreFailureMode,
+              domainSector: rec.domainSector,
+              titleRewritten: rec.titleRewritten,
+            });
+            return new Response(request.method === "HEAD" ? null : svg, {
+              status: 200,
+              headers: {
+                "Content-Type": "image/svg+xml; charset=utf-8",
+                "Cache-Control": "public, max-age=300",
+                "Access-Control-Allow-Origin": "*",
+              },
+            });
+          }
+        } catch {
+          // Fall through to R2 lookup or generic blueprint card
+        }
+      }
+
+      const r2Key = `media/${filename}`;
+      const obj = await env.AUDIO_BUCKET.get(r2Key);
+      if (!obj) {
+        if (filename.toLowerCase().endsWith(".svg")) {
+          const fallbackSvg = generateIncidentTelemetrySvgCard({
+            incidentCode: "#CAB-2026-2000",
+            title: "Change Advisory Board — Structural Incident Telemetry",
+            sourceFeed: "THE CAB CALL",
+            publishedAt: new Date().toISOString(),
+            primaryTool: "The Square",
+            secondaryTool: "24-Inch Gauge",
+            sreFailureMode: "Configuration Drift",
+            domainSector: "Infrastructure & Supply Chain",
+          });
+          return new Response(request.method === "HEAD" ? null : fallbackSvg, {
+            status: 200,
+            headers: {
+              "Content-Type": "image/svg+xml; charset=utf-8",
+              "Cache-Control": "public, max-age=300",
+              "Access-Control-Allow-Origin": "*",
+            },
+          });
+        }
+        return jsonResponse(
+          { error: "Media object not found in R2", key: r2Key },
+          404
+        );
+      }
+
+      const fullBuffer = await obj.arrayBuffer();
+      const contentType =
+        obj.httpMetadata?.contentType ||
+        (filename.endsWith(".svg")
+          ? "image/svg+xml; charset=utf-8"
+          : filename.endsWith(".png")
+          ? "image/png"
+          : filename.endsWith(".webp")
+          ? "image/webp"
+          : filename.endsWith(".gif")
+          ? "image/gif"
+          : "image/jpeg");
+
+      return new Response(request.method === "HEAD" ? null : fullBuffer, {
+        status: 200,
+        headers: {
+          "Content-Type": contentType,
+          "Content-Length": String(fullBuffer.byteLength),
+          "Cache-Control": "public, max-age=86400",
+          "Access-Control-Allow-Origin": "*",
         },
       });
     }
@@ -2690,6 +2836,611 @@ const worker = {
               ok: true,
               ...result,
               episodes,
+            },
+            200,
+            { "Cache-Control": "no-store" }
+          );
+        } catch (err) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            400
+          );
+        }
+      }
+    }
+
+    // Admin Editorial Media Upload Route: POST /api/admin/media/upload
+    if (
+      request.method === "POST" &&
+      url.pathname === "/api/admin/media/upload"
+    ) {
+      const actor = await resolveAdminActor(request, env);
+      if (!actor) {
+        return jsonResponse(
+          { ok: false, error: "Unauthorized: Admin authentication required" },
+          401
+        );
+      }
+      if (actor.role === "auditor") {
+        return jsonResponse(
+          { ok: false, error: "Forbidden: Auditor role is read-only." },
+          403
+        );
+      }
+
+      const clientIp =
+        request.headers.get("cf-connecting-ip") ||
+        request.headers.get("x-forwarded-for");
+
+      try {
+        const contentTypeHeader = (
+          request.headers.get("content-type") || ""
+        ).toLowerCase();
+
+        let filename = "incident-image.jpg";
+        let mimeType = "image/jpeg";
+        let bytes: Uint8Array | null = null;
+        let incidentId: number | undefined = undefined;
+        let imageAlt: string | undefined = undefined;
+        let imageCaption: string | undefined = undefined;
+        let reason: string | undefined = undefined;
+        let actorEmailOverride: string | undefined = undefined;
+        let actorRoleOverride: string | undefined = undefined;
+        let authMethodOverride: AuditAuthMethod | undefined = undefined;
+
+        if (contentTypeHeader.includes("multipart/form-data")) {
+          const formData = await request.formData();
+          const fileEntry = formData.get("file");
+          if (fileEntry && typeof (fileEntry as Blob).arrayBuffer === "function") {
+            const fileObj = fileEntry as File;
+            filename = fileObj.name || filename;
+            mimeType = fileObj.type || mimeType;
+            const buf = await fileObj.arrayBuffer();
+            bytes = new Uint8Array(buf);
+          }
+          const incVal = formData.get("incidentId");
+          if (incVal) {
+            const parsedId = Number(incVal);
+            if (Number.isFinite(parsedId) && parsedId > 0) {
+              incidentId = parsedId;
+            }
+          }
+          const altVal = formData.get("imageAlt");
+          if (typeof altVal === "string") imageAlt = altVal;
+          const capVal = formData.get("imageCaption");
+          if (typeof capVal === "string") imageCaption = capVal;
+          const reasonVal = formData.get("reason");
+          if (typeof reasonVal === "string") reason = reasonVal;
+        } else {
+          const body = (await request.json()) as {
+            filename?: string;
+            contentType?: string;
+            base64Data?: string;
+            incidentId?: number | string;
+            imageAlt?: string;
+            imageCaption?: string;
+            reason?: string;
+            actorEmail?: string;
+            actorRole?: string;
+            authMethod?: AuditAuthMethod;
+          };
+          if (body.filename) filename = body.filename;
+          if (body.contentType) mimeType = body.contentType;
+          if (body.incidentId !== undefined) {
+            const parsedId = Number(
+              String(body.incidentId).replace(/^d1-inc-/i, "")
+            );
+            if (Number.isFinite(parsedId) && parsedId > 0) {
+              incidentId = parsedId;
+            }
+          }
+          imageAlt = body.imageAlt;
+          imageCaption = body.imageCaption;
+          reason = body.reason;
+          actorEmailOverride = body.actorEmail;
+          actorRoleOverride = body.actorRole;
+          authMethodOverride = body.authMethod;
+
+          if (body.base64Data) {
+            const cleaned = body.base64Data.replace(
+              /^data:[^;]+;base64,/i,
+              ""
+            );
+            const binaryStr = atob(cleaned);
+            const arr = new Uint8Array(binaryStr.length);
+            for (let i = 0; i < binaryStr.length; i++) {
+              arr[i] = binaryStr.charCodeAt(i);
+            }
+            bytes = arr;
+          }
+        }
+
+        if (!bytes || bytes.byteLength === 0) {
+          return jsonResponse(
+            { ok: false, error: "No image bytes provided for upload." },
+            400
+          );
+        }
+
+        const uploadResult = await uploadAdminMediaToR2({
+          db: env.DB,
+          audioBucket: env.AUDIO_BUCKET,
+          filename,
+          contentType: mimeType,
+          bytes,
+          incidentId,
+          imageAlt,
+          imageCaption,
+          reason,
+          actor: {
+            actorEmail: actorEmailOverride || actor.email,
+            actorRole: actorRoleOverride || actor.role,
+            authMethod: authMethodOverride || actor.authMethod,
+            actorIpHash: await hashActorIp(clientIp),
+          },
+        });
+
+        return jsonResponse(
+          {
+            ...uploadResult,
+            mediaKey: uploadResult.key,
+            mediaUrl: uploadResult.url,
+            byteLength: uploadResult.sizeBytes,
+            auditEventId: uploadResult.auditEntry?.eventId,
+          },
+          201,
+          { "Cache-Control": "no-store" }
+        );
+      } catch (err) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          },
+          400
+        );
+      }
+    }
+
+    // Admin Editorial Incidents Studio Route: GET / PUT / POST /api/admin/incidents
+    if (url.pathname === "/api/admin/incidents") {
+      const actor = await resolveAdminActor(request, env);
+      if (!actor) {
+        return jsonResponse(
+          { ok: false, error: "Unauthorized: Admin authentication required" },
+          401
+        );
+      }
+
+      if (request.method === "GET") {
+        try {
+          const status = url.searchParams.get("status") || undefined;
+          const search = url.searchParams.get("search") || undefined;
+          const onlyRewritten =
+            url.searchParams.get("rewrittenOnly") === "true" ||
+            url.searchParams.get("rewrittenOnly") === "1" ||
+            url.searchParams.get("onlyRewritten") === "true";
+          const limit = url.searchParams.get("limit")
+            ? parseInt(url.searchParams.get("limit")!, 10)
+            : 100;
+
+          const data = await listAdminIncidentsAndTransforms(env.DB, {
+            status,
+            search,
+            onlyRewritten,
+            limit,
+          });
+
+          return jsonResponse(
+            {
+              ok: true,
+              ...data,
+              counts: {
+                ...data.counts,
+                rewritten: data.counts.titleRewritten,
+              },
+            },
+            200,
+            { "Cache-Control": "no-store" }
+          );
+        } catch (err) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            500
+          );
+        }
+      }
+
+      if (request.method === "PUT" || request.method === "POST") {
+        if (actor.role === "auditor") {
+          return jsonResponse(
+            { ok: false, error: "Forbidden: Auditor role is read-only." },
+            403
+          );
+        }
+
+        const clientIp =
+          request.headers.get("cf-connecting-ip") ||
+          request.headers.get("x-forwarded-for");
+
+        try {
+          const body = (await request.json()) as {
+            action?:
+              | "rewrite_title"
+              | "attach_image"
+              | "override_brief"
+              | "resynthesize"
+              | "update_transform";
+            id?: number | string;
+            incidentId?: number | string;
+            newTitle?: string;
+            autoDeescalate?: boolean;
+            restoreOriginal?: boolean;
+            imageUrl?: string | null;
+            imageAlt?: string | null;
+            imageCaption?: string | null;
+            imageSourceType?: ImageSourceType;
+            extractFromSource?: boolean;
+            generateSvgCard?: boolean;
+            executiveSummary?: string;
+            socraticBrief?: string;
+            noiseOverblown?: string;
+            structuralSignal?: string;
+            questions?: string[];
+            primaryTool?: JevWorkingToolKey;
+            secondaryTool?: JevWorkingToolKey;
+            sreFailureMode?: JevSreFailureModeKey;
+            status?:
+              | "dropped"
+              | "triaged"
+              | "synthesized"
+              | "QUARANTINED"
+              | "PENDING_RETRY";
+            isPinned?: boolean;
+            isHidden?: boolean;
+            isLeadPostMortem?: boolean;
+            leadPostMortemAnalysis?: string | null;
+            editorialNotes?: string | null;
+            transformKey?: string;
+            enabled?: boolean;
+            config?: Record<string, unknown>;
+            reason?: string;
+            actorEmail?: string;
+            actorRole?: string;
+            authMethod?: AuditAuthMethod;
+          };
+
+          const resolvedActor = {
+            actorEmail: body.actorEmail || actor.email,
+            actorRole: body.actorRole || actor.role,
+            authMethod: body.authMethod || actor.authMethod,
+            actorIpHash: await hashActorIp(clientIp),
+          };
+
+          const action = body.action || "override_brief";
+
+          if (action === "update_transform") {
+            if (!body.transformKey) {
+              return jsonResponse(
+                { ok: false, error: "Missing required transformKey" },
+                400
+              );
+            }
+            const transformResult = await updatePipelineTransform(
+              env.DB,
+              {
+                idOrKey: body.transformKey,
+                enabled: body.enabled,
+                config: body.config,
+                reason: body.reason,
+              },
+              resolvedActor
+            );
+            const data = await listAdminIncidentsAndTransforms(env.DB, {
+              limit: 100,
+            });
+            return jsonResponse(
+              {
+                ok: true,
+                ...transformResult,
+                ...data,
+                counts: {
+                  ...data.counts,
+                  rewritten: data.counts.titleRewritten,
+                },
+              },
+              200,
+              { "Cache-Control": "no-store" }
+            );
+          }
+
+          const rawId = body.incidentId ?? body.id ?? url.searchParams.get("id");
+          const incidentId = Number(
+            String(rawId || "").replace(/^d1-inc-/i, "")
+          );
+          if (!Number.isFinite(incidentId) || incidentId <= 0) {
+            return jsonResponse(
+              { ok: false, error: "Valid incidentId is required." },
+              400
+            );
+          }
+
+          if (action === "rewrite_title") {
+            const mode = body.restoreOriginal
+              ? "restore_original"
+              : body.autoDeescalate
+              ? "ai_deescalate"
+              : "manual_override";
+            const result = await rewriteIncidentTitle(
+              env.DB,
+              {
+                id: incidentId,
+                mode,
+                newTitle: body.newTitle,
+                reason: body.reason,
+                geminiApiKey: env.GEMINI_API_KEY,
+              },
+              resolvedActor
+            );
+            const data = await listAdminIncidentsAndTransforms(env.DB, {
+              limit: 100,
+            });
+            return jsonResponse(
+              {
+                ok: true,
+                ...result,
+                ...data,
+                counts: {
+                  ...data.counts,
+                  rewritten: data.counts.titleRewritten,
+                },
+              },
+              200,
+              { "Cache-Control": "no-store" }
+            );
+          }
+
+          if (action === "attach_image") {
+            const mode = body.generateSvgCard
+              ? "generated_card"
+              : body.extractFromSource
+              ? "rss_extracted"
+              : !body.imageUrl || body.imageSourceType === "none"
+              ? "remove"
+              : body.imageSourceType === "r2_upload" ||
+                body.imageSourceType === "upload" ||
+                body.imageUrl.startsWith("/media/")
+              ? "r2_upload"
+              : "external_url";
+
+            const result = await attachIncidentImage(
+              env.DB,
+              {
+                id: incidentId,
+                mode,
+                imageUrl: body.imageUrl,
+                imageAlt: body.imageAlt,
+                imageCaption: body.imageCaption,
+                reason: body.reason,
+                audioBucket: env.AUDIO_BUCKET,
+              },
+              resolvedActor
+            );
+            const data = await listAdminIncidentsAndTransforms(env.DB, {
+              limit: 100,
+            });
+            return jsonResponse(
+              {
+                ok: true,
+                ...result,
+                ...data,
+                counts: {
+                  ...data.counts,
+                  rewritten: data.counts.titleRewritten,
+                },
+              },
+              200,
+              { "Cache-Control": "no-store" }
+            );
+          }
+
+          if (action === "resynthesize") {
+            const beforeIncident = await getAdminIncidentById(
+              env.DB,
+              incidentId
+            );
+            if (!beforeIncident) {
+              return jsonResponse(
+                { ok: false, error: `Incident #${incidentId} not found.` },
+                404
+              );
+            }
+            const synthSummary = await runSynthesizePipeline({
+              db: env.DB,
+              geminiApiKey: env.GEMINI_API_KEY,
+              articleIds: [incidentId],
+              limit: 1,
+            });
+            const afterIncident = await getAdminIncidentById(
+              env.DB,
+              incidentId
+            );
+            const auditEntry = await appendAuditEntry(env.DB, {
+              actorEmail: resolvedActor.actorEmail,
+              actorRole: resolvedActor.actorRole,
+              authMethod: resolvedActor.authMethod,
+              actorIpHash: resolvedActor.actorIpHash,
+              actionType: "incident.override_brief",
+              targetType: "incident_article",
+              targetId: String(incidentId),
+              reason:
+                body.reason ||
+                `Re-triggered System-2 Gemini synthesis for incident #${incidentId}.`,
+              beforeState: beforeIncident.row,
+              afterState: afterIncident?.row ?? null,
+            });
+            const data = await listAdminIncidentsAndTransforms(env.DB, {
+              limit: 100,
+            });
+            return jsonResponse(
+              {
+                ok: true,
+                incident: afterIncident?.record,
+                synthesis: synthSummary,
+                auditEventId: auditEntry.eventId,
+                ...data,
+                counts: {
+                  ...data.counts,
+                  rewritten: data.counts.titleRewritten,
+                },
+              },
+              200,
+              { "Cache-Control": "no-store" }
+            );
+          }
+
+          // Default action: override_brief
+          const result = await overrideIncidentBriefAndClassification(
+            env.DB,
+            {
+              id: incidentId,
+              executiveSummary: body.executiveSummary,
+              socraticBrief: body.socraticBrief,
+              noiseOverblown: body.noiseOverblown,
+              structuralSignal: body.structuralSignal,
+              questions: body.questions,
+              primaryTool: body.primaryTool,
+              secondaryTool: body.secondaryTool,
+              sreFailureMode: body.sreFailureMode,
+              status: body.status,
+              isPinned: body.isPinned,
+              isHidden: body.isHidden,
+              isLeadPostMortem: body.isLeadPostMortem,
+              leadPostMortemAnalysis: body.leadPostMortemAnalysis,
+              editorialNotes: body.editorialNotes,
+              reason: body.reason,
+            },
+            resolvedActor
+          );
+          const data = await listAdminIncidentsAndTransforms(env.DB, {
+            limit: 100,
+          });
+          return jsonResponse(
+            {
+              ok: true,
+              ...result,
+              ...data,
+              counts: {
+                ...data.counts,
+                rewritten: data.counts.titleRewritten,
+              },
+            },
+            200,
+            { "Cache-Control": "no-store" }
+          );
+        } catch (err) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            400
+          );
+        }
+      }
+    }
+
+    // Admin Editorial Pipeline Transforms Route: GET / PUT / POST /api/admin/transforms
+    if (url.pathname === "/api/admin/transforms") {
+      const actor = await resolveAdminActor(request, env);
+      if (!actor) {
+        return jsonResponse(
+          { ok: false, error: "Unauthorized: Admin authentication required" },
+          401
+        );
+      }
+
+      if (request.method === "GET") {
+        try {
+          const transforms = await listPipelineTransforms(env.DB);
+          return jsonResponse(
+            {
+              ok: true,
+              transforms,
+            },
+            200,
+            { "Cache-Control": "no-store" }
+          );
+        } catch (err) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            500
+          );
+        }
+      }
+
+      if (request.method === "PUT" || request.method === "POST") {
+        if (actor.role === "auditor") {
+          return jsonResponse(
+            { ok: false, error: "Forbidden: Auditor role is read-only." },
+            403
+          );
+        }
+
+        const clientIp =
+          request.headers.get("cf-connecting-ip") ||
+          request.headers.get("x-forwarded-for");
+
+        try {
+          const body = (await request.json()) as {
+            transformKey?: string;
+            enabled?: boolean;
+            config?: Record<string, unknown>;
+            reason?: string;
+            actorEmail?: string;
+            actorRole?: string;
+            authMethod?: AuditAuthMethod;
+          };
+
+          if (!body.transformKey) {
+            return jsonResponse(
+              { ok: false, error: "Missing required transformKey" },
+              400
+            );
+          }
+
+          const result = await updatePipelineTransform(
+            env.DB,
+            {
+              idOrKey: body.transformKey,
+              enabled: body.enabled,
+              config: body.config,
+              reason: body.reason,
+            },
+            {
+              actorEmail: body.actorEmail || actor.email,
+              actorRole: body.actorRole || actor.role,
+              authMethod: body.authMethod || actor.authMethod,
+              actorIpHash: await hashActorIp(clientIp),
+            }
+          );
+
+          const transforms = await listPipelineTransforms(env.DB);
+          return jsonResponse(
+            {
+              ok: true,
+              ...result,
+              auditEventId: result.auditEntry.eventId,
+              transforms,
             },
             200,
             { "Cache-Control": "no-store" }

@@ -73,11 +73,55 @@ export function IncidentCard({
 
       <div className="relative z-10">
         {/* Metadata Header: Strictly {Date} • {Source} */}
-        <div className="pb-3 mb-3.5 border-b border-[#8A6D3B]/35 font-mono text-[11px] uppercase tracking-[0.14em] text-[#94A3B8]">
-          <span className="text-[#C5A059]">{datelinePrefix}</span>
-          <span className="mx-2 text-[#8A6D3B]">•</span>
-          <span className="text-[#F3EFE6]/90">{incident.sourceFeed}</span>
+        <div className="pb-3 mb-3.5 border-b border-[#8A6D3B]/35 font-mono text-[11px] uppercase tracking-[0.14em] text-[#94A3B8] flex items-center justify-between gap-2">
+          <div>
+            <span className="text-[#C5A059]">{datelinePrefix}</span>
+            <span className="mx-2 text-[#8A6D3B]">•</span>
+            <span className="text-[#F3EFE6]/90">{incident.sourceFeed}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {incident.isPinned && (
+              <span className="px-1.5 py-0.5 bg-[#C5A059]/15 border border-[#C5A059]/60 text-[#C5A059] text-[9px] tracking-widest">
+                PINNED
+              </span>
+            )}
+            {incident.titleRewritten && (
+              <span
+                className="px-1.5 py-0.5 bg-[#10B981]/10 border border-[#10B981]/45 text-[#10B981] text-[9px] tracking-wider cursor-help"
+                title={
+                  incident.originalTitle
+                    ? `Original Headline: "${incident.originalTitle}"${
+                        incident.titleRewriteReason
+                          ? ` — ${incident.titleRewriteReason}`
+                          : ""
+                      }`
+                    : "Title Neutralized · View Original in Audit Log"
+                }
+              >
+                Title Neutralized
+              </span>
+            )}
+          </div>
         </div>
+
+        {/* Attached Editorial / RSS / Uploaded Visual Media */}
+        {incident.imageUrl &&
+          incident.imageSourceType &&
+          incident.imageSourceType !== "none" &&
+          incident.imageSourceType !== "svg_card" && (
+            <Link
+              href={`/incidents/${incident.slug}`}
+              className="block mb-4 overflow-hidden border border-[#8A6D3B]/40 bg-[#0B0E14]"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={incident.imageUrl}
+                alt={incident.imageAlt || incident.title}
+                loading="lazy"
+                className="w-full h-44 object-cover opacity-90 group-hover:opacity-100 transition-opacity"
+              />
+            </Link>
+          )}
 
         {/* Crisp Serif Headline */}
         <Link
@@ -88,6 +132,17 @@ export function IncidentCard({
             {incident.title}
           </h3>
         </Link>
+
+        {incident.titleRewritten && incident.originalTitle && (
+          <div className="mt-2 px-2.5 py-1.5 bg-[#0B0E14]/80 border-l-2 border-[#10B981]/60 font-mono text-[10px] text-[#94A3B8]">
+            <span className="text-[#10B981] uppercase tracking-wider">
+              Title Neutralized · View Original in Audit Log:
+            </span>{" "}
+            <span className="italic text-[#F3EFE6]/75">
+              &ldquo;{incident.originalTitle}&rdquo;
+            </span>
+          </div>
+        )}
 
         {/* 2-Sentence Plain-English Factual Summary */}
         <p className="font-serif text-[15px] text-[#F3EFE6]/85 mt-3.5 leading-relaxed">

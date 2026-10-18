@@ -1,3 +1,13 @@
+import { appendAuditEntry } from "./audit";
+import {
+  deescalateHeadlineDeterministic,
+  deescalateHeadlineWithGemini,
+  ensureEditorialPipelineSchema,
+  getPipelineTransformMap,
+  HeadlineDeescalationResult,
+  ImageSourceType,
+  isAlarmistHeadline,
+} from "./editorial";
 import {
   D1DatabaseLike,
   D1PreparedStatementLike,
@@ -18,11 +28,21 @@ import {
 } from "../lib/sanitize";
 import { SreFailureModeId, WorkingToolId } from "../lib/taxonomy";
 
+export {
+  deescalateHeadlineDeterministic,
+  deescalateHeadlineWithGemini,
+  isAlarmistHeadline,
+};
+export type { HeadlineDeescalationResult };
+
 export interface TelemetryArticleRow {
   id: number;
   url_hash: string;
   source_feed: string;
   title: string;
+  original_title?: string | null;
+  title_rewritten?: number | null;
+  title_rewrite_reason?: string | null;
   source_url: string;
   raw_excerpt: string;
   published_at: string;
@@ -41,6 +61,13 @@ export interface TelemetryArticleRow {
     | "synthesized"
     | "QUARANTINED"
     | "PENDING_RETRY";
+  image_url?: string | null;
+  image_alt?: string | null;
+  image_caption?: string | null;
+  image_source_type?: ImageSourceType;
+  editorial_notes?: string | null;
+  is_pinned?: number | null;
+  is_hidden?: number | null;
 }
 
 export interface SocraticSynthesisOutput {
@@ -204,7 +231,10 @@ function parseToolProbabilitiesFromJevRaw(
   return fallback;
 }
 
-export function buildSystem2Prompt(row: TelemetryArticleRow): {
+export function buildSystem2Prompt(
+  row: TelemetryArticleRow,
+  customDirective?: string
+): {
   systemInstruction: string;
   userPrompt: string;
 } {
@@ -220,6 +250,11 @@ export function buildSystem2Prompt(row: TelemetryArticleRow): {
   const secondaryDisplay = WORKING_TOOL_DISPLAY_NAMES[secondaryTool];
   const sreDisplay = SRE_FAILURE_DISPLAY_NAMES[row.sre_failure_mode];
 
+  const directiveBlock =
+    customDirective && customDirective.trim().length > 0
+      ? `\n\n3. CUSTOM SYSTEM-2 EDITORIAL DIRECTIVE:\n   ${customDirective.trim()}`
+      : "";
+
   const systemInstruction = `You are the Post-Incident Review (PIR) editorial synthesizer for Change Advisory Board (thecabcall.com), analyzing current events through Site Reliability Engineering (SRE) and the Working Tools of Freemasonry.
 
 HARD GOVERNANCE CONSTRAINTS (NON-NEGOTIABLE):
@@ -233,7 +268,7 @@ HARD GOVERNANCE CONSTRAINTS (NON-NEGOTIABLE):
    - NEVER mention internal classifier names ("Jev", "TypeSafe Jev", "jev-1.14.0", "System-1", "ingestion gate") or raw decimal weights ("0.61 primary weight") anywhere in your output.
    - NEVER use Mad-Libs templates like "{Source} reports on '{Headline}', exposing an active operational friction point...".
    - Do NOT recite dictionary or monitorial definitions of what a Square, Plumb, Level, Gauge, Gavel, or Trowel is.
-   - Zero partisan punditry, zero moralizing conclusions, zero AI clichés ("delve", "testament", "stark reminder", "wake-up call", "underscores").`;
+   - Zero partisan punditry, zero moralizing conclusions, zero AI clichés ("delve", "testament", "stark reminder", "wake-up call", "underscores").${directiveBlock}`;
 
   const userPrompt = `Synthesize a Post-Incident Review brief for the following source dispatch:
 
@@ -392,6 +427,7 @@ export async function callGeminiStructuredSynthesis(
   options?: {
     fetchImpl?: typeof fetch;
     synthesisOverride?: unknown;
+    customDirective?: string;
   }
 ): Promise<SynthesisAttemptOutcome> {
   if (options?.synthesisOverride !== undefined) {
@@ -420,7 +456,10 @@ export async function callGeminiStructuredSynthesis(
     };
   }
 
-  const { systemInstruction, userPrompt } = buildSystem2Prompt(row);
+  const { systemInstruction, userPrompt } = buildSystem2Prompt(
+    row,
+    options?.customDirective
+  );
   const fetchFn = options?.fetchImpl ?? fetch;
 
   const candidateModels = [
@@ -523,6 +562,9 @@ export const TELEMETRY_ARTICLES_SYNTHESIS_COLUMNS = `
   url_hash,
   source_feed,
   title,
+  original_title,
+  title_rewritten,
+  title_rewrite_reason,
   source_url,
   raw_excerpt,
   published_at,
@@ -535,7 +577,14 @@ export const TELEMETRY_ARTICLES_SYNTHESIS_COLUMNS = `
   jev_raw_json,
   socratic_brief,
   questions_json,
-  status
+  status,
+  image_url,
+  image_alt,
+  image_caption,
+  image_source_type,
+  editorial_notes,
+  is_pinned,
+  is_hidden
 `;
 
 /**
@@ -556,6 +605,48 @@ export async function runSynthesizePipeline(options: {
   const startMs = Date.now();
   const startedAt = new Date().toISOString();
   const limit = options.limit ?? 5;
+
+  await ensureEditorialPipelineSchema(options.db);
+  const transformMap = await getPipelineTransformMap(options.db).catch(() => ({
+    auto_deescalate_titles: {
+      transformKey: "auto_deescalate_titles",
+      enabled: true,
+      config: { mode: "alarmist_only" },
+      updatedBy: "system_bootstrap",
+      updatedAt: startedAt,
+    },
+    auto_extract_rss_images: {
+      transformKey: "auto_extract_rss_images",
+      enabled: true,
+      config: {},
+      updatedBy: "system_bootstrap",
+      updatedAt: startedAt,
+    },
+    auto_generate_fallback_cards: {
+      transformKey: "auto_generate_fallback_cards",
+      enabled: true,
+      config: {},
+      updatedBy: "system_bootstrap",
+      updatedAt: startedAt,
+    },
+    custom_system2_directive: {
+      transformKey: "custom_system2_directive",
+      enabled: true,
+      config: { directive: "" },
+      updatedBy: "system_bootstrap",
+      updatedAt: startedAt,
+    },
+  }));
+
+  const autoDeescalateEnabled =
+    transformMap.auto_deescalate_titles?.enabled ?? true;
+  const autoFallbackCardEnabled =
+    transformMap.auto_generate_fallback_cards?.enabled ?? true;
+  const customDirective =
+    transformMap.custom_system2_directive?.enabled &&
+    typeof transformMap.custom_system2_directive?.config?.directive === "string"
+      ? String(transformMap.custom_system2_directive.config.directive)
+      : "";
 
   let rows: TelemetryArticleRow[] = [];
 
@@ -616,19 +707,54 @@ export async function runSynthesizePipeline(options: {
         };
       }
 
+      let activeTitle = row.title;
+      const originalTitle = row.original_title || row.title;
+      let titleRewritten = Number(row.title_rewritten ?? 0) === 1 ? 1 : 0;
+      let titleRewriteReason = row.title_rewrite_reason || null;
+
+      if (
+        autoDeescalateEnabled &&
+        !titleRewritten &&
+        isAlarmistHeadline(row.title)
+      ) {
+        const deesc = await deescalateHeadlineWithGemini(
+          row.title,
+          row.raw_excerpt,
+          options.geminiApiKey,
+          {
+            fetchImpl: options.fetchImpl,
+            forceRewrite: true,
+          }
+        );
+        if (deesc.changed && deesc.neutralTitle !== row.title) {
+          activeTitle = deesc.neutralTitle;
+          titleRewritten = 1;
+          titleRewriteReason = deesc.rationale;
+        }
+      }
+
+      const rowForSynthesis: TelemetryArticleRow = {
+        ...row,
+        title: activeTitle,
+        original_title: originalTitle,
+        title_rewritten: titleRewritten,
+        title_rewrite_reason: titleRewriteReason,
+      };
+
       const outcome = await callGeminiStructuredSynthesis(
-        row,
+        rowForSynthesis,
         options.geminiApiKey,
         {
           fetchImpl: options.fetchImpl,
           synthesisOverride: options.synthesisOverride,
+          customDirective,
         }
       );
 
       if (!outcome.ok) {
         return {
           ok: false as const,
-          row,
+          row: rowForSynthesis,
           disposition: outcome.disposition,
           reason: outcome.reason,
         };
@@ -636,7 +762,9 @@ export async function runSynthesizePipeline(options: {
 
       return {
         ok: true as const,
-        row,
+        row: rowForSynthesis,
+        previousTitle: row.title,
+        headlineChanged: activeTitle !== row.title,
         synthesis: outcome.synthesis,
         modelUsed: outcome.modelUsed,
       };
@@ -655,17 +783,100 @@ export async function runSynthesizePipeline(options: {
         synthesized_at: new Date().toISOString(),
       });
 
+      const hasExistingImage =
+        typeof res.row.image_url === "string" &&
+        res.row.image_url.trim().length > 0;
+      const imageUrl = hasExistingImage
+        ? res.row.image_url!
+        : autoFallbackCardEnabled
+        ? `/media/card-d1-${res.row.id}.svg`
+        : null;
+      const imageSourceType: ImageSourceType = hasExistingImage
+        ? (res.row.image_source_type as ImageSourceType) || "rss"
+        : autoFallbackCardEnabled
+        ? "svg_card"
+        : "none";
+      const imageAlt = hasExistingImage
+        ? res.row.image_alt || res.row.title
+        : autoFallbackCardEnabled
+        ? `${WORKING_TOOL_DISPLAY_NAMES[res.row.primary_tool]} · ${SRE_FAILURE_DISPLAY_NAMES[res.row.sre_failure_mode]} telemetry blueprint for ${res.row.title}`
+        : null;
+      const imageCaption = hasExistingImage
+        ? res.row.image_caption || null
+        : autoFallbackCardEnabled
+        ? `Blueprint Card · ${WORKING_TOOL_DISPLAY_NAMES[res.row.primary_tool]} / ${SRE_FAILURE_DISPLAY_NAMES[res.row.sre_failure_mode]}`
+        : null;
+
       updateStatements.push(
         options.db
           .prepare(
             `UPDATE telemetry_articles
-             SET socratic_brief = ?,
+             SET title = ?,
+                 original_title = ?,
+                 title_rewritten = ?,
+                 title_rewrite_reason = ?,
+                 socratic_brief = ?,
                  questions_json = ?,
+                 image_url = ?,
+                 image_alt = ?,
+                 image_caption = ?,
+                 image_source_type = ?,
                  status = 'synthesized'
              WHERE id = ?`
           )
-          .bind(res.synthesis.socratic_brief, questionsPayload, res.row.id)
+          .bind(
+            res.row.title,
+            res.row.original_title || res.row.title,
+            res.row.title_rewritten ?? 0,
+            res.row.title_rewrite_reason ?? null,
+            res.synthesis.socratic_brief,
+            questionsPayload,
+            imageUrl,
+            imageAlt,
+            imageCaption,
+            imageSourceType,
+            res.row.id
+          )
       );
+
+      if (res.headlineChanged) {
+        await appendAuditEntry(options.db, {
+          actorEmail: "system_pipeline@thecabcall.com",
+          authMethod: "system_bootstrap",
+          actionType: "incident.rewrite_title",
+          targetType: "incident_article",
+          targetId: String(res.row.id),
+          reason:
+            res.row.title_rewrite_reason ||
+            "Automated System-2 de-alarmist headline rewrite.",
+          beforeState: {
+            id: res.row.id,
+            title: res.previousTitle,
+            original_title: res.row.original_title || res.previousTitle,
+            title_rewritten: 0,
+          },
+          afterState: {
+            id: res.row.id,
+            title: res.row.title,
+            original_title: res.row.original_title || res.previousTitle,
+            title_rewritten: 1,
+            title_rewrite_reason: res.row.title_rewrite_reason,
+          },
+          replayCommand: {
+            type: "d1.upsert_row",
+            table: "telemetry_articles",
+            primaryKeyColumn: "id",
+            primaryKeyValue: res.row.id,
+            row: {
+              id: res.row.id,
+              title: res.row.title,
+              original_title: res.row.original_title || res.previousTitle,
+              title_rewritten: 1,
+              title_rewrite_reason: res.row.title_rewrite_reason,
+            },
+          },
+        }).catch(() => {});
+      }
 
       articles.push({
         id: res.row.id,

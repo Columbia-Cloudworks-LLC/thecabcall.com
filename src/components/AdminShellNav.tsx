@@ -212,7 +212,10 @@ export function AdminShellNav({
             {ADMIN_NAV_TABS.map((tab) => {
               const isActive = tab.exact
                 ? pathname === tab.href
-                : pathname === tab.href || pathname.startsWith(`${tab.href}/`);
+                : pathname === tab.href ||
+                  pathname.startsWith(`${tab.href}/`) ||
+                  (tab.href === "/admin/incidents" &&
+                    pathname.startsWith("/admin/transforms"));
 
               return (
                 <Link

@@ -18,6 +18,9 @@ export interface IncidentArticle {
   urlHash: string;
   sourceFeed: string; // e.g. "REUTERS", "ARS TECHNICA", "AP NEWS", "HACKER NEWS", "FEDERAL REGISTER"
   title: string;
+  originalTitle?: string;
+  titleRewritten?: boolean;
+  titleRewriteReason?: string;
   sourceUrl: string;
   publishedAt: string;
   ingestedAt: string;
@@ -35,6 +38,23 @@ export interface IncidentArticle {
   classifierLatencyMs: number;
   isLeadPostMortem?: boolean; // Only render full-width Lead Post-Mortem card when explicitly flagged
   leadPostMortemAnalysis?: string; // Bespoke multi-paragraph analysis required for Lead Post-Mortem slot
+  imageUrl?: string;
+  imageAlt?: string;
+  imageCaption?: string;
+  imageSourceType?:
+    | "rss"
+    | "og"
+    | "upload"
+    | "svg_card"
+    | "none"
+    | "rss_extracted"
+    | "r2_upload"
+    | "external_url"
+    | "generated_card"
+    | null;
+  editorialNotes?: string;
+  isPinned?: boolean;
+  isHidden?: boolean;
 }
 
 export interface WeeklyDocketItem {

@@ -246,18 +246,72 @@ export function IncidentBriefClient({
         {/* RIGHT COLUMN (8 cols): Structural Inspection Main Column */}
         <div className="lg:col-span-8 space-y-8">
           {/* Article Title Header (flows directly into Section I without introductory blockquote) */}
-          <div className="tracing-board-frame p-6 sm:p-8">
-            <div className="flex flex-wrap items-center gap-2 font-mono text-xs text-[#C5A059] mb-3">
-              <span>STRUCTURAL INSPECTION</span>
-              <span>•</span>
-              <span>{incident.sourceFeed}</span>
-              <span>•</span>
-              <span>SECONDARY TOOL: {incident.secondaryTool.toUpperCase()}</span>
+          <div className="tracing-board-frame p-6 sm:p-8 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-xs text-[#C5A059]">
+              <div className="flex flex-wrap items-center gap-2">
+                <span>STRUCTURAL INSPECTION</span>
+                <span>•</span>
+                <span>{incident.sourceFeed}</span>
+                <span>•</span>
+                <span>SECONDARY TOOL: {incident.secondaryTool.toUpperCase()}</span>
+              </div>
+              {incident.isPinned && (
+                <span className="px-2 py-0.5 bg-[#C5A059]/15 border border-[#C5A059]/60 text-[#C5A059] text-[10px] tracking-widest">
+                  PINNED DISPATCH
+                </span>
+              )}
             </div>
 
             <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl text-[#F3EFE6] leading-tight">
               {incident.title}
             </h1>
+
+            {incident.titleRewritten && (
+              <div className="p-3.5 bg-[#0B0E14] border border-[#10B981]/50 space-y-1.5 font-mono text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[#10B981] font-semibold uppercase tracking-wider">
+                    Title Neutralized · View Original in Audit Log
+                  </span>
+                  <span className="text-[10px] text-[#94A3B8]">
+                    EPISTEMIC DE-ESCALATION RECORDED
+                  </span>
+                </div>
+                {incident.originalTitle && (
+                  <p className="font-serif text-sm text-[#F3EFE6]/85">
+                    <span className="font-mono text-[11px] uppercase text-[#94A3B8] mr-1.5">
+                      Original Source Headline:
+                    </span>
+                    <span className="italic">&ldquo;{incident.originalTitle}&rdquo;</span>
+                  </p>
+                )}
+                {incident.titleRewriteReason && (
+                  <p className="font-mono text-[11px] text-[#94A3B8]">
+                    Rationale: {incident.titleRewriteReason}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {incident.imageUrl && incident.imageSourceType !== "none" && (
+              <figure className="pt-2">
+                <div className="overflow-hidden border border-[#8A6D3B]/50 bg-[#0B0E14]">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={incident.imageUrl}
+                    alt={incident.imageAlt || incident.title}
+                    className="w-full max-h-[380px] object-cover"
+                  />
+                </div>
+                {incident.imageCaption && (
+                  <figcaption className="mt-2 font-mono text-[11px] text-[#94A3B8] flex items-center justify-between gap-2">
+                    <span>{incident.imageCaption}</span>
+                    <span className="uppercase text-[10px] text-[#C5A059]/80">
+                      [{incident.imageSourceType || "card"}]
+                    </span>
+                  </figcaption>
+                )}
+              </figure>
+            )}
           </div>
 
           {/* Section I: What Happened (The Plain Facts) (Strictly 1 concise factual paragraph) */}

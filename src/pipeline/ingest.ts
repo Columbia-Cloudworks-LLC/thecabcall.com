@@ -4,6 +4,11 @@ import {
   AuditLedgerEntry,
 } from "./audit";
 import {
+  ensureEditorialPipelineSchema,
+  extractImageFromRssBlock,
+  getPipelineTransformMap,
+} from "./editorial";
+import {
   buildDroppedByFilterJevResult,
   evaluateArticleWithJev,
   JevDispositionStatus,
@@ -201,6 +206,9 @@ export interface ParsedRssItem {
   sourceUrl: string;
   rawExcerpt: string;
   publishedAt: string;
+  extractedImageUrl?: string | null;
+  extractedImageAlt?: string | null;
+  extractedImageCaption?: string | null;
 }
 
 export interface FeedTestPreviewResult {
@@ -2065,6 +2073,8 @@ export async function parseRssFeedItems(
       }
     }
 
+    const extractedImage = extractImageFromRssBlock(block, title);
+
     items.push({
       urlHash,
       guid,
@@ -2074,6 +2084,9 @@ export async function parseRssFeedItems(
       sourceUrl,
       rawExcerpt,
       publishedAt,
+      extractedImageUrl: extractedImage?.imageUrl || null,
+      extractedImageAlt: extractedImage?.imageAlt || null,
+      extractedImageCaption: extractedImage?.imageCaption || null,
     });
   }
 
@@ -2314,11 +2327,17 @@ export async function runD1IngestPipeline(options: {
 }): Promise<IngestRunSummary> {
   const startedAt = new Date().toISOString();
 
-  await ensureFeedsAndFiltersTables(options.db);
-  const [thresholds, activeFilters] = await Promise.all([
+  await Promise.all([
+    ensureFeedsAndFiltersTables(options.db),
+    ensureEditorialPipelineSchema(options.db),
+  ]);
+  const [thresholds, activeFilters, transformsMap] = await Promise.all([
     getSystemThresholds(options.db),
     listIngestFilters(options.db, { enabledOnly: true }),
+    getPipelineTransformMap(options.db),
   ]);
+  const autoExtractRssImages =
+    transformsMap?.auto_extract_rss_images?.enabled !== false;
 
   const maxNetNew = options.maxNetNew ?? thresholds.maxNetNewPerRun ?? 10;
   const itemsPerFeed =
@@ -2412,13 +2431,25 @@ export async function runD1IngestPipeline(options: {
   // Persist raw feed records with status = 'PENDING_RETRY' and ON CONFLICT(url_hash) DO NOTHING
   // BEFORE calling jev-1.14.0 so transient classification failures never drop ingested feed records.
   if (candidateItems.length > 0) {
-    const rawInsertStatements = candidateItems.map((item) =>
-      options.db
+    const rawInsertStatements = candidateItems.map((item) => {
+      const attachImageUrl =
+        autoExtractRssImages && item.extractedImageUrl
+          ? item.extractedImageUrl
+          : null;
+      const attachImageAlt =
+        attachImageUrl ? item.extractedImageAlt || item.title : null;
+      const attachImageCaption =
+        attachImageUrl ? item.extractedImageCaption || null : null;
+      const attachImageSourceType = attachImageUrl ? "rss_extracted" : null;
+
+      return options.db
         .prepare(
           `INSERT INTO telemetry_articles (
             url_hash,
             source_feed,
             title,
+            original_title,
+            title_rewritten,
             source_url,
             raw_excerpt,
             published_at,
@@ -2428,19 +2459,28 @@ export async function runD1IngestPipeline(options: {
             secondary_tool,
             sre_failure_mode,
             jev_raw_json,
-            status
-          ) VALUES (?, ?, ?, ?, ?, ?, 0, 0, 'square', 'twenty_four_inch_gauge', 'configuration_drift', '{}', 'PENDING_RETRY')
+            status,
+            image_url,
+            image_alt,
+            image_caption,
+            image_source_type
+          ) VALUES (?, ?, ?, ?, 0, ?, ?, ?, 0, 0, 'square', 'twenty_four_inch_gauge', 'configuration_drift', '{}', 'PENDING_RETRY', ?, ?, ?, ?)
           ON CONFLICT(url_hash) DO NOTHING`
         )
         .bind(
           item.urlHash,
           item.sourceFeed,
           item.title,
+          item.title,
           item.sourceUrl,
           item.rawExcerpt,
-          item.publishedAt
-        )
-    );
+          item.publishedAt,
+          attachImageUrl,
+          attachImageAlt,
+          attachImageCaption,
+          attachImageSourceType
+        );
+    });
     await executeD1Batch(options.db, rawInsertStatements);
   }
 

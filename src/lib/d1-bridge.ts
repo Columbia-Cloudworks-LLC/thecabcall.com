@@ -270,6 +270,24 @@ export function mapD1RowToIncidentArticle(
 
   const incidentNumber = 2000 + row.id;
 
+  const hasImageUrl =
+    typeof row.image_url === "string" && row.image_url.trim().length > 0;
+  const effectiveImageUrl = hasImageUrl
+    ? row.image_url!.trim()
+    : `/media/card-d1-${row.id}.svg`;
+  const effectiveImageSourceType: IncidentArticle["imageSourceType"] =
+    hasImageUrl
+      ? (row.image_source_type as IncidentArticle["imageSourceType"]) || "rss"
+      : "svg_card";
+  const effectiveImageAlt =
+    typeof row.image_alt === "string" && row.image_alt.trim().length > 0
+      ? row.image_alt.trim()
+      : `${primaryTool} · ${sreFailureMode} telemetry blueprint for ${row.title}`;
+  const effectiveImageCaption =
+    typeof row.image_caption === "string" && row.image_caption.trim().length > 0
+      ? row.image_caption.trim()
+      : `Blueprint Card · ${primaryTool} / ${sreFailureMode}`;
+
   const candidate: IncidentArticle = {
     id: `d1-inc-${row.id}`,
     incidentCode: `#CAB-2026-${incidentNumber}`,
@@ -277,6 +295,16 @@ export function mapD1RowToIncidentArticle(
     urlHash: row.url_hash,
     sourceFeed: row.source_feed.toUpperCase(),
     title: row.title,
+    originalTitle:
+      typeof row.original_title === "string" && row.original_title.trim().length > 0
+        ? row.original_title.trim()
+        : row.title,
+    titleRewritten: Number(row.title_rewritten ?? 0) === 1,
+    titleRewriteReason:
+      typeof row.title_rewrite_reason === "string" &&
+      row.title_rewrite_reason.trim().length > 0
+        ? row.title_rewrite_reason.trim()
+        : undefined,
     sourceUrl: row.source_url,
     publishedAt: row.published_at,
     ingestedAt: row.ingested_at || row.published_at,
@@ -299,6 +327,16 @@ export function mapD1RowToIncidentArticle(
     classifierLatencyMs: 112 + (row.id % 37),
     isLeadPostMortem: storedPayload.isLeadPostMortem,
     leadPostMortemAnalysis: storedPayload.leadPostMortemAnalysis || undefined,
+    imageUrl: effectiveImageUrl,
+    imageAlt: effectiveImageAlt,
+    imageCaption: effectiveImageCaption,
+    imageSourceType: effectiveImageSourceType,
+    editorialNotes:
+      typeof row.editorial_notes === "string" && row.editorial_notes.trim().length > 0
+        ? row.editorial_notes.trim()
+        : undefined,
+    isPinned: Number(row.is_pinned ?? 0) === 1,
+    isHidden: Number(row.is_hidden ?? 0) === 1,
   };
 
   if (!isRenderablePublicIncident(candidate)) {
@@ -681,6 +719,9 @@ const TELEMETRY_ARTICLES_SNAPSHOT_COLUMNS = `
   url_hash,
   source_feed,
   title,
+  original_title,
+  title_rewritten,
+  title_rewrite_reason,
   source_url,
   raw_excerpt,
   published_at,
@@ -693,7 +734,14 @@ const TELEMETRY_ARTICLES_SNAPSHOT_COLUMNS = `
   jev_raw_json,
   socratic_brief,
   questions_json,
-  status
+  status,
+  image_url,
+  image_alt,
+  image_caption,
+  image_source_type,
+  editorial_notes,
+  is_pinned,
+  is_hidden
 `;
 
 const EPISODES_SNAPSHOT_COLUMNS = `
@@ -747,6 +795,9 @@ function mapPublicIncidentDtoToIncidentArticle(
     urlHash: dto.slug,
     sourceFeed: dto.sourceFeed,
     title: dto.title,
+    originalTitle: dto.originalTitle || dto.title,
+    titleRewritten: Boolean(dto.titleRewritten),
+    titleRewriteReason: dto.titleRewriteReason,
     sourceUrl: dto.sourceUrl,
     publishedAt: dto.publishedAt,
     ingestedAt: dto.publishedAt,
@@ -767,6 +818,11 @@ function mapPublicIncidentDtoToIncidentArticle(
     classifierLatencyMs: 118,
     isLeadPostMortem: dto.isLeadPostMortem,
     leadPostMortemAnalysis: dto.leadPostMortemAnalysis,
+    imageUrl: dto.imageUrl,
+    imageAlt: dto.imageAlt,
+    imageCaption: dto.imageCaption,
+    imageSourceType: dto.imageSourceType,
+    isPinned: Boolean(dto.isPinned),
   };
 }
 
@@ -804,7 +860,7 @@ function buildSnapshotFromRows(
   source: "remote-worker" | "local-sqlite"
 ): LocalD1Snapshot {
   const synthesizedCount = allArticleRows.filter(
-    (r) => r.status === "synthesized"
+    (r) => r.status === "synthesized" && Number(r.is_hidden ?? 0) !== 1
   ).length;
   const triagedCount = allArticleRows.filter(
     (r) => r.status === "triaged"
@@ -813,10 +869,14 @@ function buildSnapshotFromRows(
     (r) => r.status === "dropped"
   ).length;
 
-  // Strictly filter out QUARANTINED, PENDING_RETRY, dropped, and un-synthesized rows
-  const visibleRows = allArticleRows.filter(
-    (r) => r.status === "synthesized"
-  );
+  // Strictly filter out QUARANTINED, PENDING_RETRY, dropped, hidden, and un-synthesized rows
+  const visibleRows = allArticleRows
+    .filter((r) => r.status === "synthesized" && Number(r.is_hidden ?? 0) !== 1)
+    .sort(
+      (a, b) =>
+        Number(b.is_pinned ?? 0) - Number(a.is_pinned ?? 0) ||
+        new Date(b.published_at).getTime() - new Date(a.published_at).getTime()
+    );
   const incidents: IncidentArticle[] = [];
 
   for (const row of visibleRows) {
@@ -874,12 +934,25 @@ function ensureLocalSqliteHardenedSchema(db: {
   exec(sql: string): void;
 }): void {
   if (localSchemaHardened) return;
-  try {
-    db.exec(
-      "ALTER TABLE episodes ADD COLUMN status TEXT NOT NULL DEFAULT 'PUBLISHED';"
-    );
-  } catch {
-    // Column already exists
+  const alterStmts = [
+    "ALTER TABLE episodes ADD COLUMN status TEXT NOT NULL DEFAULT 'PUBLISHED';",
+    "ALTER TABLE telemetry_articles ADD COLUMN original_title TEXT;",
+    "ALTER TABLE telemetry_articles ADD COLUMN title_rewritten INTEGER NOT NULL DEFAULT 0;",
+    "ALTER TABLE telemetry_articles ADD COLUMN title_rewrite_reason TEXT;",
+    "ALTER TABLE telemetry_articles ADD COLUMN image_url TEXT;",
+    "ALTER TABLE telemetry_articles ADD COLUMN image_alt TEXT;",
+    "ALTER TABLE telemetry_articles ADD COLUMN image_caption TEXT;",
+    "ALTER TABLE telemetry_articles ADD COLUMN image_source_type TEXT NOT NULL DEFAULT 'none';",
+    "ALTER TABLE telemetry_articles ADD COLUMN editorial_notes TEXT;",
+    "ALTER TABLE telemetry_articles ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0;",
+    "ALTER TABLE telemetry_articles ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0;",
+  ];
+  for (const stmt of alterStmts) {
+    try {
+      db.exec(stmt);
+    } catch {
+      // Column already exists
+    }
   }
   try {
     db.exec(`

@@ -29,6 +29,9 @@ export interface PublicIncidentDto {
   slug: string;
   sourceFeed: string;
   title: string;
+  originalTitle?: string;
+  titleRewritten?: boolean;
+  titleRewriteReason?: string;
   sourceUrl: string;
   publishedAt: string;
   domainSector: DomainSectorId;
@@ -44,6 +47,21 @@ export interface PublicIncidentDto {
   questions: [string, string];
   isLeadPostMortem?: boolean;
   leadPostMortemAnalysis?: string;
+  imageUrl?: string;
+  imageAlt?: string;
+  imageCaption?: string;
+  imageSourceType?:
+    | "rss"
+    | "og"
+    | "upload"
+    | "svg_card"
+    | "none"
+    | "rss_extracted"
+    | "r2_upload"
+    | "external_url"
+    | "generated_card"
+    | null;
+  isPinned?: boolean;
 }
 
 /**
@@ -312,6 +330,9 @@ export function projectPublicIncidentDto(
   inc: IncidentArticle | PublicIncidentDto | null | undefined
 ): PublicIncidentDto | null {
   if (!inc) return null;
+  if ("isHidden" in inc && inc.isHidden) {
+    return null;
+  }
   const mapped = mapDtoToCraftLexicon(inc);
   if (!isRenderablePublicIncident(mapped)) {
     return null;
@@ -344,6 +365,29 @@ export function projectPublicIncidentDto(
     },
     questions: [q1, q2],
   };
+
+  if (mapped.originalTitle) {
+    dto.originalTitle = sanitizeEditorialText(mapped.originalTitle);
+  }
+  if (mapped.titleRewritten) {
+    dto.titleRewritten = true;
+  }
+  if (mapped.titleRewriteReason) {
+    dto.titleRewriteReason = sanitizeEditorialText(mapped.titleRewriteReason);
+  }
+  if (mapped.imageUrl) {
+    dto.imageUrl = mapped.imageUrl.trim();
+    dto.imageAlt = mapped.imageAlt
+      ? sanitizeEditorialText(mapped.imageAlt)
+      : dto.title;
+    if (mapped.imageCaption) {
+      dto.imageCaption = sanitizeEditorialText(mapped.imageCaption);
+    }
+    dto.imageSourceType = mapped.imageSourceType || "svg_card";
+  }
+  if (mapped.isPinned) {
+    dto.isPinned = true;
+  }
 
   if (mapped.isLeadPostMortem && mapped.leadPostMortemAnalysis) {
     dto.isLeadPostMortem = true;
