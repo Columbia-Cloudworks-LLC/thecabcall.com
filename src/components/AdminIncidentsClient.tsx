@@ -1068,13 +1068,14 @@ export function AdminIncidentsClient({
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    <Link
-                      href={`/incidents/${selectedIncident.slug}`}
+                    <a
+                      href={`https://thecabcall.com/incidents/${selectedIncident.slug}`}
                       target="_blank"
+                      rel="noopener noreferrer"
                       className="px-3 py-1.5 rounded border border-[#263147] hover:border-[#C5A059] bg-[#0B0E14] font-mono text-xs text-[#C5A059]"
                     >
                       Public Brief ↗
-                    </Link>
+                    </a>
                     <a
                       href={selectedIncident.sourceUrl}
                       target="_blank"

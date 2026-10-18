@@ -102,13 +102,25 @@ export function AdminShellNav({
   const router = useRouter();
 
   // Do not wrap /admin/login with the authenticated shell header
-  if (pathname === "/admin/login" || pathname.startsWith("/admin/login/")) {
+  if (
+    pathname === "/login" ||
+    pathname.startsWith("/login/") ||
+    pathname === "/admin/login" ||
+    pathname.startsWith("/admin/login/")
+  ) {
     return <>{children}</>;
   }
 
   if (!actor) {
     return <>{children}</>;
   }
+
+  const normalizedAdminPath =
+    pathname === "/"
+      ? "/admin"
+      : pathname.startsWith("/admin")
+      ? pathname
+      : `/admin${pathname}`;
 
   async function handleSignOut() {
     try {
@@ -135,9 +147,13 @@ export function AdminShellNav({
             {/* Left: Console Title & Cryptographic Chain Seal */}
             <div className="space-y-1">
               <div className="flex flex-wrap items-center gap-2.5">
-                <span className="font-mono text-[11px] uppercase tracking-widest text-[#C5A059] font-semibold">
+                <a
+                  href="https://thecabcall.com"
+                  className="font-mono text-[11px] uppercase tracking-widest text-[#C5A059] hover:text-[#E5C178] font-semibold transition-colors"
+                  title="Return to Change Advisory Board (thecabcall.com)"
+                >
                   THE CAB CALL // SRE GOVERNANCE &amp; EDITORIAL COMMAND CENTER
-                </span>
+                </a>
 
                 <Link
                   href="/admin/audit"
@@ -187,12 +203,12 @@ export function AdminShellNav({
                 </span>
               </div>
 
-              <Link
-                href="/"
+              <a
+                href="https://thecabcall.com"
                 className="px-3 py-1.5 rounded border border-[#263147] hover:border-[#C5A059] text-xs font-mono text-[#D6D1C7] transition-colors"
               >
                 Public Site ↗
-              </Link>
+              </a>
 
               <button
                 type="button"
@@ -211,11 +227,11 @@ export function AdminShellNav({
           >
             {ADMIN_NAV_TABS.map((tab) => {
               const isActive = tab.exact
-                ? pathname === tab.href
-                : pathname === tab.href ||
-                  pathname.startsWith(`${tab.href}/`) ||
+                ? normalizedAdminPath === tab.href
+                : normalizedAdminPath === tab.href ||
+                  normalizedAdminPath.startsWith(`${tab.href}/`) ||
                   (tab.href === "/admin/incidents" &&
-                    pathname.startsWith("/admin/transforms"));
+                    normalizedAdminPath.startsWith("/admin/transforms"));
 
               return (
                 <Link

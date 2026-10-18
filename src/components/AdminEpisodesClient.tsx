@@ -601,15 +601,16 @@ export function AdminEpisodesClient({
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            <Link
-              href="/archive"
+            <a
+              href="https://thecabcall.com/archive"
               target="_blank"
+              rel="noopener noreferrer"
               className="px-3.5 py-2 rounded border border-[#263147] hover:border-[#C5A059] bg-[#0B0E14] text-xs font-mono text-[#D6D1C7] transition-colors"
             >
               Public /archive ↗
-            </Link>
+            </a>
             <a
-              href="/feed.xml"
+              href="https://thecabcall.com/feed.xml"
               target="_blank"
               rel="noopener noreferrer"
               className="px-3.5 py-2 rounded border border-[#263147] hover:border-[#C5A059] bg-[#0B0E14] text-xs font-mono text-[#D6D1C7] transition-colors"

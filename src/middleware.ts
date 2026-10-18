@@ -42,6 +42,32 @@ export function middleware(req: NextRequest) {
 
   // 2. On admin.thecabcall.com, serve the Admin Console at root (/, /login, /users, /audit, etc.)
   if (isAdminSubdomain) {
+    // Allow static public assets (e.g. brand icons, images, media) through untouched
+    if (
+      pathname.startsWith("/images/") ||
+      pathname.startsWith("/media/") ||
+      /\.(?:png|jpg|jpeg|gif|webp|svg|ico|xml|json|txt|mp3)$/i.test(pathname)
+    ) {
+      return NextResponse.next();
+    }
+
+    // Redirect public-only broadsheet routes back to https://thecabcall.com
+    if (
+      pathname === "/knowledge-graph" ||
+      pathname.startsWith("/knowledge-graph/") ||
+      pathname === "/archive" ||
+      pathname.startsWith("/archive/") ||
+      pathname === "/rubric" ||
+      pathname.startsWith("/rubric/") ||
+      pathname === "/status" ||
+      pathname.startsWith("/status/") ||
+      pathname.startsWith("/incidents/")
+    ) {
+      return NextResponse.redirect(
+        new URL(`${pathname}${search || ""}`, "https://thecabcall.com")
+      );
+    }
+
     if (
       pathname === "/login" ||
       pathname === "/admin/login" ||
@@ -96,6 +122,6 @@ export function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|audio|feed.xml).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|images|media|audio|feed.xml).*)",
   ],
 };

@@ -679,9 +679,12 @@ export function AdminOverviewClient({
             >
               Incidents &amp; Transforms Studio →
             </Link>
-            <Link href="/" className="text-[#8E9BAE] hover:text-[#F3EFE6]">
+            <a
+              href="https://thecabcall.com"
+              className="text-[#8E9BAE] hover:text-[#F3EFE6]"
+            >
               View Trestleboard ↗
-            </Link>
+            </a>
           </div>
         </div>
 
@@ -770,12 +773,12 @@ export function AdminOverviewClient({
             >
               Open Podcast Episode Studio →
             </Link>
-            <Link
-              href="/feed.xml"
+            <a
+              href="https://thecabcall.com/feed.xml"
               className="text-[#8E9BAE] hover:text-[#F3EFE6]"
             >
               /feed.xml ↗
-            </Link>
+            </a>
           </div>
         </div>
 
