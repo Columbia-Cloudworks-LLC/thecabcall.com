@@ -9,7 +9,8 @@
     "start": "next start",
     "lint": "next lint",
     "test": "node --import ./scripts/register-ts-resolver.mjs scripts/verify-defensive-hardening.ts",
-    "verify": "pwsh -File scripts/verify-defensive-hardening.ps1"
+    "verify": "pwsh -File scripts/verify-defensive-hardening.ps1",
+    "import:legacy": "node --import ./scripts/register-ts-resolver.mjs scripts/import-legacy-episodes.ts"
   },
   "dependencies": {
     "lucide-react": "^1.16.0",

@@ -24,17 +24,35 @@ export async function GET() {
       const enclosureUrl = ep.audioUrl.startsWith("http")
         ? ep.audioUrl
         : `${siteUrl}${ep.audioUrl.startsWith("/") ? "" : "/"}${ep.audioUrl}`;
+      const enclosureMime = enclosureUrl.toLowerCase().endsWith(".m4a")
+        ? "audio/x-m4a"
+        : "audio/mpeg";
+      const artworkHref = ep.artworkUrl
+        ? ep.artworkUrl.startsWith("http")
+          ? ep.artworkUrl
+          : `${siteUrl}${ep.artworkUrl.startsWith("/") ? "" : "/"}${ep.artworkUrl}`
+        : null;
+      const disclaimerSuffix = ep.aiDisclaimer ? `\n\n${ep.aiDisclaimer}` : "";
+      const descriptionWithDisclaimer = ep.summary.includes("Google Gemini")
+        ? ep.summary
+        : `${ep.summary}${disclaimerSuffix}`;
+      const artworkXml = artworkHref
+        ? `\n      <itunes:image href="${escapeXml(artworkHref)}" />`
+        : "";
+      const disclaimerHtml = ep.aiDisclaimer
+        ? `<p><em>${escapeXml(ep.aiDisclaimer)}</em></p>`
+        : "";
       return `    <item>
       <title>${escapeXml(ep.title)}</title>
       <link>${episodeUrl}</link>
       <guid isPermaLink="false">${escapeXml(ep.id)}</guid>
       <pubDate>${pubDate}</pubDate>
-      <description>${escapeXml(ep.summary)}</description>
-      <content:encoded><![CDATA[<p>${ep.summary}</p><pre>${ep.transcript}</pre>]]></content:encoded>
-      <enclosure url="${escapeXml(enclosureUrl)}" length="${ep.fileSizeBytes}" type="audio/mpeg" />
+      <description>${escapeXml(descriptionWithDisclaimer)}</description>
+      <content:encoded><![CDATA[<p>${ep.summary}</p>${disclaimerHtml}<pre>${ep.transcript}</pre>]]></content:encoded>
+      <enclosure url="${escapeXml(enclosureUrl)}" length="${ep.fileSizeBytes}" type="${enclosureMime}" />${artworkXml}
       <itunes:episode>${ep.episodeNumber}</itunes:episode>
       <itunes:duration>${ep.durationSeconds}</itunes:duration>
-      <itunes:summary>${escapeXml(ep.summary)}</itunes:summary>
+      <itunes:summary>${escapeXml(descriptionWithDisclaimer)}</itunes:summary>
       <itunes:explicit>false</itunes:explicit>
     </item>`;
     })

@@ -16,11 +16,11 @@
 | **Next.js 15 Frontend (6 Core Pages)** | Live in Production (`https://thecabcall.com`) & working locally | `src/app/`, `src/components/` |
 | **System-1 Classifier (TypeSafe Jev `jev-1.14.0`)** | Live on Cloudflare Edge & working locally | `src/pipeline/jev.ts`, `src/pipeline/ingest.ts` |
 | **System-2 Synthesis (Gemini 2.5 Flash)** | Live on Cloudflare Edge & working locally | `src/pipeline/synthesize.ts` |
-| **Friday 5-Min Podcast Rollup + TTS Audio** | Live on Cloudflare Edge & R2 (`cabcall-audio`) | `src/pipeline/rollup.ts` |
+| **Friday 5-Min Podcast Rollup + TTS Audio + 21 Legacy Episodes** | Live on Cloudflare Edge & R2 (`cabcall-audio`) | `src/pipeline/rollup.ts`, `scripts/import-legacy-episodes.ts` |
 | **Cloudflare Worker Entrypoint & Crons** | Deployed (`https://thecabcall.thecabcall.workers.dev`) | `src/worker.ts`, `wrangler.jsonc` |
-| **D1 SQLite Schema & Migrations** | Applied to remote `cabcall-db` (`094cf69c-0fe3-409b-a871-06f3610a28a6`) & local `.wrangler` | `migrations/0001_init.sql`, `migrations/0002_pipeline_runs.sql`, `migrations/0003_audit_ledger.sql`, `migrations/0004_admin_auth.sql`, `migrations/0005_dynamic_feeds_and_filters.sql`, `migrations/0006_editorial_pipeline_and_images.sql` |
+| **D1 SQLite Schema & Migrations** | Applied to remote `cabcall-db` (`094cf69c-0fe3-409b-a871-06f3610a28a6`) & local `.wrangler` | `migrations/0001_init.sql` – `migrations/0007_legacy_episodes_artwork_and_disclaimer.sql` |
 | **Database & Audio Bridge** | Live Cloud Worker Bridge (`/api/snapshot` + R2 audio & `/media/*`) with local `.wrangler` fallback | `src/lib/d1-bridge.ts`, `src/lib/store.ts`, `src/lib/episodes.ts`, `src/lib/feeds-filters.ts`, `src/lib/incidents.ts` |
-| **Admin Governance, Auth & Audit Ledger** | Issues #6, #7, #8, #9, #10 & #11 (Audit Ledger, Admin OAuth/Magic-Link Auth & Invites, Command Center Shell & Audit Replay Studio, Podcast Episode & R2 Audio Studio, Dynamic Feeds & Filters Studio, Editorial Pipeline & Incident Studio) live in Production; Issue #12 planned below | `migrations/0003_audit_ledger.sql`, `migrations/0004_admin_auth.sql`, `migrations/0005_dynamic_feeds_and_filters.sql`, `migrations/0006_editorial_pipeline_and_images.sql`, `src/pipeline/audit.ts`, `src/pipeline/auth.ts`, `src/pipeline/ingest.ts`, `src/pipeline/rollup.ts`, `src/pipeline/editorial.ts`, `src/lib/audit.ts`, `src/lib/auth.ts`, `src/lib/episodes.ts`, `src/lib/feeds-filters.ts`, `src/lib/incidents.ts`, `src/app/admin/` |
+| **Admin Governance, Auth & Audit Ledger** | Issues #6, #7, #8, #9, #10 & #11 (Audit Ledger, Admin OAuth/Magic-Link Auth & Invites, Command Center Shell & Audit Replay Studio, Podcast Episode & R2 Audio Studio, Dynamic Feeds & Filters Studio, Editorial Pipeline & Incident Studio) live in Production; Issue #12 planned below | `migrations/0003_audit_ledger.sql` – `migrations/0007_legacy_episodes_artwork_and_disclaimer.sql`, `src/pipeline/audit.ts`, `src/pipeline/auth.ts`, `src/pipeline/ingest.ts`, `src/pipeline/rollup.ts`, `src/pipeline/editorial.ts`, `src/lib/audit.ts`, `src/lib/auth.ts`, `src/lib/episodes.ts`, `src/lib/feeds-filters.ts`, `src/lib/incidents.ts`, `src/app/admin/` |
 
 ---
 
@@ -32,8 +32,8 @@
 - [x] **Epic #3 ([GitHub Issue #3](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/3)): Cloud Bridge — Connecting the Live Next.js Website to Production Cloudflare D1 & R2**
 - [x] **Epic #4 ([GitHub Issue #4](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/4)): Production Frontend Deployment (Vercel) & Custom Domain Cutover (`thecabcall.com`)**
 
-### Open Archive & Voice Enhancement Epic (#5)
-- [ ] **Epic #5 ([GitHub Issue #5](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/5)): Legacy Podcast Archive Migration & Voice Cloning / TTS Enhancement** (`Issues 5.1 – 5.3`)
+### Completed Archive & Voice Enhancement Epic (#5)
+- [x] **Epic #5 ([GitHub Issue #5](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/5)): Legacy Podcast Archive Migration & Voice Cloning / TTS Enhancement** (`Issues 5.1 – 5.3`)
 
 ### Open Admin Dashboard, Editorial Pipeline & Immutable Audit Trail Epic (#6 — Issues #6 to #12)
 - [x] **Issue #6 ([GitHub Issue #6](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/6)): Immutable Replayable Audit Ledger & Disclosure Engine (D1 Append-Only Schema, SHA-256 Hash Chain & Replay API)**
@@ -145,30 +145,26 @@
 **Objective:** Permanently re-host historical *Change Advisory Board* podcast episodes in Cloudflare R2 (`cabcall-audio`) and D1 (`episodes`) so old WordPress/podcast hosting can be retired completely, and optionally configure custom cloned voice synthesis (ElevenLabs / OpenAI TTS) for the Friday 5-minute rollup.
 
 ### Issue 5.1: Build Automated Legacy Podcast Bulk Importer (`scripts/import-legacy-episodes.ts`)
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Automated Steps for Antigravity:**
-  1. Create a CLI script `scripts/import-legacy-episodes.ts` (and npm script `"import:legacy"`) that accepts either a local directory of `.mp3` files + metadata JSON/CSV or an existing podcast RSS XML file.
-  2. For each legacy episode, the script uploads the `.mp3` binary to Cloudflare R2 (`cabcall-audio`) via Wrangler R2 and inserts/upserts the episode metadata into remote D1 (`episodes` table).
+  1. Create a CLI script `scripts/import-legacy-episodes.ts` (and npm script `"import:legacy"`) that accepts either a local directory of `.mp3`/`.m4a` files + metadata/transcripts or an existing podcast RSS XML file.
+  2. For each legacy episode, the script uploads the `.m4a` binary and square/widescreen artwork `.png` files to Cloudflare R2 (`cabcall-audio`) via Wrangler R2 and inserts/upserts the episode metadata and Google Gemini AI disclaimer into remote D1 (`episodes` table) and `audit_ledger`.
 - **Verification:** Running the script in `--dry-run` mode validates parsing, R2 key naming, and D1 SQL generation.
 - **Human Action Gate:** None.
 
 ### Issue 5.2: Execute Legacy Archive Upload to Production R2 & D1
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **[HUMAN ACTION GATE] — Provide Legacy Episode Files:**
-  > **Why Antigravity paused:** Antigravity needs to know where your historical *Change Advisory Board* `.mp3` files (and episode titles/dates, or old RSS feed XML) are stored on your computer.
-  >
-  > **Steps for you to perform:**
-  > 1. Place your historical `.mp3` files (and any export/RSS XML file if you have one) into a folder on your computer, such as `d:\repos\thecabcall.com\legacy-episodes\`.
-  > 2. Reply here with the folder path (e.g., **`"The files are in d:\repos\thecabcall.com\legacy-episodes"`**), or reply **`"Skip legacy upload for now"`** if you want to add them later.
+  > **Completed:** User provided all 21 historical episodes (`The CAB Call #1` through `The CAB Call #21`) in `tmp/Episodes`, including `.m4a` audio, square and widescreen `.png` artwork, descriptions, sources, and `.srt`/`.txt`/`.md` transcripts.
 - **Automated Steps for Antigravity (once path is provided):**
-  1. Run the bulk import script to upload all `.mp3` files to production R2 `cabcall-audio` and insert their rows into production D1 `episodes`.
+  1. Run the bulk import script to upload all 21 `.m4a` files (1.04 GB) and 43 `.png` artwork files to production R2 `cabcall-audio` and insert their rows + Google Gemini AI disclaimer into production D1 `episodes` and `audit_ledger`.
   2. Verify they appear under the **Legacy Deep-Dive Archive** tab on `/archive` and inside `/feed.xml`.
 
 ### Issue 5.3: Optional Custom Voice Clone TTS Integration (ElevenLabs / OpenAI TTS)
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Automated Steps for Antigravity:**
   1. Inspect `src/pipeline/rollup.ts` (which currently synthesizes MP3 audio via Gemini TTS with WAV/MP3 fallback).
-  2. Add optional support for `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID` (so if you clone your own voice on ElevenLabs and add those secrets, Friday rollups automatically speak in your cloned voice, while keeping Gemini TTS as the zero-cost default).
+  2. Add optional support for `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID` and `OPENAI_API_KEY` (so if you clone your own voice on ElevenLabs and add those secrets, Friday rollups automatically speak in your cloned voice, while keeping Gemini TTS as the zero-cost default).
 - **Verification:** `npm run build` and Worker deployment succeed with multi-provider TTS support.
 - **Human Action Gate:** Optional — only if the user wants to supply an `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID`.
 

@@ -267,7 +267,7 @@ export async function updateAdminEpisodeBridge(
     publishedAt?: string;
     regenerateAudio?: boolean;
     ttsVoice?: string;
-    ttsProvider?: "gemini-tts" | "mpeg-framed";
+    ttsProvider?: "gemini-tts" | "elevenlabs" | "openai-tts" | "mpeg-framed";
     reason?: string;
   },
   actor: EpisodeAdminActor

@@ -167,6 +167,31 @@ export async function GET(
     });
   }
 
+  if (!shouldUseRemoteWorker()) {
+    try {
+      const workerUrl = getEffectiveWorkerUrl();
+      const res = await fetch(
+        `${workerUrl}/media/${encodeURIComponent(cleanName)}`,
+        { cache: "no-store" }
+      );
+      if (res.ok) {
+        const ab = await res.arrayBuffer();
+        const contentType =
+          res.headers.get("content-type") || "application/octet-stream";
+        return new NextResponse(Buffer.from(ab), {
+          status: 200,
+          headers: {
+            "Content-Type": contentType,
+            "Content-Length": String(ab.byteLength),
+            "Cache-Control": "public, max-age=3600",
+          },
+        });
+      }
+    } catch {
+      // Ignore fallback error
+    }
+  }
+
   // If SVG requested, return generic blueprint card
   if (cleanName.toLowerCase().endsWith(".svg")) {
     const svg = generateIncidentTelemetrySvgCard({

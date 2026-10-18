@@ -60,6 +60,7 @@ import { evaluateArticleWithJev, JevSreFailureModeKey, JevWorkingToolKey } from 
 import {
   buildValidMp3AudioBytes,
   D1EpisodeTableRow,
+  DEFAULT_GEMINI_AI_DISCLAIMER,
   deleteAdminEpisode,
   ensureBaselineEpisodesSeeded,
   EPISODES_SELECT_COLUMNS,
@@ -96,6 +97,9 @@ export interface WorkerEnv {
   AUDIO_BUCKET: R2BucketLike;
   TYPESAFE_API_KEY?: string;
   GEMINI_API_KEY?: string;
+  ELEVENLABS_API_KEY?: string;
+  ELEVENLABS_VOICE_ID?: string;
+  OPENAI_API_KEY?: string;
   ADMIN_SECRET?: string;
   OWNER_ADMIN_EMAIL?: string;
   GOOGLE_CLIENT_ID?: string;
@@ -307,11 +311,25 @@ function mapWorkerRowToPublicEpisodeDto(
     .padStart(2, "0");
 
   let dominantTool: WorkingToolId = incidents[0]?.primaryTool || "The Square";
-  for (const t of Object.values(WORKER_TOOL_DISPLAY)) {
-    if (row.title.includes(t) || row.summary.includes(t)) {
-      dominantTool = t;
-      break;
-    }
+  const allTools = Object.values(WORKER_TOOL_DISPLAY);
+  const matchedExactTool = allTools.find(
+    (t) => row.title.includes(t) || row.summary.includes(t)
+  );
+  const combinedLower = `${row.title} ${row.summary}`.toLowerCase();
+  if (matchedExactTool) {
+    dominantTool = matchedExactTool;
+  } else if (combinedLower.includes("gauge")) {
+    dominantTool = "24-Inch Gauge";
+  } else if (combinedLower.includes("gavel") || combinedLower.includes("ashlar")) {
+    dominantTool = "Common Gavel";
+  } else if (combinedLower.includes("plumb") || combinedLower.includes("watchtower")) {
+    dominantTool = "The Plumb";
+  } else if (combinedLower.includes("level")) {
+    dominantTool = "The Level";
+  } else if (combinedLower.includes("trowel") || combinedLower.includes("compass")) {
+    dominantTool = "The Trowel";
+  } else if (combinedLower.includes("square")) {
+    dominantTool = "The Square";
   }
 
   let dominantFailureMode: SreFailureModeId =
@@ -325,7 +343,9 @@ function mapWorkerRowToPublicEpisodeDto(
 
   const isLegacy =
     row.slug.startsWith("legacy-") ||
+    row.slug.startsWith("the-cab-call-") ||
     row.title.toLowerCase().includes("legacy archive") ||
+    row.title.toLowerCase().startsWith("the cab call #") ||
     episodeNumber <= 30;
   const rawTranscript = row.transcript || row.summary || "";
   const parsedSections = parseEpisodeTranscriptSections(rawTranscript);
@@ -343,21 +363,27 @@ function mapWorkerRowToPublicEpisodeDto(
         ? parsedSections
         : undefined,
     audioUrl: row.audio_url,
+    artworkUrl: row.artwork_url || undefined,
+    artworkWidescreenUrl: row.artwork_widescreen_url || undefined,
+    aiDisclaimer:
+      row.ai_disclaimer || (isLegacy ? DEFAULT_GEMINI_AI_DISCLAIMER : undefined),
     durationSeconds,
     durationFormatted: `${mins}:${secs}`,
     fileSizeBytes: Number(row.file_size_bytes || 0),
     publishedAt: row.published_at,
     dominantTool,
     dominantFailureMode,
-    incidentMarkers: incidents.slice(0, 3).map((inc, idx) => ({
-      incidentId: inc.id,
-      incidentCode: inc.incidentCode,
-      incidentSlug: inc.slug,
-      incidentTitle: inc.title,
-      timestampSeconds: idx === 0 ? 35 : idx === 1 ? 115 : 210,
-      timecodeLabel: idx === 0 ? "00:35" : idx === 1 ? "01:55" : "03:30",
-      toolApplied: inc.primaryTool,
-    })),
+    incidentMarkers: isLegacy
+      ? []
+      : incidents.slice(0, 3).map((inc, idx) => ({
+          incidentId: inc.id,
+          incidentCode: inc.incidentCode,
+          incidentSlug: inc.slug,
+          incidentTitle: inc.title,
+          timestampSeconds: idx === 0 ? 35 : idx === 1 ? 115 : 210,
+          timecodeLabel: idx === 0 ? "00:35" : idx === 1 ? "01:55" : "03:30",
+          toolApplied: inc.primaryTool,
+        })),
   });
 }
 
@@ -583,7 +609,7 @@ const worker = {
       }
     }
 
-    // Public Route: GET /audio/:filename (Streams episode MP3 from R2 with byte-range support)
+    // Public Route: GET /audio/:filename (Streams episode MP3/M4A from R2 with byte-range support)
     if (
       (request.method === "GET" || request.method === "HEAD") &&
       url.pathname.startsWith("/audio/")
@@ -593,6 +619,96 @@ const worker = {
       ).trim();
       if (!filename || filename.includes("..")) {
         return jsonResponse({ error: "Invalid audio filename" }, 400);
+      }
+
+      const defaultAudioMime = filename.toLowerCase().endsWith(".m4a")
+        ? "audio/mp4"
+        : "audio/mpeg";
+      const rangeHeader = request.headers.get("range");
+
+      if (env.AUDIO_BUCKET.head) {
+        const meta = await env.AUDIO_BUCKET.head(filename);
+        if (!meta) {
+          return jsonResponse(
+            { error: "Audio object not found in R2", key: filename },
+            404
+          );
+        }
+
+        const totalSize = meta.size;
+        const parsedRange = parseByteRangeHeader(rangeHeader, totalSize);
+        const baseHeaders: Record<string, string> = {
+          "Content-Type": meta.httpMetadata?.contentType || defaultAudioMime,
+          "Accept-Ranges": "bytes",
+          "Cache-Control": "public, max-age=86400",
+          "Access-Control-Allow-Origin": "*",
+        };
+        if (meta.etag) {
+          baseHeaders["ETag"] = meta.etag;
+        }
+
+        if (parsedRange) {
+          if (request.method === "HEAD") {
+            return new Response(null, {
+              status: 206,
+              headers: {
+                ...baseHeaders,
+                "Content-Range": `bytes ${parsedRange.start}-${parsedRange.end}/${totalSize}`,
+                "Content-Length": String(parsedRange.length),
+              },
+            });
+          }
+
+          const rangedObj = await env.AUDIO_BUCKET.get(filename, {
+            range: {
+              offset: parsedRange.start,
+              length: parsedRange.length,
+            },
+          });
+          if (!rangedObj) {
+            return jsonResponse(
+              { error: "Audio range not found in R2", key: filename },
+              404
+            );
+          }
+
+          const bodyPayload =
+            rangedObj.body ?? (await rangedObj.arrayBuffer());
+          return new Response(bodyPayload, {
+            status: 206,
+            headers: {
+              ...baseHeaders,
+              "Content-Range": `bytes ${parsedRange.start}-${parsedRange.end}/${totalSize}`,
+              "Content-Length": String(parsedRange.length),
+            },
+          });
+        }
+
+        if (request.method === "HEAD") {
+          return new Response(null, {
+            status: 200,
+            headers: {
+              ...baseHeaders,
+              "Content-Length": String(totalSize),
+            },
+          });
+        }
+
+        const obj = await env.AUDIO_BUCKET.get(filename);
+        if (!obj) {
+          return jsonResponse(
+            { error: "Audio object not found in R2", key: filename },
+            404
+          );
+        }
+
+        return new Response(obj.body ?? (await obj.arrayBuffer()), {
+          status: 200,
+          headers: {
+            ...baseHeaders,
+            "Content-Length": String(totalSize),
+          },
+        });
       }
 
       const obj = await env.AUDIO_BUCKET.get(filename);
@@ -605,13 +721,12 @@ const worker = {
 
       const fullBuffer = await obj.arrayBuffer();
       const totalSize = fullBuffer.byteLength;
-      const rangeHeader = request.headers.get("range");
       const parsedRange = parseByteRangeHeader(rangeHeader, totalSize);
 
       const baseHeaders: Record<string, string> = {
-        "Content-Type": obj.httpMetadata?.contentType || "audio/mpeg",
+        "Content-Type": obj.httpMetadata?.contentType || defaultAudioMime,
         "Accept-Ranges": "bytes",
-        "Cache-Control": "public, max-age=3600",
+        "Cache-Control": "public, max-age=86400",
         "Access-Control-Allow-Origin": "*",
       };
 
@@ -718,7 +833,6 @@ const worker = {
         );
       }
 
-      const fullBuffer = await obj.arrayBuffer();
       const contentType =
         obj.httpMetadata?.contentType ||
         (filename.endsWith(".svg")
@@ -731,6 +845,21 @@ const worker = {
           ? "image/gif"
           : "image/jpeg");
 
+      if (obj.body) {
+        return new Response(request.method === "HEAD" ? null : obj.body, {
+          status: 200,
+          headers: {
+            "Content-Type": contentType,
+            ...(typeof obj.size === "number"
+              ? { "Content-Length": String(obj.size) }
+              : {}),
+            "Cache-Control": "public, max-age=86400",
+            "Access-Control-Allow-Origin": "*",
+          },
+        });
+      }
+
+      const fullBuffer = await obj.arrayBuffer();
       return new Response(request.method === "HEAD" ? null : fullBuffer, {
         status: 200,
         headers: {
@@ -1008,6 +1137,9 @@ const worker = {
           db: env.DB,
           audioBucket: env.AUDIO_BUCKET,
           geminiApiKey: env.GEMINI_API_KEY,
+          elevenlabsApiKey: env.ELEVENLABS_API_KEY,
+          elevenlabsVoiceId: env.ELEVENLABS_VOICE_ID,
+          openaiApiKey: env.OPENAI_API_KEY,
         });
 
         try {
@@ -2615,7 +2747,7 @@ const worker = {
             windowDays?: number;
             incidentIds?: number[];
             ttsVoice?: string;
-            ttsProvider?: "gemini-tts" | "mpeg-framed";
+            ttsProvider?: "elevenlabs" | "openai-tts" | "gemini-tts" | "mpeg-framed";
             reason?: string;
             actorEmail?: string;
             actorRole?: string;
@@ -2645,6 +2777,9 @@ const worker = {
             db: env.DB,
             audioBucket: env.AUDIO_BUCKET,
             geminiApiKey: env.GEMINI_API_KEY,
+            elevenlabsApiKey: env.ELEVENLABS_API_KEY,
+            elevenlabsVoiceId: env.ELEVENLABS_VOICE_ID,
+            openaiApiKey: env.OPENAI_API_KEY,
             overrides,
             reason: body.reason,
             actor: {
@@ -2694,7 +2829,7 @@ const worker = {
             publishedAt?: string;
             regenerateAudio?: boolean;
             ttsVoice?: string;
-            ttsProvider?: "gemini-tts" | "mpeg-framed";
+            ttsProvider?: "elevenlabs" | "openai-tts" | "gemini-tts" | "mpeg-framed";
             reason?: string;
             actorEmail?: string;
             actorRole?: string;
@@ -2721,6 +2856,9 @@ const worker = {
             db: env.DB,
             audioBucket: env.AUDIO_BUCKET,
             geminiApiKey: env.GEMINI_API_KEY,
+            elevenlabsApiKey: env.ELEVENLABS_API_KEY,
+            elevenlabsVoiceId: env.ELEVENLABS_VOICE_ID,
+            openaiApiKey: env.OPENAI_API_KEY,
             idOrSlug: targetIdOrSlug,
             input: {
               title: body.title,
@@ -3513,6 +3651,9 @@ const worker = {
               db: env.DB,
               audioBucket: env.AUDIO_BUCKET,
               geminiApiKey: env.GEMINI_API_KEY,
+              elevenlabsApiKey: env.ELEVENLABS_API_KEY,
+              elevenlabsVoiceId: env.ELEVENLABS_VOICE_ID,
+              openaiApiKey: env.OPENAI_API_KEY,
             });
           } catch (err) {
             console.error("[Scheduled Friday Cron] Rollup stage error:", err);

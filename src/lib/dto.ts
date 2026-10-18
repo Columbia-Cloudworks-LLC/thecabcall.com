@@ -84,6 +84,9 @@ export interface PublicEpisodeDto {
   transcript: string;
   transcriptSections?: EpisodeTranscriptSections;
   audioUrl: string;
+  artworkUrl?: string;
+  artworkWidescreenUrl?: string;
+  aiDisclaimer?: string;
   durationSeconds: number;
   durationFormatted: string;
   fileSizeBytes: number;
@@ -468,8 +471,8 @@ export function isRenderablePublicEpisode(
   if (!publishedAt || Number.isNaN(Date.parse(publishedAt))) {
     return false;
   }
-  // Verified media link check: must be an /audio/*.mp3 or https://*.mp3 URL and have non-zero bytes & duration
-  if (!/^(\/audio\/[a-zA-Z0-9._-]+\.mp3|https?:\/\/[^\s]+\.mp3)$/i.test(audioUrl)) {
+  // Verified media link check: must be an /audio/*.(mp3|m4a) or https://*.*(mp3|m4a) URL and have non-zero bytes & duration
+  if (!/^(\/audio\/[a-zA-Z0-9._-]+\.(?:mp3|m4a)|https?:\/\/[^\s]+\.(?:mp3|m4a))$/i.test(audioUrl)) {
     return false;
   }
   const durationSeconds = Number(ep.durationSeconds ?? 0);
@@ -538,6 +541,16 @@ export function projectPublicEpisodeDto(
         }))
       : [],
   };
+
+  if (mapped.artworkUrl && mapped.artworkUrl.trim()) {
+    dto.artworkUrl = mapped.artworkUrl.trim();
+  }
+  if (mapped.artworkWidescreenUrl && mapped.artworkWidescreenUrl.trim()) {
+    dto.artworkWidescreenUrl = mapped.artworkWidescreenUrl.trim();
+  }
+  if (mapped.aiDisclaimer && mapped.aiDisclaimer.trim()) {
+    dto.aiDisclaimer = sanitizeEditorialText(mapped.aiDisclaimer);
+  }
 
   if (mapped.transcriptSections) {
     dto.transcriptSections = {

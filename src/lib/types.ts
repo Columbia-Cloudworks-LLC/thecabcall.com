@@ -109,6 +109,9 @@ export interface PodcastEpisode {
   transcript: string;
   transcriptSections?: EpisodeTranscriptSections;
   audioUrl: string;
+  artworkUrl?: string;
+  artworkWidescreenUrl?: string;
+  aiDisclaimer?: string;
   durationSeconds: number;
   durationFormatted: string;
   fileSizeBytes: number;

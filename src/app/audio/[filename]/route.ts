@@ -3,6 +3,7 @@ import {
   createLocalR2AudioAdapter,
   ensureD1Snapshot,
   fetchRemoteWorkerAudioBytes,
+  getEffectiveWorkerUrl,
   shouldUseRemoteWorker,
 } from "@/lib/d1-bridge";
 import { buildValidMp3AudioBytes } from "@/pipeline/rollup";
@@ -19,9 +20,22 @@ export async function GET(
     return NextResponse.json({ error: "Invalid filename" }, { status: 400 });
   }
 
+  const isM4a = cleanName.toLowerCase().endsWith(".m4a");
+  const contentType = isM4a ? "audio/mp4" : "audio/mpeg";
+
+  // Large legacy .m4a episodes (24 MB - 88 MB) exceed Vercel's 4.5 MB serverless response limit;
+  // redirect directly to the Cloudflare Worker R2 range-streaming endpoint when remote worker is active.
+  if (isM4a && shouldUseRemoteWorker()) {
+    const workerUrl = getEffectiveWorkerUrl();
+    return NextResponse.redirect(
+      `${workerUrl}/audio/${encodeURIComponent(cleanName)}`,
+      307
+    );
+  }
+
   let audioBytes: Uint8Array | null = null;
 
-  if (shouldUseRemoteWorker()) {
+  if (shouldUseRemoteWorker() && !isM4a) {
     audioBytes = await fetchRemoteWorkerAudioBytes(cleanName);
   }
 
@@ -34,12 +48,20 @@ export async function GET(
     }
   }
 
+  if (!audioBytes && isM4a) {
+    const workerUrl = getEffectiveWorkerUrl();
+    return NextResponse.redirect(
+      `${workerUrl}/audio/${encodeURIComponent(cleanName)}`,
+      307
+    );
+  }
+
   if (!audioBytes && !shouldUseRemoteWorker()) {
     audioBytes = await fetchRemoteWorkerAudioBytes(cleanName);
   }
 
   if (!audioBytes) {
-    const slug = cleanName.replace(/\.mp3$/i, "");
+    const slug = cleanName.replace(/\.(mp3|m4a)$/i, "");
     const d1 = await ensureD1Snapshot();
     const episode = d1.episodes.find(
       (ep) => ep.slug === slug || ep.audioUrl.endsWith(cleanName)
@@ -84,11 +106,11 @@ export async function GET(
       return new NextResponse(sliced, {
         status: 206,
         headers: {
-          "Content-Type": "audio/mpeg",
+          "Content-Type": contentType,
           "Accept-Ranges": "bytes",
           "Content-Range": `bytes ${start}-${end}/${totalSize}`,
           "Content-Length": String(sliced.byteLength),
-          "Cache-Control": "no-cache",
+          "Cache-Control": "public, max-age=3600",
         },
       });
     }
@@ -97,10 +119,10 @@ export async function GET(
   return new NextResponse(Buffer.from(audioBytes), {
     status: 200,
     headers: {
-      "Content-Type": "audio/mpeg",
+      "Content-Type": contentType,
       "Accept-Ranges": "bytes",
       "Content-Length": String(totalSize),
-      "Cache-Control": "no-cache",
+      "Cache-Control": "public, max-age=3600",
     },
   });
 }
