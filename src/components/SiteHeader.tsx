@@ -173,6 +173,16 @@ export function SiteHeader() {
   const isAdminContext =
     hostInfo.isAdminSubdomain || isAdminDashboardPath(pathname);
 
+  const isLoginRoute =
+    pathname === "/login" ||
+    pathname.startsWith("/login/") ||
+    pathname === "/admin/login" ||
+    pathname.startsWith("/admin/login/");
+
+  if (isAdminContext && !isLoginRoute) {
+    return null;
+  }
+
   const homeHref =
     hostInfo.isLocalhost && !hostInfo.isAdminSubdomain
       ? "/"

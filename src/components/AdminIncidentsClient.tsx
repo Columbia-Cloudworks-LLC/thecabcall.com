@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { AdminFeedsClient } from "./AdminFeedsClient";
+import { AdminFiltersClient } from "./AdminFiltersClient";
 import type { AuthenticatedAdminActor } from "@/pipeline/auth";
 import type {
   AuditChainVerificationResult,
@@ -12,7 +14,14 @@ import type {
   ImageSourceType,
   PipelineTransformRecord,
 } from "@/pipeline/editorial";
+import type {
+  IngestFeedRecord,
+  IngestFilterRecord,
+  SystemSettingsMap,
+} from "@/pipeline/ingest";
 import type { JevSreFailureModeKey, JevWorkingToolKey } from "@/pipeline/jev";
+
+export type EditorialWorkspaceView = "stories" | "feeds" | "rules";
 
 interface AdminIncidentsClientProps {
   actor: AuthenticatedAdminActor;
@@ -29,9 +38,13 @@ interface AdminIncidentsClientProps {
     pinned: number;
     hidden: number;
   };
-  initialAuditEntries: AuditLedgerEntry[];
+  initialAuditEntries?: AuditLedgerEntry[];
   chainIntegrity?: AuditChainVerificationResult;
   defaultTab?: "incidents" | "transforms";
+  defaultView?: EditorialWorkspaceView;
+  initialFeeds?: IngestFeedRecord[];
+  initialFilters?: IngestFilterRecord[];
+  initialThresholds?: SystemSettingsMap;
 }
 
 const WORKING_TOOL_OPTIONS: Array<{
@@ -72,29 +85,36 @@ const TRANSFORM_LABELS: Record<
   { title: string; subtitle: string; badge: string }
 > = {
   auto_deescalate_titles: {
-    title: "Automated De-Alarmist Headline Rewriting",
+    title: "Calm Headline Rewrite",
     subtitle:
-      "During System-2 synthesis, detects sensationalist/clickbait headlines (ALL-CAPS, partisan slam verbs, panic framing) and rewrites them into calm, factual SRE post-incident titles while preserving original_title in audit_ledger.",
-    badge: "System-2 Headline Gate",
+      "Automatically rewrites sensationalist or clickbait source headlines (ALL-CAPS, partisan slam verbs, panic framing) into calm, factual titles while preserving original_title in the audit ledger.",
+    badge: "Editorial Tone",
   },
   auto_extract_rss_images: {
-    title: "Automated RSS & OpenGraph Visual Media Extraction",
+    title: "Source Article Image Extraction",
     subtitle:
-      "Extracts <media:content>, <media:thumbnail>, image <enclosure>, and inline <img> tags from inbound RSS/Atom items on ingest.",
-    badge: "Inbound Media Extractor",
+      "Extracts lead images and OpenGraph thumbnails from incoming RSS and Atom articles during newsroom collection.",
+    badge: "Story Media",
   },
   auto_generate_fallback_cards: {
-    title: "Masonic Blueprint + SRE Telemetry SVG Fallback Cards",
+    title: "Masonic Blueprint Illustration Cards",
     subtitle:
-      "Automatically attaches a deterministic 1200x630 blueprint SVG card (/media/card-d1-<id>.svg) featuring the Working Tool and SRE Failure Mode when an incident has no source photo.",
-    badge: "Blueprint Card Renderer",
+      "Automatically attaches a custom 1200x630 blueprint SVG card featuring the Working Tool and Failure Mode when a story has no source photo.",
+    badge: "Blueprint Card",
   },
   custom_system2_directive: {
-    title: "Custom System-2 Editorial Prompt Directive",
+    title: "Custom Editorial Guidance Note",
     subtitle:
-      "Injects an additional editorial governance instruction into Gemini 2.5 Flash System-2 synthesis prompts across all newly synthesized briefs.",
-    badge: "System-2 Prompt Governance",
+      "Applies an additional standing editorial instruction across all newly drafted Craftsman's Briefs.",
+    badge: "Editorial Voice",
   },
+};
+
+const DEFAULT_THRESHOLDS: SystemSettingsMap = {
+  jevMinSystemicProb: 0.7,
+  jevMinConfidence: 0.5,
+  maxNetNewPerRun: 10,
+  defaultItemsPerPoll: 3,
 };
 
 export function AdminIncidentsClient({
@@ -102,28 +122,47 @@ export function AdminIncidentsClient({
   initialIncidents,
   initialTransforms,
   initialCounts,
-  initialAuditEntries,
   defaultTab = "incidents",
+  defaultView,
+  initialFeeds = [],
+  initialFilters = [],
+  initialThresholds = DEFAULT_THRESHOLDS,
 }: AdminIncidentsClientProps) {
   const canMutate = actor.role !== "auditor";
 
-  const [activeTab, setActiveTab] = useState<"incidents" | "transforms">(
-    defaultTab
-  );
+  const resolvedDefaultView: EditorialWorkspaceView =
+    defaultView || (defaultTab === "transforms" ? "rules" : "stories");
+
+  const [activeView, setActiveView] =
+    useState<EditorialWorkspaceView>(resolvedDefaultView);
+
+  // Sync with ?view=stories|feeds|rules on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const viewParam = params.get("view");
+      if (
+        viewParam === "stories" ||
+        viewParam === "feeds" ||
+        viewParam === "rules"
+      ) {
+        setActiveView(viewParam);
+      }
+    }
+  }, []);
+
   const [incidents, setIncidents] =
     useState<AdminIncidentRecord[]>(initialIncidents);
   const [transforms, setTransforms] =
     useState<PipelineTransformRecord[]>(initialTransforms);
   const [counts, setCounts] = useState(initialCounts);
-  const [auditEntries, setAuditEntries] =
-    useState<AuditLedgerEntry[]>(initialAuditEntries);
 
-  // Filters
+  // Filters for Case Briefs & Stories
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [rewrittenOnly, setRewrittenOnly] = useState<boolean>(false);
 
-  // Active selected incident for studio editing
+  // Active selected story for studio editing
   const [selectedIncidentId, setSelectedIncidentId] = useState<number | null>(
     initialIncidents[0]?.id ?? null
   );
@@ -289,12 +328,11 @@ export function AdminIncidentsClient({
     });
   }, [incidents, statusFilter, rewrittenOnly, searchQuery]);
 
-  async function refreshAuditAndIncidents(selectId?: number) {
+  async function refreshIncidents(selectId?: number) {
     try {
-      const [incRes, auditRes] = await Promise.all([
-        fetch("/api/admin/incidents?limit=100", { cache: "no-store" }),
-        fetch("/api/admin/audit?limit=25", { cache: "no-store" }),
-      ]);
+      const incRes = await fetch("/api/admin/incidents?limit=100", {
+        cache: "no-store",
+      });
       if (incRes.ok) {
         const data = await incRes.json();
         if (Array.isArray(data.incidents)) {
@@ -308,12 +346,6 @@ export function AdminIncidentsClient({
           if (updatedSelected) {
             selectIncidentForEdit(updatedSelected);
           }
-        }
-      }
-      if (auditRes.ok) {
-        const auditData = await auditRes.json();
-        if (Array.isArray(auditData.entries)) {
-          setAuditEntries(auditData.entries);
         }
       }
     } catch {
@@ -345,10 +377,10 @@ export function AdminIncidentsClient({
           reason:
             headlineReason.trim() ||
             (options.restoreOriginal
-              ? "Restored original source headline from Admin Incident Studio."
+              ? "Restored original source headline in Editorial & Feeds."
               : options.autoDeescalate
-              ? "Triggered Gemini System-2 de-alarmist headline neutralization."
-              : "Manual editorial headline de-escalation in Admin Incident Studio."),
+              ? "Applied automated Calm Headline Rewrite."
+              : "Editorial Calm Headline Rewrite in Editorial & Feeds."),
         }),
       });
 
@@ -360,19 +392,19 @@ export function AdminIncidentsClient({
       setBanner({
         type: "success",
         title: options.restoreOriginal
-          ? "Original Headline Restored & Audited"
-          : "Headline Neutralized & Recorded in Audit Ledger",
-        detail: `Display Title: "${
+          ? "Original Headline Restored"
+          : "Calm Headline Saved & Recorded in Audit Ledger",
+        detail: `Display Headline: "${
           data.incident?.title || headlineDraft
-        }" • Original Title Preserved: "${
+        }" • Original Source Headline Preserved: "${
           data.incident?.originalTitle || selectedIncident.originalTitle
         }"`,
       });
-      await refreshAuditAndIncidents(selectedIncident.id);
+      await refreshIncidents(selectedIncident.id);
     } catch (err) {
       setBanner({
         type: "error",
-        title: "Headline Rewrite Error",
+        title: "Headline Update Error",
         detail: err instanceof Error ? err.message : String(err),
       });
     } finally {
@@ -411,12 +443,12 @@ export function AdminIncidentsClient({
           reason:
             imageReason.trim() ||
             (options.extractFromSource
-              ? `Extracted OpenGraph / source article image for ${selectedIncident.incidentCode}`
+              ? `Extracted source article image for ${selectedIncident.incidentCode}`
               : options.generateSvgCard
-              ? `Attached Masonic Blueprint + SRE Telemetry SVG Card for ${selectedIncident.incidentCode}`
+              ? `Attached Masonic Blueprint SVG Card for ${selectedIncident.incidentCode}`
               : options.clearImage
-              ? `Cleared attached visual media for ${selectedIncident.incidentCode}`
-              : `Updated incident visual media for ${selectedIncident.incidentCode}`),
+              ? `Cleared attached illustration for ${selectedIncident.incidentCode}`
+              : `Updated story illustration for ${selectedIncident.incidentCode}`),
         }),
       });
 
@@ -428,18 +460,14 @@ export function AdminIncidentsClient({
       setImageCacheBuster(Date.now());
       setBanner({
         type: "success",
-        title: "Incident Visual Media Updated & Audited",
-        detail: `Attached [${
-          data.incident?.imageSourceType || "media"
-        }] ${data.incident?.imageUrl || "(cleared)"} to ${
-          selectedIncident.incidentCode
-        }.`,
+        title: "Story Illustration Updated",
+        detail: `Updated visual media for ${selectedIncident.incidentCode} and recorded in the audit ledger.`,
       });
-      await refreshAuditAndIncidents(selectedIncident.id);
+      await refreshIncidents(selectedIncident.id);
     } catch (err) {
       setBanner({
         type: "error",
-        title: "Visual Media Attachment Error",
+        title: "Illustration Update Error",
         detail: err instanceof Error ? err.message : String(err),
       });
     } finally {
@@ -468,7 +496,7 @@ export function AdminIncidentsClient({
       formData.append(
         "reason",
         imageReason.trim() ||
-          `Uploaded custom R2 visual media (${uploadFile.name}) for ${selectedIncident.incidentCode}`
+          `Uploaded custom illustration (${uploadFile.name}) for ${selectedIncident.incidentCode}`
       );
 
       const response = await fetch("/api/admin/media/upload", {
@@ -478,23 +506,21 @@ export function AdminIncidentsClient({
 
       const data = await response.json();
       if (!response.ok || data.ok === false) {
-        throw new Error(data.error || "R2 media upload failed");
+        throw new Error(data.error || "Image upload failed");
       }
 
       setImageCacheBuster(Date.now());
       setUploadFile(null);
       setBanner({
         type: "success",
-        title: "Media Uploaded to R2 & Attached to Incident",
-        detail: `Stored ${data.mediaKey} (${Math.round(
-          (data.byteLength || 0) / 1024
-        )} KB) and attached ${data.mediaUrl} to ${selectedIncident.incidentCode}.`,
+        title: "Illustration Uploaded & Attached",
+        detail: `Attached ${data.mediaUrl} to ${selectedIncident.incidentCode}.`,
       });
-      await refreshAuditAndIncidents(selectedIncident.id);
+      await refreshIncidents(selectedIncident.id);
     } catch (err) {
       setBanner({
         type: "error",
-        title: "R2 Media Upload Error",
+        title: "Upload Error",
         detail: err instanceof Error ? err.message : String(err),
       });
     } finally {
@@ -518,7 +544,7 @@ export function AdminIncidentsClient({
                 incidentId: selectedIncident.id,
                 reason:
                   briefReason.trim() ||
-                  `Re-triggered System-2 Gemini synthesis for ${selectedIncident.incidentCode}.`,
+                  `Re-drafted Craftsman's Brief for ${selectedIncident.incidentCode}.`,
               }
             : {
                 action: "override_brief",
@@ -539,30 +565,28 @@ export function AdminIncidentsClient({
                 editorialNotes: editorialNotesDraft || null,
                 reason:
                   briefReason.trim() ||
-                  `Editorial brief & classification override for ${selectedIncident.incidentCode}.`,
+                  `Saved Craftsman's Brief & Working Tool updates for ${selectedIncident.incidentCode}.`,
               }
         ),
       });
 
       const data = await response.json();
       if (!response.ok || data.ok === false) {
-        throw new Error(data.error || "Incident brief update failed");
+        throw new Error(data.error || "Brief update failed");
       }
 
       setBanner({
         type: "success",
         title: resynthesize
-          ? "System-2 Gemini Re-Synthesis Completed & Audited"
-          : "Incident Brief, Classification & Visibility Saved",
-        detail: `Updated ${selectedIncident.incidentCode} (${
-          data.incident?.primaryTool || primaryToolDraft
-        } · ${data.incident?.sreFailureMode || failureModeDraft}).`,
+          ? "Craftsman's Brief Re-Drafted"
+          : "Craftsman's Brief & Working Tools Saved",
+        detail: `Updated ${selectedIncident.incidentCode} and recorded changes in the audit ledger.`,
       });
-      await refreshAuditAndIncidents(selectedIncident.id);
+      await refreshIncidents(selectedIncident.id);
     } catch (err) {
       setBanner({
         type: "error",
-        title: "Incident Brief Update Error",
+        title: "Brief Update Error",
         detail: err instanceof Error ? err.message : String(err),
       });
     } finally {
@@ -588,13 +612,13 @@ export function AdminIncidentsClient({
           config: customConfig ?? transform.config,
           reason:
             transformReason.trim() ||
-            `Updated pipeline transform "${transform.transformKey}" (enabled=${nextEnabled}).`,
+            `Updated editorial tone rule "${transform.transformKey}" (enabled=${nextEnabled}).`,
         }),
       });
 
       const data = await response.json();
       if (!response.ok || data.ok === false) {
-        throw new Error(data.error || "Failed to update pipeline transform");
+        throw new Error(data.error || "Failed to update editorial rule");
       }
 
       if (Array.isArray(data.transforms)) {
@@ -602,50 +626,16 @@ export function AdminIncidentsClient({
       }
       setBanner({
         type: "success",
-        title: "Pipeline Transform Rule Updated & Audited",
-        detail: `${transform.transformKey} is now ${
+        title: "Editorial Tone Rule Updated",
+        detail: `Rule is now ${
           nextEnabled ? "ENABLED" : "DISABLED"
-        } (Audit Event: ${data.auditEventId?.slice(0, 12) || "logged"}).`,
+        } and recorded in the audit ledger.`,
       });
-      await refreshAuditAndIncidents();
+      await refreshIncidents();
     } catch (err) {
       setBanner({
         type: "error",
-        title: "Transform Update Error",
-        detail: err instanceof Error ? err.message : String(err),
-      });
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function handleReplayAuditEvent(eventId: string) {
-    setSubmitting(true);
-    setBanner(null);
-    try {
-      const response = await fetch("/api/admin/audit/replay", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          eventId,
-          mode: "rollback",
-          reason: `Reverted editorial mutation ${eventId} from Admin Incident Studio.`,
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok || data.ok === false) {
-        throw new Error(data.error || "Audit rollback failed");
-      }
-      setBanner({
-        type: "success",
-        title: "Editorial Mutation Rolled Back via Audit Ledger",
-        detail: `Restored previous state from event ${eventId}.`,
-      });
-      await refreshAuditAndIncidents();
-    } catch (err) {
-      setBanner({
-        type: "error",
-        title: "Audit Rollback Error",
+        title: "Rule Update Error",
         detail: err instanceof Error ? err.message : String(err),
       });
     } finally {
@@ -654,168 +644,183 @@ export function AdminIncidentsClient({
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Studio Header */}
-      <div className="bg-[#111622] border border-[#263147] rounded-lg p-6">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      {/* Unified "Editorial & Feeds" Workspace Header + Segmented Control Bar */}
+      <div className="relative bg-[#111726] border border-[#8A6D3B]/45 p-6 shadow-xl space-y-5">
+        <span className="pointer-events-none absolute top-1.5 left-1.5 w-2.5 h-2.5 border-t border-l border-[#C5A059]/75" />
+        <span className="pointer-events-none absolute top-1.5 right-1.5 w-2.5 h-2.5 border-t border-r border-[#C5A059]/75" />
+        <span className="pointer-events-none absolute bottom-1.5 left-1.5 w-2.5 h-2.5 border-b border-l border-[#C5A059]/75" />
+        <span className="pointer-events-none absolute bottom-1.5 right-1.5 w-2.5 h-2.5 border-b border-r border-[#C5A059]/75" />
+
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="space-y-1.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-xs uppercase tracking-widest text-[#C5A059] font-semibold">
-                EPIC 6.6 // EDITORIAL PIPELINE &amp; INCIDENT STUDIO
-              </span>
-              <span className="px-2 py-0.5 rounded bg-emerald-950/70 border border-emerald-500/40 font-mono text-[11px] text-emerald-300">
-                Headline De-Escalation + R2 Media + Brief Overrides
-              </span>
+            <div className="font-display text-[11px] uppercase tracking-[0.18em] text-[#C5A059]">
+              Editorial &amp; Feeds • Newsroom Workspace
             </div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-[#F3EFE6] tracking-tight">
-              Incident Editorial Studio &amp; Pipeline Transforms
+            <h1 className="font-display text-2xl sm:text-3xl text-[#F3EFE6] tracking-wide">
+              Editorial &amp; Feeds
             </h1>
-            <p className="text-sm text-[#9CA3AF] max-w-3xl">
-              Neutralize alarmist source headlines while preserving{" "}
-              <code className="text-[#C5A059]">original_title</code> in the
-              audit trail, attach RSS/OpenGraph/R2 images or Masonic Blueprint
-              SVG cards, and override Socratic briefs or Working Tool
-              classifications.
+            <p className="font-serif text-sm text-[#94A3B8] max-w-2xl leading-relaxed">
+              Review and refine published Craftsman&apos;s Briefs, manage
+              monitored RSS news sources, and configure editorial tone and
+              filtering rules in one unified workspace.
             </p>
           </div>
 
-          {/* Mode Switcher */}
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => setActiveTab("incidents")}
-              className={`px-4 py-2 rounded font-mono text-xs font-semibold uppercase tracking-wider border transition-colors cursor-pointer ${
-                activeTab === "incidents"
-                  ? "bg-[#C5A059] text-[#0B0E14] border-[#C5A059]"
-                  : "bg-[#0B0E14] text-[#D6D1C7] border-[#263147] hover:border-[#C5A059]"
-              }`}
-            >
-              Incident Studio ({counts.total})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("transforms")}
-              className={`px-4 py-2 rounded font-mono text-xs font-semibold uppercase tracking-wider border transition-colors cursor-pointer ${
-                activeTab === "transforms"
-                  ? "bg-[#C5A059] text-[#0B0E14] border-[#C5A059]"
-                  : "bg-[#0B0E14] text-[#D6D1C7] border-[#263147] hover:border-[#C5A059]"
-              }`}
-            >
-              Pipeline Transforms ({transforms.filter((t) => t.enabled).length}/
-              {transforms.length})
-            </button>
+          {/* Compact Summary Badges */}
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="px-3 py-1.5 bg-[#0B0E14] border border-[#8A6D3B]/45 font-sans text-[#F3EFE6]">
+              <strong className="text-[#C5A059]">{counts.synthesized}</strong>{" "}
+              Published Briefs
+            </span>
+            <span className="px-3 py-1.5 bg-[#0B0E14] border border-[#8A6D3B]/45 font-sans text-[#F3EFE6]">
+              <strong className="text-emerald-300">{counts.rewritten}</strong>{" "}
+              Calm Headlines
+            </span>
+            <span className="px-3 py-1.5 bg-[#0B0E14] border border-[#8A6D3B]/45 font-sans text-[#F3EFE6]">
+              <strong className="text-[#C5A059]">{initialFeeds.length}</strong>{" "}
+              RSS Sources
+            </span>
           </div>
         </div>
 
-        {/* KPI Strip */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-6 pt-5 border-t border-[#1E2738]">
-          <div className="bg-[#0B0E14] border border-[#1E2738] rounded p-3">
-            <div className="font-mono text-[10px] uppercase text-[#8E9BAE]">
-              Synthesized Public
+        {/* Top Segmented Control Bar switching between Stories, RSS Sources, and Editorial Tone & Filtering */}
+        <div
+          role="tablist"
+          aria-label="Editorial & Feeds Workspace Views"
+          className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-4 border-t border-[#8A6D3B]/35"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeView === "stories"}
+            onClick={() => setActiveView("stories")}
+            className={`px-4 py-3 text-left border transition-all duration-200 ease-out cursor-pointer ${
+              activeView === "stories"
+                ? "bg-[#C5A059]/15 border-[#C5A059] text-[#F3EFE6]"
+                : "bg-[#0B0E14]/80 border-[#8A6D3B]/40 text-[#94A3B8] hover:text-[#F3EFE6] hover:border-[#C5A059]/60"
+            }`}
+          >
+            <div className="font-display text-xs uppercase tracking-wider font-bold">
+              1. Case Briefs &amp; Stories ({counts.total})
             </div>
-            <div className="text-xl font-bold text-emerald-400 font-mono mt-0.5">
-              {counts.synthesized}
+            <div className="font-serif text-xs text-[#94A3B8] mt-0.5">
+              Calm Headline Rewrite, illustrations &amp; Craftsman&apos;s Briefs
             </div>
-          </div>
-          <div className="bg-[#0B0E14] border border-[#1E2738] rounded p-3">
-            <div className="font-mono text-[10px] uppercase text-[#8E9BAE]">
-              Titles Neutralized
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeView === "feeds"}
+            onClick={() => setActiveView("feeds")}
+            className={`px-4 py-3 text-left border transition-all duration-200 ease-out cursor-pointer ${
+              activeView === "feeds"
+                ? "bg-[#C5A059]/15 border-[#C5A059] text-[#F3EFE6]"
+                : "bg-[#0B0E14]/80 border-[#8A6D3B]/40 text-[#94A3B8] hover:text-[#F3EFE6] hover:border-[#C5A059]/60"
+            }`}
+          >
+            <div className="font-display text-xs uppercase tracking-wider font-bold">
+              2. RSS Sources ({initialFeeds.length})
             </div>
-            <div className="text-xl font-bold text-[#C5A059] font-mono mt-0.5">
-              {counts.rewritten}
+            <div className="font-serif text-xs text-[#94A3B8] mt-0.5">
+              Add, preview, or pause monitored RSS &amp; Atom publications
             </div>
-          </div>
-          <div className="bg-[#0B0E14] border border-[#1E2738] rounded p-3">
-            <div className="font-mono text-[10px] uppercase text-[#8E9BAE]">
-              With Visual Media
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeView === "rules"}
+            onClick={() => setActiveView("rules")}
+            className={`px-4 py-3 text-left border transition-all duration-200 ease-out cursor-pointer ${
+              activeView === "rules"
+                ? "bg-[#C5A059]/15 border-[#C5A059] text-[#F3EFE6]"
+                : "bg-[#0B0E14]/80 border-[#8A6D3B]/40 text-[#94A3B8] hover:text-[#F3EFE6] hover:border-[#C5A059]/60"
+            }`}
+          >
+            <div className="font-display text-xs uppercase tracking-wider font-bold">
+              3. Editorial Tone &amp; Filtering ({initialFilters.length} rules)
             </div>
-            <div className="text-xl font-bold text-sky-400 font-mono mt-0.5">
-              {counts.withImage}
+            <div className="font-serif text-xs text-[#94A3B8] mt-0.5">
+              Minimum Relevance Score, keyword filters &amp; automated tone
+              rules
             </div>
-          </div>
-          <div className="bg-[#0B0E14] border border-[#1E2738] rounded p-3">
-            <div className="font-mono text-[10px] uppercase text-[#8E9BAE]">
-              Pinned to Top
-            </div>
-            <div className="text-xl font-bold text-[#F3EFE6] font-mono mt-0.5">
-              {counts.pinned}
-            </div>
-          </div>
-          <div className="bg-[#0B0E14] border border-[#1E2738] rounded p-3">
-            <div className="font-mono text-[10px] uppercase text-[#8E9BAE]">
-              Triaged Queue
-            </div>
-            <div className="text-xl font-bold text-amber-300 font-mono mt-0.5">
-              {counts.triaged}
-            </div>
-          </div>
-          <div className="bg-[#0B0E14] border border-[#1E2738] rounded p-3">
-            <div className="font-mono text-[10px] uppercase text-[#8E9BAE]">
-              Quarantined / Hidden
-            </div>
-            <div className="text-xl font-bold text-rose-400 font-mono mt-0.5">
-              {counts.quarantined + counts.hidden}
-            </div>
-          </div>
+          </button>
         </div>
       </div>
 
       {/* Feedback Banner */}
       {banner && (
         <div
-          className={`p-4 rounded-lg border font-mono text-xs flex items-start justify-between gap-4 ${
+          className={`p-4 border text-xs flex items-start justify-between gap-4 ${
             banner.type === "success"
               ? "bg-emerald-950/60 border-emerald-500/50 text-emerald-200"
               : banner.type === "error"
               ? "bg-red-950/60 border-red-500/50 text-red-200"
-              : "bg-sky-950/60 border-sky-500/50 text-sky-200"
+              : "bg-[#111726] border-[#C5A059] text-[#F3EFE6]"
           }`}
         >
           <div className="space-y-1">
-            <div className="font-bold uppercase tracking-wider">
+            <div className="font-display font-bold uppercase tracking-wider">
               {banner.title}
             </div>
-            <div className="text-[#D6D1C7]">{banner.detail}</div>
+            <div className="font-serif text-sm text-[#F3EFE6]/90">
+              {banner.detail}
+            </div>
           </div>
           <button
             type="button"
             onClick={() => setBanner(null)}
-            className="text-xs opacity-75 hover:opacity-100 cursor-pointer"
+            className="font-display text-xs uppercase tracking-wider opacity-75 hover:opacity-100 cursor-pointer"
           >
             ✕
           </button>
         </div>
       )}
 
-      {activeTab === "transforms" ? (
-        /* PIPELINE TRANSFORMS STUDIO */
+      {/* SUB-VIEW 2: RSS SOURCES */}
+      {activeView === "feeds" && (
+        <AdminFeedsClient
+          actor={actor}
+          initialFeeds={initialFeeds}
+          embedded={true}
+        />
+      )}
+
+      {/* SUB-VIEW 3: EDITORIAL TONE & FILTERING (Combines Automated Tone Rules + Relevance Thresholds + Keyword Filters) */}
+      {activeView === "rules" && (
         <div className="space-y-6">
-          <div className="bg-[#111622] border border-[#263147] rounded-lg p-6 space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-[#1E2738] pb-4">
+          {/* Automated Editorial Tone & Media Rules */}
+          <div className="relative bg-[#111726] border border-[#8A6D3B]/45 p-6 space-y-5 shadow-xl">
+            <span className="pointer-events-none absolute top-1.5 left-1.5 w-2 h-2 border-t border-l border-[#C5A059]/65" />
+            <span className="pointer-events-none absolute bottom-1.5 right-1.5 w-2 h-2 border-b border-r border-[#C5A059]/65" />
+
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-[#8A6D3B]/35 pb-4">
               <div>
-                <h2 className="text-lg font-bold text-[#F3EFE6]">
-                  Automated Editorial &amp; Media Pipeline Transforms
+                <h2 className="font-display text-base sm:text-lg text-[#F3EFE6] tracking-wide">
+                  Automated Editorial Tone &amp; Illustration Rules
                 </h2>
-                <p className="text-xs text-[#9CA3AF]">
-                  Configure deterministic &amp; System-2 transforms executed
-                  automatically during RSS ingestion and Gemini synthesis.
+                <p className="font-serif text-xs text-[#94A3B8]">
+                  Configure automatic Calm Headline Rewrite, source photo
+                  extraction, and Masonic Blueprint fallback cards.
                 </p>
               </div>
               <input
                 type="text"
                 value={transformReason}
                 onChange={(e) => setTransformReason(e.target.value)}
-                placeholder="Audit reason for transform change (optional)…"
-                className="px-3 py-1.5 rounded bg-[#0B0E14] border border-[#263147] text-xs font-mono text-[#F3EFE6] w-full sm:w-80"
+                placeholder="Editorial note for rule change (optional)…"
+                className="px-3 py-1.5 bg-[#0B0E14] border border-[#8A6D3B]/45 text-xs font-serif text-[#F3EFE6] w-full sm:w-80"
               />
             </div>
 
-            <div className="grid grid-cols-1 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {transforms.map((t) => {
                 const meta = TRANSFORM_LABELS[t.transformKey] || {
                   title: t.transformKey,
-                  subtitle: "Pipeline transform configuration rule",
-                  badge: "Pipeline Rule",
+                  subtitle: "Editorial automation rule",
+                  badge: "Rule",
                 };
                 const isCustomDirective =
                   t.transformKey === "custom_system2_directive";
@@ -823,34 +828,32 @@ export function AdminIncidentsClient({
                 return (
                   <div
                     key={t.transformKey}
-                    className="bg-[#0B0E14] border border-[#263147] rounded-lg p-5 space-y-4"
+                    className={`bg-[#0B0E14] border border-[#8A6D3B]/40 p-5 space-y-3 ${
+                      isCustomDirective ? "md:col-span-2" : ""
+                    }`}
                   >
-                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                       <div className="space-y-1.5">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-xs font-bold text-[#C5A059]">
+                          <span className="font-display text-sm font-bold text-[#F3EFE6]">
                             {meta.title}
                           </span>
-                          <span className="px-2 py-0.5 rounded bg-[#182032] border border-[#2E3C56] font-mono text-[10px] text-[#9CA3AF]">
+                          <span className="px-2 py-0.5 bg-[#111726] border border-[#8A6D3B]/45 font-display text-[10px] uppercase tracking-wider text-[#C5A059]">
                             {meta.badge}
                           </span>
                           <span
-                            className={`px-2 py-0.5 rounded font-mono text-[10px] font-bold uppercase ${
+                            className={`px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wider ${
                               t.enabled
                                 ? "bg-emerald-950/70 border border-emerald-500/40 text-emerald-300"
-                                : "bg-slate-900 border border-slate-700 text-slate-400"
+                                : "bg-[#111726] border border-[#8A6D3B]/40 text-[#94A3B8]"
                             }`}
                           >
-                            {t.enabled ? "ENABLED" : "DISABLED"}
+                            {t.enabled ? "Active" : "Paused"}
                           </span>
                         </div>
-                        <p className="text-xs text-[#9CA3AF] leading-relaxed max-w-3xl">
+                        <p className="font-serif text-xs text-[#94A3B8] leading-relaxed">
                           {meta.subtitle}
                         </p>
-                        <div className="font-mono text-[11px] text-[#8E9BAE]">
-                          Key: <code>{t.transformKey}</code> • Last updated{" "}
-                          {t.updatedAt.slice(0, 16).replace("T", " ")} UTC
-                        </div>
                       </div>
 
                       {canMutate && (
@@ -858,31 +861,30 @@ export function AdminIncidentsClient({
                           type="button"
                           disabled={submitting}
                           onClick={() => handleToggleTransform(t, !t.enabled)}
-                          className={`px-4 py-2 rounded font-mono text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer shrink-0 ${
+                          className={`px-3.5 py-1.5 font-display text-[11px] font-bold uppercase tracking-wider transition-all duration-200 ease-out cursor-pointer shrink-0 ${
                             t.enabled
-                              ? "bg-red-950/50 hover:bg-red-900/60 border border-red-500/40 text-red-200"
+                              ? "bg-[#111726] hover:border-red-500/50 border border-[#8A6D3B]/50 text-[#94A3B8] hover:text-red-200"
                               : "bg-emerald-950/60 hover:bg-emerald-900/70 border border-emerald-500/40 text-emerald-200"
                           }`}
                         >
-                          {t.enabled ? "Disable Rule" : "Enable Rule"}
+                          {t.enabled ? "Pause" : "Enable"}
                         </button>
                       )}
                     </div>
 
                     {isCustomDirective && (
-                      <div className="pt-3 border-t border-[#1E2738] space-y-2.5">
-                        <label className="block font-mono text-[11px] uppercase text-[#C5A059]">
-                          Custom System-2 Prompt Directive (Appended to Gemini
-                          System Instruction):
+                      <div className="pt-3 border-t border-[#8A6D3B]/30 space-y-2.5">
+                        <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059]">
+                          Standing Editorial Guidance Instruction:
                         </label>
                         <textarea
-                          rows={3}
+                          rows={2}
                           value={customDirectiveText}
                           onChange={(e) =>
                             setCustomDirectiveText(e.target.value)
                           }
                           placeholder="e.g., Emphasize concrete failure recovery timelines and avoid speculative policy prescriptions."
-                          className="w-full px-3 py-2 rounded bg-[#111622] border border-[#263147] text-xs font-mono text-[#F3EFE6]"
+                          className="w-full px-3 py-2 bg-[#111726] border border-[#8A6D3B]/45 text-xs font-serif text-[#F3EFE6]"
                         />
                         {canMutate && (
                           <div className="flex justify-end">
@@ -894,9 +896,9 @@ export function AdminIncidentsClient({
                                   directive: customDirectiveText,
                                 })
                               }
-                              className="px-4 py-1.5 rounded bg-[#C5A059] hover:bg-[#d4b06a] text-[#0B0E14] font-mono text-xs font-bold uppercase tracking-wider cursor-pointer"
+                              className="px-4 py-1.5 bg-[#C5A059] hover:bg-[#d4b06a] text-[#0B0E14] font-display text-xs font-bold uppercase tracking-wider cursor-pointer"
                             >
-                              Save Custom System-2 Directive
+                              Save Editorial Guidance
                             </button>
                           </div>
                         )}
@@ -907,25 +909,36 @@ export function AdminIncidentsClient({
               })}
             </div>
           </div>
+
+          {/* Embedded Filtering Rules & Minimum Relevance Score */}
+          <AdminFiltersClient
+            actor={actor}
+            initialFilters={initialFilters}
+            initialThresholds={initialThresholds}
+            initialFeeds={initialFeeds}
+            embedded={true}
+          />
         </div>
-      ) : (
-        /* INCIDENT & EDITORIAL STUDIO (2-Column Master/Detail) */
+      )}
+
+      {/* SUB-VIEW 1: CASE BRIEFS & STORIES (2-Column Master/Detail) */}
+      {activeView === "stories" && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* LEFT COLUMN (5 cols): Filterable Incident Roster */}
-          <div className="lg:col-span-5 bg-[#111622] border border-[#263147] rounded-lg p-4 space-y-4">
-            <div className="space-y-3 border-b border-[#1E2738] pb-3">
+          {/* LEFT COLUMN (5 cols): Scannable Story Roster */}
+          <div className="lg:col-span-5 bg-[#111726] border border-[#8A6D3B]/45 p-4 space-y-4 shadow-xl">
+            <div className="space-y-3 border-b border-[#8A6D3B]/35 pb-3">
               <div className="flex items-center justify-between">
-                <h2 className="font-mono text-xs uppercase tracking-wider text-[#C5A059] font-bold">
-                  D1 Incident Queue ({filteredIncidents.length})
+                <h2 className="font-display text-xs uppercase tracking-wider text-[#C5A059] font-bold">
+                  Stories &amp; Briefs ({filteredIncidents.length})
                 </h2>
-                <label className="inline-flex items-center gap-1.5 font-mono text-[11px] text-emerald-300 cursor-pointer">
+                <label className="inline-flex items-center gap-1.5 font-sans text-xs text-emerald-300 cursor-pointer">
                   <input
                     type="checkbox"
                     checked={rewrittenOnly}
                     onChange={(e) => setRewrittenOnly(e.target.checked)}
-                    className="rounded border-[#263147]"
+                    className="accent-[#C5A059]"
                   />
-                  <span>Neutralized Only</span>
+                  <span>Calm Headlines Only</span>
                 </label>
               </div>
 
@@ -933,26 +946,26 @@ export function AdminIncidentsClient({
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search headline, original title, #CAB code, feed…"
-                className="w-full px-3 py-2 rounded bg-[#0B0E14] border border-[#263147] text-xs font-mono text-[#F3EFE6]"
+                placeholder="Search headline, original title, #CAB code, or source…"
+                className="w-full px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 text-xs font-sans text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
               />
 
               <div className="flex flex-wrap gap-1.5">
                 {[
                   { id: "ALL", label: "All" },
-                  { id: "synthesized", label: "Synthesized" },
-                  { id: "triaged", label: "Triaged" },
+                  { id: "synthesized", label: "Published" },
+                  { id: "triaged", label: "Pending" },
                   { id: "QUARANTINED", label: "Quarantined" },
-                  { id: "dropped", label: "Dropped" },
+                  { id: "dropped", label: "Filtered" },
                 ].map((tab) => (
                   <button
                     key={tab.id}
                     type="button"
                     onClick={() => setStatusFilter(tab.id)}
-                    className={`px-2.5 py-1 rounded font-mono text-[10px] uppercase cursor-pointer border ${
+                    className={`px-2.5 py-1 font-display text-[10px] uppercase tracking-wider cursor-pointer border ${
                       statusFilter === tab.id
-                        ? "bg-[#C5A059]/20 border-[#C5A059] text-[#F3EFE6]"
-                        : "bg-[#0B0E14] border-[#263147] text-[#9CA3AF]"
+                        ? "bg-[#C5A059] border-[#C5A059] text-[#0B0E14] font-bold"
+                        : "bg-[#0B0E14] border-[#8A6D3B]/40 text-[#94A3B8]"
                     }`}
                   >
                     {tab.label}
@@ -969,66 +982,57 @@ export function AdminIncidentsClient({
                     key={inc.id}
                     type="button"
                     onClick={() => selectIncidentForEdit(inc)}
-                    className={`w-full text-left p-3.5 rounded-md border transition-all cursor-pointer space-y-1.5 ${
+                    className={`w-full text-left p-3.5 border transition-all duration-200 ease-out cursor-pointer space-y-1.5 ${
                       isSelected
-                        ? "bg-[#182032] border-[#C5A059] shadow-sm"
-                        : "bg-[#0B0E14] border-[#1E2738] hover:border-[#3A4A6B]"
+                        ? "bg-[#C5A059]/10 border-[#C5A059] shadow-sm"
+                        : "bg-[#0B0E14] border-[#8A6D3B]/35 hover:border-[#C5A059]/60"
                     }`}
                   >
-                    <div className="flex flex-wrap items-center justify-between gap-1.5 font-mono text-[10px]">
+                    <div className="flex flex-wrap items-center justify-between gap-1.5 text-[10px]">
                       <div className="flex items-center gap-1.5">
-                        <span className="text-[#C5A059] font-bold">
+                        <span className="font-mono text-[#C5A059] font-bold">
                           {inc.incidentCode}
                         </span>
-                        <span className="text-[#8E9BAE]">•</span>
-                        <span className="text-[#D6D1C7]">{inc.sourceFeed}</span>
+                        <span className="text-[#8A6D3B]">•</span>
+                        <span className="font-sans text-[#94A3B8]">
+                          {inc.sourceFeed}
+                        </span>
                       </div>
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1 font-display uppercase tracking-wider">
                         {inc.isPinned && (
-                          <span className="px-1.5 py-0.5 rounded bg-[#C5A059]/20 text-[#C5A059]">
-                            PINNED
+                          <span className="px-1.5 py-0.5 bg-[#C5A059]/20 text-[#C5A059]">
+                            Pinned
                           </span>
                         )}
                         {inc.isHidden && (
-                          <span className="px-1.5 py-0.5 rounded bg-rose-950/80 text-rose-300">
-                            HIDDEN
+                          <span className="px-1.5 py-0.5 bg-rose-950/80 text-rose-300">
+                            Hidden
                           </span>
                         )}
                         {inc.titleRewritten && (
-                          <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40 text-emerald-300">
-                            NEUTRALIZED
+                          <span className="px-1.5 py-0.5 bg-emerald-950/80 border border-emerald-500/40 text-emerald-300">
+                            Calm Headline
                           </span>
                         )}
-                        <span
-                          className={`px-1.5 py-0.5 rounded uppercase ${
-                            inc.status === "synthesized"
-                              ? "bg-emerald-950/60 text-emerald-300"
-                              : inc.status === "triaged"
-                              ? "bg-amber-950/60 text-amber-300"
-                              : "bg-slate-800 text-slate-300"
-                          }`}
-                        >
-                          {inc.status}
-                        </span>
                       </div>
                     </div>
 
-                    <div className="text-sm font-semibold text-[#F3EFE6] line-clamp-2">
+                    <div className="font-serif text-sm font-semibold text-[#F3EFE6] line-clamp-2">
                       {inc.title}
                     </div>
 
                     {inc.titleRewritten && inc.originalTitle && (
-                      <div className="font-mono text-[10px] text-[#9CA3AF] line-clamp-1 italic">
-                        Orig: &ldquo;{inc.originalTitle}&rdquo;
+                      <div className="font-serif text-[11px] text-[#94A3B8] line-clamp-1 italic">
+                        Source: &ldquo;{inc.originalTitle}&rdquo;
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between font-mono text-[10px] text-[#8E9BAE] pt-1">
-                      <span>
+                    <div className="flex items-center justify-between text-[11px] text-[#94A3B8] pt-1">
+                      <span className="font-display text-[10px] uppercase tracking-wider text-[#C5A059]">
                         {inc.primaryTool} · {inc.sreFailureMode}
                       </span>
-                      <span className="text-sky-400">
-                        [{inc.imageSourceType || "none"}]
+                      <span className="font-mono text-[10px]">
+                        [{inc.imageSourceType || "card"}]
                       </span>
                     </div>
                   </button>
@@ -1037,32 +1041,31 @@ export function AdminIncidentsClient({
             </div>
           </div>
 
-          {/* RIGHT COLUMN (7 cols): Active Incident Editorial Studio */}
-          <div className="lg:col-span-7 space-y-6">
+          {/* RIGHT COLUMN (7 cols): Story & Brief Inspector */}
+          <div className="lg:col-span-7 space-y-4">
             {!selectedIncident ? (
-              <div className="bg-[#111622] border border-[#263147] rounded-lg p-8 text-center font-mono text-xs text-[#9CA3AF]">
-                Select an incident from the left roster to open the Editorial
-                Studio.
+              <div className="bg-[#111726] border border-[#8A6D3B]/45 p-8 text-center font-serif text-sm text-[#94A3B8]">
+                Select a story from the left list to edit its headline,
+                illustration, or Craftsman&apos;s Brief.
               </div>
             ) : (
-              <div className="bg-[#111622] border border-[#263147] rounded-lg p-6 space-y-6">
-                {/* Selected Incident Header */}
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 border-b border-[#1E2738] pb-4">
+              <div className="relative bg-[#111726] border border-[#8A6D3B]/45 p-6 space-y-6 shadow-xl">
+                <span className="pointer-events-none absolute top-1.5 left-1.5 w-2.5 h-2.5 border-t border-l border-[#C5A059]/75" />
+                <span className="pointer-events-none absolute top-1.5 right-1.5 w-2.5 h-2.5 border-t border-r border-[#C5A059]/75" />
+
+                {/* Selected Story Header */}
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 border-b border-[#8A6D3B]/35 pb-4">
                   <div className="space-y-1">
-                    <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
-                      <span className="text-[#C5A059] font-bold">
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="font-mono text-[#C5A059] font-bold">
                         {selectedIncident.incidentCode}
                       </span>
-                      <span>•</span>
-                      <span className="text-[#D6D1C7]">
+                      <span className="text-[#8A6D3B]">•</span>
+                      <span className="font-sans text-[#94A3B8]">
                         {selectedIncident.sourceFeed}
                       </span>
-                      <span>•</span>
-                      <span className="text-[#8E9BAE]">
-                        D1 ID #{selectedIncident.id}
-                      </span>
                     </div>
-                    <h2 className="text-lg font-bold text-[#F3EFE6]">
+                    <h2 className="font-display text-lg sm:text-xl text-[#F3EFE6] leading-snug">
                       {selectedIncident.title}
                     </h2>
                   </div>
@@ -1072,7 +1075,7 @@ export function AdminIncidentsClient({
                       href={`https://thecabcall.com/incidents/${selectedIncident.slug}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="px-3 py-1.5 rounded border border-[#263147] hover:border-[#C5A059] bg-[#0B0E14] font-mono text-xs text-[#C5A059]"
+                      className="px-3 py-1.5 border border-[#8A6D3B]/50 hover:border-[#C5A059] bg-[#0B0E14] font-display text-xs uppercase tracking-wider text-[#C5A059]"
                     >
                       Public Brief ↗
                     </a>
@@ -1080,59 +1083,59 @@ export function AdminIncidentsClient({
                       href={selectedIncident.sourceUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="px-3 py-1.5 rounded border border-[#263147] hover:border-[#C5A059] bg-[#0B0E14] font-mono text-xs text-[#D6D1C7]"
+                      className="px-3 py-1.5 border border-[#8A6D3B]/50 hover:border-[#C5A059] bg-[#0B0E14] font-display text-xs uppercase tracking-wider text-[#F3EFE6]"
                     >
-                      Source URL ↗
+                      Source Article ↗
                     </a>
                   </div>
                 </div>
 
-                {/* Studio Section Sub-Tabs */}
-                <div className="flex flex-wrap gap-2 border-b border-[#1E2738] pb-3">
+                {/* Inspector Section Tabs */}
+                <div className="flex flex-wrap gap-2 border-b border-[#8A6D3B]/35 pb-3">
                   <button
                     type="button"
                     onClick={() => setStudioSection("headline")}
-                    className={`px-3.5 py-2 rounded font-mono text-xs font-semibold cursor-pointer border ${
+                    className={`px-3.5 py-2 font-display text-xs uppercase tracking-wider cursor-pointer border transition-all duration-200 ease-out ${
                       studioSection === "headline"
-                        ? "bg-[#C5A059]/20 border-[#C5A059] text-[#F3EFE6]"
-                        : "bg-[#0B0E14] border-[#263147] text-[#9CA3AF]"
+                        ? "bg-[#C5A059] border-[#C5A059] text-[#0B0E14] font-bold"
+                        : "bg-[#0B0E14] border-[#8A6D3B]/45 text-[#94A3B8] hover:text-[#F3EFE6]"
                     }`}
                   >
-                    1. De-Alarmist Headline Rewriter
+                    1. Calm Headline Rewrite
                   </button>
                   <button
                     type="button"
                     onClick={() => setStudioSection("media")}
-                    className={`px-3.5 py-2 rounded font-mono text-xs font-semibold cursor-pointer border ${
+                    className={`px-3.5 py-2 font-display text-xs uppercase tracking-wider cursor-pointer border transition-all duration-200 ease-out ${
                       studioSection === "media"
-                        ? "bg-[#C5A059]/20 border-[#C5A059] text-[#F3EFE6]"
-                        : "bg-[#0B0E14] border-[#263147] text-[#9CA3AF]"
+                        ? "bg-[#C5A059] border-[#C5A059] text-[#0B0E14] font-bold"
+                        : "bg-[#0B0E14] border-[#8A6D3B]/45 text-[#94A3B8] hover:text-[#F3EFE6]"
                     }`}
                   >
-                    2. Image &amp; Blueprint Card Studio
+                    2. Story Illustration &amp; Card
                   </button>
                   <button
                     type="button"
                     onClick={() => setStudioSection("brief")}
-                    className={`px-3.5 py-2 rounded font-mono text-xs font-semibold cursor-pointer border ${
+                    className={`px-3.5 py-2 font-display text-xs uppercase tracking-wider cursor-pointer border transition-all duration-200 ease-out ${
                       studioSection === "brief"
-                        ? "bg-[#C5A059]/20 border-[#C5A059] text-[#F3EFE6]"
-                        : "bg-[#0B0E14] border-[#263147] text-[#9CA3AF]"
+                        ? "bg-[#C5A059] border-[#C5A059] text-[#0B0E14] font-bold"
+                        : "bg-[#0B0E14] border-[#8A6D3B]/45 text-[#94A3B8] hover:text-[#F3EFE6]"
                     }`}
                   >
-                    3. Socratic Brief &amp; Lens Override
+                    3. Craftsman&apos;s Brief &amp; Working Tools
                   </button>
                 </div>
 
-                {/* SECTION 1: DE-ALARMIST HEADLINE REWRITER */}
+                {/* SECTION 1: CALM HEADLINE REWRITE */}
                 {studioSection === "headline" && (
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="p-3.5 rounded bg-[#0B0E14] border border-[#263147] space-y-1">
-                        <div className="font-mono text-[10px] uppercase text-[#8E9BAE]">
-                          Immutable Original Source Headline (original_title)
+                      <div className="p-3.5 bg-[#0B0E14] border border-[#8A6D3B]/40 space-y-1">
+                        <div className="font-display text-[10px] uppercase tracking-wider text-[#94A3B8]">
+                          Original Source Headline (Preserved for Disclosure)
                         </div>
-                        <div className="text-sm font-serif italic text-[#D6D1C7]">
+                        <div className="text-sm font-serif italic text-[#F3EFE6]/90">
                           &ldquo;
                           {selectedIncident.originalTitle ||
                             selectedIncident.title}
@@ -1140,49 +1143,43 @@ export function AdminIncidentsClient({
                         </div>
                       </div>
 
-                      <div className="p-3.5 rounded bg-[#0B0E14] border border-emerald-500/40 space-y-1">
-                        <div className="flex items-center justify-between font-mono text-[10px] uppercase text-emerald-400">
-                          <span>Active Public Display Headline</span>
+                      <div className="p-3.5 bg-[#0B0E14] border border-emerald-500/40 space-y-1">
+                        <div className="flex items-center justify-between font-display text-[10px] uppercase tracking-wider text-emerald-400">
+                          <span>Published Display Headline</span>
                           <span>
                             {selectedIncident.titleRewritten
-                              ? "NEUTRALIZED"
-                              : "UNCHANGED"}
+                              ? "Calm Rewrite Active"
+                              : "Original Used"}
                           </span>
                         </div>
-                        <div className="text-sm font-semibold text-[#F3EFE6]">
+                        <div className="font-serif text-sm font-semibold text-[#F3EFE6]">
                           {selectedIncident.title}
                         </div>
-                        {selectedIncident.titleRewriteReason && (
-                          <div className="font-mono text-[10px] text-[#9CA3AF] pt-1">
-                            Rationale: {selectedIncident.titleRewriteReason}
-                          </div>
-                        )}
                       </div>
                     </div>
 
                     <div className="space-y-2">
-                      <label className="block font-mono text-xs uppercase text-[#C5A059]">
-                        Neutralized Display Headline Override:
+                      <label className="block font-display text-xs uppercase tracking-wider text-[#C5A059]">
+                        Display Headline:
                       </label>
                       <input
                         type="text"
                         value={headlineDraft}
                         onChange={(e) => setHeadlineDraft(e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded bg-[#0B0E14] border border-[#263147] text-sm text-[#F3EFE6]"
+                        className="w-full px-3.5 py-2.5 bg-[#0B0E14] border border-[#8A6D3B]/45 font-serif text-sm text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
                       />
                     </div>
 
                     <div className="space-y-2">
-                      <label className="block font-mono text-xs uppercase text-[#8E9BAE]">
-                        Editorial De-Escalation Rationale (Recorded in
-                        audit_ledger):
+                      <label className="block font-display text-xs uppercase tracking-wider text-[#94A3B8]">
+                        Editorial Note (Recorded in Audit Ledger):
                       </label>
                       <input
                         type="text"
                         value={headlineReason}
                         onChange={(e) => setHeadlineReason(e.target.value)}
-                        placeholder="e.g., Stripped sensationalist 'SLAMMED' framing in favor of neutral operational description."
-                        className="w-full px-3.5 py-2 rounded bg-[#0B0E14] border border-[#263147] text-xs font-mono text-[#F3EFE6]"
+                        placeholder="e.g., Replaced sensationalist verb with calm factual description."
+                        className="w-full px-3.5 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 text-xs font-serif text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
                       />
                     </div>
 
@@ -1192,9 +1189,9 @@ export function AdminIncidentsClient({
                           type="button"
                           disabled={submitting}
                           onClick={() => handleRewriteTitle({})}
-                          className="px-4 py-2 rounded bg-[#C5A059] hover:bg-[#d4b06a] text-[#0B0E14] font-mono text-xs font-bold uppercase tracking-wider cursor-pointer"
+                          className="px-4 py-2 bg-[#C5A059] hover:bg-[#d4b06a] text-[#0B0E14] font-display text-xs font-bold uppercase tracking-wider cursor-pointer"
                         >
-                          Save Neutralized Headline
+                          Save Display Headline
                         </button>
                         <button
                           type="button"
@@ -1202,9 +1199,9 @@ export function AdminIncidentsClient({
                           onClick={() =>
                             handleRewriteTitle({ autoDeescalate: true })
                           }
-                          className="px-4 py-2 rounded bg-emerald-950/70 hover:bg-emerald-900/80 border border-emerald-500/50 text-emerald-200 font-mono text-xs font-semibold uppercase tracking-wider cursor-pointer"
+                          className="px-4 py-2 bg-emerald-950/70 hover:bg-emerald-900/80 border border-emerald-500/50 text-emerald-200 font-display text-xs font-semibold uppercase tracking-wider cursor-pointer"
                         >
-                          ⚡ Auto-Neutralize with Gemini 2.5 Flash
+                          ⚡ Suggest Calm Headline
                         </button>
                         {selectedIncident.titleRewritten && (
                           <button
@@ -1213,7 +1210,7 @@ export function AdminIncidentsClient({
                             onClick={() =>
                               handleRewriteTitle({ restoreOriginal: true })
                             }
-                            className="px-3.5 py-2 rounded bg-[#0B0E14] hover:border-[#C5A059] border border-[#263147] text-[#D6D1C7] font-mono text-xs cursor-pointer"
+                            className="px-3.5 py-2 bg-[#0B0E14] hover:border-[#C5A059] border border-[#8A6D3B]/45 text-[#F3EFE6] font-display text-xs uppercase tracking-wider cursor-pointer"
                           >
                             Restore Original Title
                           </button>
@@ -1223,21 +1220,20 @@ export function AdminIncidentsClient({
                   </div>
                 )}
 
-                {/* SECTION 2: VISUAL MEDIA & BLUEPRINT CARD STUDIO */}
+                {/* SECTION 2: STORY ILLUSTRATION & BLUEPRINT CARD */}
                 {studioSection === "media" && (
                   <div className="space-y-5">
-                    {/* Live Preview */}
-                    <div className="p-4 rounded bg-[#0B0E14] border border-[#263147] space-y-3">
-                      <div className="flex items-center justify-between font-mono text-xs">
-                        <span className="text-[#C5A059] uppercase">
-                          Active Incident Visual Preview
+                    <div className="p-4 bg-[#0B0E14] border border-[#8A6D3B]/40 space-y-3">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-display text-[#C5A059] uppercase tracking-wider">
+                          Current Story Illustration
                         </span>
-                        <span className="px-2 py-0.5 rounded bg-[#182032] text-sky-300 text-[11px]">
-                          Source Type: {selectedIncident.imageSourceType}
+                        <span className="px-2 py-0.5 bg-[#111726] border border-[#8A6D3B]/40 font-mono text-[#94A3B8] text-[11px]">
+                          Source: {selectedIncident.imageSourceType}
                         </span>
                       </div>
 
-                      <div className="overflow-hidden rounded border border-[#1E2738] bg-[#111622]">
+                      <div className="overflow-hidden border border-[#8A6D3B]/35 bg-[#111726]">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={`${
@@ -1258,50 +1254,46 @@ export function AdminIncidentsClient({
                         />
                       </div>
 
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        {canMutate && (
-                          <>
-                            <button
-                              type="button"
-                              disabled={submitting}
-                              onClick={() =>
-                                handleAttachImage({ generateSvgCard: true })
-                              }
-                              className="px-3.5 py-1.5 rounded bg-[#182032] hover:border-[#C5A059] border border-[#2E3C56] font-mono text-xs text-[#C5A059] cursor-pointer"
-                            >
-                              Use Masonic/SRE Blueprint SVG Card
-                            </button>
-                            <button
-                              type="button"
-                              disabled={submitting}
-                              onClick={() =>
-                                handleAttachImage({ extractFromSource: true })
-                              }
-                              className="px-3.5 py-1.5 rounded bg-sky-950/60 hover:bg-sky-900/70 border border-sky-500/40 font-mono text-xs text-sky-200 cursor-pointer"
-                            >
-                              Extract OG/Lead Image from Source URL
-                            </button>
-                            <button
-                              type="button"
-                              disabled={submitting}
-                              onClick={() =>
-                                handleAttachImage({ clearImage: true })
-                              }
-                              className="px-3 py-1.5 rounded bg-red-950/40 hover:bg-red-900/60 border border-red-500/40 font-mono text-xs text-red-200 cursor-pointer"
-                            >
-                              Clear Image
-                            </button>
-                          </>
-                        )}
-                      </div>
+                      {canMutate && (
+                        <div className="flex flex-wrap gap-2 pt-1">
+                          <button
+                            type="button"
+                            disabled={submitting}
+                            onClick={() =>
+                              handleAttachImage({ generateSvgCard: true })
+                            }
+                            className="px-3.5 py-1.5 bg-[#111726] hover:border-[#C5A059] border border-[#8A6D3B]/50 font-display text-xs uppercase tracking-wider text-[#C5A059] cursor-pointer"
+                          >
+                            Use Masonic Blueprint Card
+                          </button>
+                          <button
+                            type="button"
+                            disabled={submitting}
+                            onClick={() =>
+                              handleAttachImage({ extractFromSource: true })
+                            }
+                            className="px-3.5 py-1.5 bg-[#111726] hover:border-[#C5A059] border border-[#8A6D3B]/50 font-display text-xs uppercase tracking-wider text-[#F3EFE6] cursor-pointer"
+                          >
+                            Extract Lead Image from Source URL
+                          </button>
+                          <button
+                            type="button"
+                            disabled={submitting}
+                            onClick={() =>
+                              handleAttachImage({ clearImage: true })
+                            }
+                            className="px-3 py-1.5 bg-red-950/40 hover:bg-red-900/60 border border-red-500/40 font-display text-xs uppercase tracking-wider text-red-200 cursor-pointer"
+                          >
+                            Clear Image
+                          </button>
+                        </div>
+                      )}
                     </div>
 
-                    {/* R2 File Upload */}
                     {canMutate && (
-                      <div className="p-4 rounded bg-[#0B0E14] border border-[#263147] space-y-3">
-                        <div className="font-mono text-xs uppercase text-[#C5A059]">
-                          Upload Custom Image to Cloudflare R2 (cabcall-audio
-                          /media/*)
+                      <div className="p-4 bg-[#0B0E14] border border-[#8A6D3B]/40 space-y-3">
+                        <div className="font-display text-xs uppercase tracking-wider text-[#C5A059]">
+                          Upload Custom Illustration
                         </div>
                         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
                           <input
@@ -1310,36 +1302,35 @@ export function AdminIncidentsClient({
                             onChange={(e) =>
                               setUploadFile(e.target.files?.[0] || null)
                             }
-                            className="text-xs font-mono text-[#D6D1C7] file:mr-3 file:px-3 file:py-1.5 file:rounded file:border-0 file:bg-[#182032] file:text-[#C5A059] file:font-mono file:text-xs"
+                            className="text-xs font-sans text-[#F3EFE6] file:mr-3 file:px-3 file:py-1.5 file:border-0 file:bg-[#111726] file:text-[#C5A059] file:font-display file:uppercase file:text-xs"
                           />
                           <button
                             type="button"
                             disabled={submitting || !uploadFile}
                             onClick={handleUploadFileToR2}
-                            className="px-4 py-2 rounded bg-[#C5A059] disabled:opacity-40 text-[#0B0E14] font-mono text-xs font-bold uppercase tracking-wider cursor-pointer"
+                            className="px-4 py-2 bg-[#C5A059] disabled:opacity-40 text-[#0B0E14] font-display text-xs font-bold uppercase tracking-wider cursor-pointer"
                           >
-                            Upload &amp; Attach to Incident
+                            Upload &amp; Attach
                           </button>
                         </div>
                       </div>
                     )}
 
-                    {/* Manual Image URL / Alt / Caption */}
                     <div className="space-y-3">
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="sm:col-span-2">
-                          <label className="block font-mono text-[11px] uppercase text-[#8E9BAE] mb-1">
-                            Image URL (/media/... or https://...):
+                          <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                            Image URL:
                           </label>
                           <input
                             type="text"
                             value={imageUrlDraft}
                             onChange={(e) => setImageUrlDraft(e.target.value)}
-                            className="w-full px-3 py-2 rounded bg-[#0B0E14] border border-[#263147] text-xs font-mono text-[#F3EFE6]"
+                            className="w-full px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 text-xs font-mono text-[#F3EFE6]"
                           />
                         </div>
                         <div>
-                          <label className="block font-mono text-[11px] uppercase text-[#8E9BAE] mb-1">
+                          <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
                             Source Type:
                           </label>
                           <select
@@ -1349,51 +1340,38 @@ export function AdminIncidentsClient({
                                 e.target.value as ImageSourceType
                               )
                             }
-                            className="w-full px-3 py-2 rounded bg-[#0B0E14] border border-[#263147] text-xs font-mono text-[#F3EFE6]"
+                            className="w-full px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 text-xs font-sans text-[#F3EFE6]"
                           >
-                            <option value="svg_card">svg_card</option>
-                            <option value="rss">rss</option>
-                            <option value="og">og</option>
-                            <option value="upload">upload</option>
-                            <option value="none">none</option>
+                            <option value="svg_card">Blueprint Card</option>
+                            <option value="rss">RSS Media</option>
+                            <option value="og">Article OpenGraph</option>
+                            <option value="upload">Uploaded Image</option>
+                            <option value="none">None</option>
                           </select>
                         </div>
                       </div>
 
                       <div>
-                        <label className="block font-mono text-[11px] uppercase text-[#8E9BAE] mb-1">
-                          Accessible Image Alt Text (image_alt):
+                        <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                          Accessible Alt Text:
                         </label>
                         <input
                           type="text"
                           value={imageAltDraft}
                           onChange={(e) => setImageAltDraft(e.target.value)}
-                          className="w-full px-3 py-2 rounded bg-[#0B0E14] border border-[#263147] text-xs text-[#F3EFE6]"
+                          className="w-full px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 text-xs font-serif text-[#F3EFE6]"
                         />
                       </div>
 
                       <div>
-                        <label className="block font-mono text-[11px] uppercase text-[#8E9BAE] mb-1">
-                          Editorial Caption &amp; Attribution (image_caption):
+                        <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                          Caption &amp; Attribution:
                         </label>
                         <input
                           type="text"
                           value={imageCaptionDraft}
                           onChange={(e) => setImageCaptionDraft(e.target.value)}
-                          className="w-full px-3 py-2 rounded bg-[#0B0E14] border border-[#263147] text-xs text-[#F3EFE6]"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block font-mono text-[11px] uppercase text-[#8E9BAE] mb-1">
-                          Audit Reason:
-                        </label>
-                        <input
-                          type="text"
-                          value={imageReason}
-                          onChange={(e) => setImageReason(e.target.value)}
-                          placeholder="Reason for attaching/updating visual media…"
-                          className="w-full px-3 py-2 rounded bg-[#0B0E14] border border-[#263147] text-xs font-mono text-[#F3EFE6]"
+                          className="w-full px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 text-xs font-serif text-[#F3EFE6]"
                         />
                       </div>
 
@@ -1402,21 +1380,21 @@ export function AdminIncidentsClient({
                           type="button"
                           disabled={submitting}
                           onClick={() => handleAttachImage({})}
-                          className="px-4 py-2 rounded bg-[#C5A059] hover:bg-[#d4b06a] text-[#0B0E14] font-mono text-xs font-bold uppercase tracking-wider cursor-pointer"
+                          className="px-4 py-2 bg-[#C5A059] hover:bg-[#d4b06a] text-[#0B0E14] font-display text-xs font-bold uppercase tracking-wider cursor-pointer"
                         >
-                          Save Image Metadata &amp; Attachment
+                          Save Illustration Settings
                         </button>
                       )}
                     </div>
                   </div>
                 )}
 
-                {/* SECTION 3: SOCRATIC BRIEF & LENS OVERRIDE */}
+                {/* SECTION 3: CRAFTSMAN'S BRIEF & WORKING TOOLS */}
                 {studioSection === "brief" && (
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div>
-                        <label className="block font-mono text-[11px] uppercase text-[#C5A059] mb-1">
+                        <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059] mb-1">
                           Primary Working Tool:
                         </label>
                         <select
@@ -1426,7 +1404,7 @@ export function AdminIncidentsClient({
                               e.target.value as JevWorkingToolKey
                             )
                           }
-                          className="w-full px-3 py-2 rounded bg-[#0B0E14] border border-[#263147] text-xs font-mono text-[#F3EFE6]"
+                          className="w-full px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 text-xs font-sans text-[#F3EFE6]"
                         >
                           {WORKING_TOOL_OPTIONS.map((t) => (
                             <option key={t.key} value={t.key}>
@@ -1437,7 +1415,7 @@ export function AdminIncidentsClient({
                       </div>
 
                       <div>
-                        <label className="block font-mono text-[11px] uppercase text-[#8E9BAE] mb-1">
+                        <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
                           Secondary Working Tool:
                         </label>
                         <select
@@ -1447,7 +1425,7 @@ export function AdminIncidentsClient({
                               e.target.value as JevWorkingToolKey
                             )
                           }
-                          className="w-full px-3 py-2 rounded bg-[#0B0E14] border border-[#263147] text-xs font-mono text-[#F3EFE6]"
+                          className="w-full px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 text-xs font-sans text-[#F3EFE6]"
                         >
                           {WORKING_TOOL_OPTIONS.map((t) => (
                             <option key={t.key} value={t.key}>
@@ -1458,8 +1436,8 @@ export function AdminIncidentsClient({
                       </div>
 
                       <div>
-                        <label className="block font-mono text-[11px] uppercase text-[#F59E0B] mb-1">
-                          SRE Failure Mode:
+                        <label className="block font-display text-[11px] uppercase tracking-wider text-[#F59E0B] mb-1">
+                          Failure Pattern:
                         </label>
                         <select
                           value={failureModeDraft}
@@ -1468,7 +1446,7 @@ export function AdminIncidentsClient({
                               e.target.value as JevSreFailureModeKey
                             )
                           }
-                          className="w-full px-3 py-2 rounded bg-[#0B0E14] border border-[#263147] text-xs font-mono text-[#F3EFE6]"
+                          className="w-full px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 text-xs font-sans text-[#F3EFE6]"
                         >
                           {FAILURE_MODE_OPTIONS.map((f) => (
                             <option key={f.key} value={f.key}>
@@ -1479,28 +1457,27 @@ export function AdminIncidentsClient({
                       </div>
                     </div>
 
-                    {/* Status, Pin, Hide, Lead Post-Mortem */}
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 p-3.5 rounded bg-[#0B0E14] border border-[#263147]">
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 p-3.5 bg-[#0B0E14] border border-[#8A6D3B]/40">
                       <div>
-                        <label className="block font-mono text-[10px] uppercase text-[#8E9BAE] mb-1">
-                          Pipeline Status:
+                        <label className="block font-display text-[10px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                          Publication State:
                         </label>
                         <select
                           value={statusDraft}
                           onChange={(e) =>
                             setStatusDraft(e.target.value as typeof statusDraft)
                           }
-                          className="w-full px-2.5 py-1.5 rounded bg-[#111622] border border-[#263147] text-xs font-mono text-[#F3EFE6]"
+                          className="w-full px-2.5 py-1.5 bg-[#111726] border border-[#8A6D3B]/45 text-xs font-sans text-[#F3EFE6]"
                         >
-                          <option value="synthesized">synthesized</option>
-                          <option value="triaged">triaged</option>
-                          <option value="QUARANTINED">QUARANTINED</option>
-                          <option value="dropped">dropped</option>
-                          <option value="PENDING_RETRY">PENDING_RETRY</option>
+                          <option value="synthesized">Published</option>
+                          <option value="triaged">Pending Brief</option>
+                          <option value="QUARANTINED">Quarantined</option>
+                          <option value="dropped">Filtered Out</option>
+                          <option value="PENDING_RETRY">Pending Retry</option>
                         </select>
                       </div>
 
-                      <label className="inline-flex items-center gap-2 font-mono text-xs text-[#C5A059] cursor-pointer pt-4">
+                      <label className="inline-flex items-center gap-2 font-sans text-xs text-[#C5A059] cursor-pointer pt-4">
                         <input
                           type="checkbox"
                           checked={isPinnedDraft}
@@ -1509,7 +1486,7 @@ export function AdminIncidentsClient({
                         <span>Pin to Trestleboard</span>
                       </label>
 
-                      <label className="inline-flex items-center gap-2 font-mono text-xs text-rose-300 cursor-pointer pt-4">
+                      <label className="inline-flex items-center gap-2 font-sans text-xs text-rose-300 cursor-pointer pt-4">
                         <input
                           type="checkbox"
                           checked={isHiddenDraft}
@@ -1518,7 +1495,7 @@ export function AdminIncidentsClient({
                         <span>Hide from Public</span>
                       </label>
 
-                      <label className="inline-flex items-center gap-2 font-mono text-xs text-emerald-300 cursor-pointer pt-4">
+                      <label className="inline-flex items-center gap-2 font-sans text-xs text-emerald-300 cursor-pointer pt-4">
                         <input
                           type="checkbox"
                           checked={isLeadDraft}
@@ -1529,106 +1506,105 @@ export function AdminIncidentsClient({
                     </div>
 
                     <div>
-                      <label className="block font-mono text-[11px] uppercase text-[#8E9BAE] mb-1">
-                        Executive Summary (2 Factual Sentences for Trestleboard
-                        Card):
+                      <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                        Executive Summary (Trestleboard Card Hook):
                       </label>
                       <textarea
                         rows={2}
                         value={execSummaryDraft}
                         onChange={(e) => setExecSummaryDraft(e.target.value)}
-                        className="w-full px-3 py-2 rounded bg-[#0B0E14] border border-[#263147] text-xs text-[#F3EFE6]"
+                        className="w-full px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 font-serif text-sm text-[#F3EFE6]"
                       />
                     </div>
 
                     <div>
-                      <label className="block font-mono text-[11px] uppercase text-[#8E9BAE] mb-1">
+                      <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
                         Section I — What Happened (The Plain Facts):
                       </label>
                       <textarea
                         rows={3}
                         value={socraticBriefDraft}
                         onChange={(e) => setSocraticBriefDraft(e.target.value)}
-                        className="w-full px-3 py-2 rounded bg-[#0B0E14] border border-[#263147] text-xs text-[#F3EFE6]"
+                        className="w-full px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 font-serif text-sm text-[#F3EFE6]"
                       />
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div>
-                        <label className="block font-mono text-[11px] uppercase text-rose-400 mb-1">
+                        <label className="block font-display text-[11px] uppercase tracking-wider text-rose-400 mb-1">
                           Partisan Heat &amp; Spin (The Noise):
                         </label>
                         <textarea
                           rows={3}
                           value={noiseDraft}
                           onChange={(e) => setNoiseDraft(e.target.value)}
-                          className="w-full px-3 py-2 rounded bg-[#0B0E14] border border-[#263147] text-xs text-[#F3EFE6]"
+                          className="w-full px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 font-serif text-sm text-[#F3EFE6]"
                         />
                       </div>
 
                       <div>
-                        <label className="block font-mono text-[11px] uppercase text-emerald-400 mb-1">
+                        <label className="block font-display text-[11px] uppercase tracking-wider text-emerald-400 mb-1">
                           The Actual Foundation (The Signal):
                         </label>
                         <textarea
                           rows={3}
                           value={signalDraft}
                           onChange={(e) => setSignalDraft(e.target.value)}
-                          className="w-full px-3 py-2 rounded bg-[#0B0E14] border border-[#263147] text-xs text-[#F3EFE6]"
+                          className="w-full px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 font-serif text-sm text-[#F3EFE6]"
                         />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div>
-                        <label className="block font-mono text-[11px] uppercase text-[#C5A059] mb-1">
-                          Socratic Question Q1:
+                        <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059] mb-1">
+                          Question for Reflection I:
                         </label>
                         <input
                           type="text"
                           value={q1Draft}
                           onChange={(e) => setQ1Draft(e.target.value)}
-                          className="w-full px-3 py-2 rounded bg-[#0B0E14] border border-[#263147] text-xs text-[#F3EFE6]"
+                          className="w-full px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 font-serif text-sm text-[#F3EFE6]"
                         />
                       </div>
                       <div>
-                        <label className="block font-mono text-[11px] uppercase text-[#C5A059] mb-1">
-                          Socratic Question Q2:
+                        <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059] mb-1">
+                          Question for Reflection II:
                         </label>
                         <input
                           type="text"
                           value={q2Draft}
                           onChange={(e) => setQ2Draft(e.target.value)}
-                          className="w-full px-3 py-2 rounded bg-[#0B0E14] border border-[#263147] text-xs text-[#F3EFE6]"
+                          className="w-full px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 font-serif text-sm text-[#F3EFE6]"
                         />
                       </div>
                     </div>
 
                     {isLeadDraft && (
                       <div>
-                        <label className="block font-mono text-[11px] uppercase text-[#C5A059] mb-1">
-                          Lead Post-Mortem Multi-Paragraph Analysis:
+                        <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059] mb-1">
+                          Lead Post-Mortem Analysis:
                         </label>
                         <textarea
                           rows={4}
                           value={leadAnalysisDraft}
                           onChange={(e) => setLeadAnalysisDraft(e.target.value)}
-                          placeholder="Enter 2+ paragraphs separated by a blank line for the Featured Lead Post-Mortem slot…"
-                          className="w-full px-3 py-2 rounded bg-[#0B0E14] border border-[#263147] text-xs text-[#F3EFE6]"
+                          placeholder="Enter 2+ paragraphs separated by a blank line…"
+                          className="w-full px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 font-serif text-sm text-[#F3EFE6]"
                         />
                       </div>
                     )}
 
                     <div>
-                      <label className="block font-mono text-[11px] uppercase text-[#8E9BAE] mb-1">
-                        Internal Editorial Notes &amp; Audit Reason:
+                      <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                        Editorial Note (Recorded in Audit Ledger):
                       </label>
                       <input
                         type="text"
                         value={briefReason}
                         onChange={(e) => setBriefReason(e.target.value)}
-                        placeholder="Reason for overriding brief or classification…"
-                        className="w-full px-3 py-2 rounded bg-[#0B0E14] border border-[#263147] text-xs font-mono text-[#F3EFE6]"
+                        placeholder="Reason for updating brief or Working Tool classification…"
+                        className="w-full px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 text-xs font-serif text-[#F3EFE6]"
                       />
                     </div>
 
@@ -1638,17 +1614,17 @@ export function AdminIncidentsClient({
                           type="button"
                           disabled={submitting}
                           onClick={() => handleSaveBriefOverride(false)}
-                          className="px-4 py-2 rounded bg-[#C5A059] hover:bg-[#d4b06a] text-[#0B0E14] font-mono text-xs font-bold uppercase tracking-wider cursor-pointer"
+                          className="px-4 py-2 bg-[#C5A059] hover:bg-[#d4b06a] text-[#0B0E14] font-display text-xs font-bold uppercase tracking-wider cursor-pointer"
                         >
-                          Save Brief &amp; Classification Override
+                          Save Craftsman&apos;s Brief
                         </button>
                         <button
                           type="button"
                           disabled={submitting}
                           onClick={() => handleSaveBriefOverride(true)}
-                          className="px-4 py-2 rounded bg-sky-950/70 hover:bg-sky-900/80 border border-sky-500/40 text-sky-200 font-mono text-xs font-semibold uppercase tracking-wider cursor-pointer"
+                          className="px-4 py-2 bg-[#0B0E14] hover:border-[#C5A059] border border-[#8A6D3B]/50 text-[#C5A059] font-display text-xs font-semibold uppercase tracking-wider cursor-pointer"
                         >
-                          ↻ Re-Trigger System-2 Gemini Synthesis
+                          ↻ Re-Draft Brief Automatically
                         </button>
                       </div>
                     )}
@@ -1657,62 +1633,18 @@ export function AdminIncidentsClient({
               </div>
             )}
 
-            {/* Recent Editorial & Transform Audit Ledger Trail */}
-            <div className="bg-[#111622] border border-[#263147] rounded-lg p-5 space-y-3">
-              <div className="flex items-center justify-between border-b border-[#1E2738] pb-2.5">
-                <span className="font-mono text-xs uppercase tracking-wider text-[#C5A059] font-bold">
-                  Recent Editorial &amp; Media Audit Trail (SHA-256 Chained)
-                </span>
-                <Link
-                  href="/admin/audit"
-                  className="font-mono text-xs text-[#C5A059] hover:underline"
-                >
-                  Open Full Audit Ledger →
-                </Link>
-              </div>
-
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {auditEntries
-                  .filter(
-                    (e) =>
-                      e.actionType.startsWith("incident.") ||
-                      e.actionType.startsWith("pipeline_transform.")
-                  )
-                  .slice(0, 10)
-                  .map((entry) => (
-                    <div
-                      key={entry.eventId}
-                      className="p-3 rounded bg-[#0B0E14] border border-[#1E2738] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 font-mono text-xs"
-                    >
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[#C5A059] font-bold">
-                            {entry.actionType}
-                          </span>
-                          <span className="text-[#8E9BAE]">
-                            target #{entry.targetId}
-                          </span>
-                          <span className="text-[10px] text-emerald-400">
-                            {entry.entryHash.slice(0, 10)}…
-                          </span>
-                        </div>
-                        <div className="text-[#D6D1C7] text-[11px]">
-                          {entry.reason}
-                        </div>
-                      </div>
-                      {canMutate && (
-                        <button
-                          type="button"
-                          disabled={submitting}
-                          onClick={() => handleReplayAuditEvent(entry.eventId)}
-                          className="px-2.5 py-1 rounded border border-[#263147] hover:border-[#C5A059] text-[11px] text-[#C5A059] shrink-0 cursor-pointer"
-                        >
-                          Rollback State
-                        </button>
-                      )}
-                    </div>
-                  ))}
-              </div>
+            {/* Subtle Footer Link to Editorial Audit History */}
+            <div className="flex items-center justify-between px-1 text-xs text-[#94A3B8]">
+              <span className="font-serif italic">
+                Every headline rewrite, illustration update, and brief revision
+                is recorded in the immutable audit ledger.
+              </span>
+              <Link
+                href="/admin/audit"
+                className="font-display uppercase tracking-wider text-[#C5A059] hover:text-[#F3EFE6] transition-colors shrink-0"
+              >
+                Open Audit Ledger →
+              </Link>
             </div>
           </div>
         </div>

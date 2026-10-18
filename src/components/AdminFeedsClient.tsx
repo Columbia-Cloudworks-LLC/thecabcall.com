@@ -16,8 +16,9 @@ import type {
 interface AdminFeedsClientProps {
   actor: AuthenticatedAdminActor;
   initialFeeds: IngestFeedRecord[];
-  initialAuditEntries: AuditLedgerEntry[];
+  initialAuditEntries?: AuditLedgerEntry[];
   chainIntegrity?: AuditChainVerificationResult;
+  embedded?: boolean;
 }
 
 const DOMAIN_SECTOR_OPTIONS = [
@@ -32,13 +33,10 @@ const DOMAIN_SECTOR_OPTIONS = [
 export function AdminFeedsClient({
   actor,
   initialFeeds,
-  initialAuditEntries,
-  chainIntegrity,
+  embedded = false,
 }: AdminFeedsClientProps) {
   const router = useRouter();
   const [feeds, setFeeds] = useState<IngestFeedRecord[]>(initialFeeds);
-  const [auditEntries, setAuditEntries] =
-    useState<AuditLedgerEntry[]>(initialAuditEntries);
 
   // Create feed form state
   const [newName, setNewName] = useState("");
@@ -54,7 +52,7 @@ export function AdminFeedsClient({
   const [previewResult, setPreviewResult] =
     useState<FeedTestPreviewResult | null>(null);
 
-  // Edit feed modal/drawer state
+  // Edit feed modal state
   const [editingFeed, setEditingFeed] = useState<IngestFeedRecord | null>(null);
   const [editName, setEditName] = useState("");
   const [editUrl, setEditUrl] = useState("");
@@ -84,31 +82,13 @@ export function AdminFeedsClient({
     actor.role === "admin" ||
     actor.role === "editor";
 
-  async function refreshAuditLog() {
-    try {
-      const res = await fetch(
-        "/api/admin/audit?targetType=ingest_feed&limit=20",
-        { cache: "no-store" }
-      );
-      if (res.ok) {
-        const data = (await res.json()) as { entries?: AuditLedgerEntry[] };
-        if (Array.isArray(data.entries)) {
-          setAuditEntries(data.entries);
-        }
-      }
-    } catch {
-      // ignore
-    }
-    router.refresh();
-  }
-
   async function handleTestUrl(targetUrl?: string) {
     const urlToTest = (targetUrl ?? newUrl).trim();
     if (!urlToTest) {
       setBanner({
         type: "error",
-        title: "Missing RSS/Atom URL",
-        detail: "Enter an http:// or https:// feed URL to test.",
+        title: "Missing Feed URL",
+        detail: "Enter an http:// or https:// RSS or Atom feed URL to test.",
       });
       return;
     }
@@ -150,13 +130,14 @@ export function AdminFeedsClient({
         body: JSON.stringify({
           name: newName.trim(),
           url: newUrl.trim(),
-          focusArea: newFocusArea.trim() || "Institutional & Systemic Telemetry",
+          focusArea:
+            newFocusArea.trim() || "Institutional & Infrastructure Coverage",
           domainSectorOverride: newSectorOverride || null,
           itemsPerPoll: newItemsPerPoll,
           enabled: true,
           reason:
             newReason.trim() ||
-            `Added inbound RSS/Atom feed "${newName.trim()}" to active ingestion rotation`,
+            `Added RSS source "${newName.trim()}" to monitored newsroom feeds`,
         }),
       });
       const data = (await res.json()) as {
@@ -164,13 +145,12 @@ export function AdminFeedsClient({
         error?: string;
         feed?: IngestFeedRecord;
         feeds?: IngestFeedRecord[];
-        auditEntry?: AuditLedgerEntry;
       };
 
       if (!res.ok || !data.ok) {
         setBanner({
           type: "error",
-          title: "Failed to Create Inbound Feed",
+          title: "Failed to Add RSS Source",
           detail: data.error || `HTTP ${res.status}`,
         });
       } else {
@@ -187,13 +167,11 @@ export function AdminFeedsClient({
         setNewReason("");
         setBanner({
           type: "success",
-          title: `Feed "${data.feed?.name}" Added & Audited`,
-          detail: `Recorded feed.create in audit_ledger (${data.auditEntry?.entryHash.slice(
-            0,
-            12
-          )}…).`,
+          title: `RSS Source "${data.feed?.name}" Added`,
+          detail:
+            "Source registered for scheduled and manual newsroom collection and recorded in the audit ledger.",
         });
-        await refreshAuditLog();
+        router.refresh();
       }
     } catch (err) {
       setBanner({
@@ -237,7 +215,7 @@ export function AdminFeedsClient({
           enabled: editEnabled,
           reason:
             editReason.trim() ||
-            `Updated configuration for inbound feed "${editName.trim()}"`,
+            `Updated configuration for RSS source "${editName.trim()}"`,
         }),
       });
       const data = (await res.json()) as {
@@ -245,13 +223,12 @@ export function AdminFeedsClient({
         error?: string;
         feed?: IngestFeedRecord;
         feeds?: IngestFeedRecord[];
-        auditEntry?: AuditLedgerEntry;
       };
 
       if (!res.ok || !data.ok) {
         setBanner({
           type: "error",
-          title: "Failed to Update Feed",
+          title: "Failed to Update RSS Source",
           detail: data.error || `HTTP ${res.status}`,
         });
       } else {
@@ -261,13 +238,10 @@ export function AdminFeedsClient({
         setEditingFeed(null);
         setBanner({
           type: "success",
-          title: `Updated Feed "${data.feed?.name}"`,
-          detail: `Recorded feed.update in audit_ledger (${data.auditEntry?.entryHash.slice(
-            0,
-            12
-          )}…).`,
+          title: `Updated RSS Source "${data.feed?.name}"`,
+          detail: "Configuration saved and recorded in the audit ledger.",
         });
-        await refreshAuditLog();
+        router.refresh();
       }
     } catch (err) {
       setBanner({
@@ -291,19 +265,20 @@ export function AdminFeedsClient({
         body: JSON.stringify({
           id: feed.id,
           enabled: nextEnabled,
-          reason: `${nextEnabled ? "Enabled" : "Paused"} polling for inbound feed "${feed.name}"`,
+          reason: `${
+            nextEnabled ? "Resumed" : "Paused"
+          } collection for RSS source "${feed.name}"`,
         }),
       });
       const data = (await res.json()) as {
         ok?: boolean;
         error?: string;
         feeds?: IngestFeedRecord[];
-        auditEntry?: AuditLedgerEntry;
       };
       if (!res.ok || !data.ok) {
         setBanner({
           type: "error",
-          title: "Toggle Feed Failed",
+          title: "Toggle Source Failed",
           detail: data.error || `HTTP ${res.status}`,
         });
       } else {
@@ -313,12 +288,9 @@ export function AdminFeedsClient({
         setBanner({
           type: "success",
           title: `${nextEnabled ? "Resumed" : "Paused"} "${feed.name}"`,
-          detail: `Recorded feed.update in audit_ledger (${data.auditEntry?.entryHash.slice(
-            0,
-            12
-          )}…).`,
+          detail: "Source status updated and recorded in the audit ledger.",
         });
-        await refreshAuditLog();
+        router.refresh();
       }
     } catch (err) {
       setBanner({
@@ -343,20 +315,19 @@ export function AdminFeedsClient({
           id: deletingFeed.id,
           reason:
             deleteReason.trim() ||
-            `Removed inbound feed "${deletingFeed.name}" from active rotation`,
+            `Removed RSS source "${deletingFeed.name}" from active rotation`,
         }),
       });
       const data = (await res.json()) as {
         ok?: boolean;
         error?: string;
         feeds?: IngestFeedRecord[];
-        auditEntry?: AuditLedgerEntry;
       };
 
       if (!res.ok || !data.ok) {
         setBanner({
           type: "error",
-          title: "Delete Feed Failed",
+          title: "Remove Source Failed",
           detail: data.error || `HTTP ${res.status}`,
         });
       } else {
@@ -370,18 +341,16 @@ export function AdminFeedsClient({
         setDeleteReason("");
         setBanner({
           type: "success",
-          title: `Deleted Feed "${removedName}"`,
-          detail: `Recorded feed.delete with full before_state_json in audit_ledger (${data.auditEntry?.entryHash.slice(
-            0,
-            12
-          )}…). Can be restored anytime via Audit Replay.`,
+          title: `Removed RSS Source "${removedName}"`,
+          detail:
+            "Full snapshot preserved in the audit ledger for 1-click restoration.",
         });
-        await refreshAuditLog();
+        router.refresh();
       }
     } catch (err) {
       setBanner({
         type: "error",
-        title: "Delete Feed Error",
+        title: "Remove Source Error",
         detail: err instanceof Error ? err.message : String(err),
       });
     } finally {
@@ -390,147 +359,89 @@ export function AdminFeedsClient({
   }
 
   const activeFeedsCount = feeds.filter((f) => f.enabled).length;
-  const pausedFeedsCount = feeds.length - activeFeedsCount;
-  const totalIngestedAllFeeds = feeds.reduce(
-    (sum, f) => sum + (f.totalIngested || 0),
-    0
-  );
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-[#263147] pb-6">
-        <div>
-          <div className="font-mono text-xs uppercase tracking-widest text-[#C5A059]">
-            STAGE 1 TELEMETRY COLLECTOR // D1 INGEST_FEEDS REGISTRY
+    <div
+      className={
+        embedded
+          ? "space-y-6"
+          : "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6"
+      }
+    >
+      {!embedded && (
+        <div className="relative bg-[#111726] border border-[#8A6D3B]/45 p-6 shadow-xl flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="space-y-1">
+            <div className="font-display text-[11px] uppercase tracking-[0.18em] text-[#C5A059]">
+              Editorial &amp; Feeds • Monitored Sources
+            </div>
+            <h1 className="font-display text-2xl sm:text-3xl text-[#F3EFE6]">
+              Monitored RSS &amp; News Sources
+            </h1>
+            <p className="font-serif text-sm text-[#94A3B8] max-w-2xl">
+              Manage the RSS and Atom publications checked for incoming stories.
+              Test candidate feeds live before adding them.
+            </p>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-serif font-bold text-[#F3EFE6] mt-1">
-            Dynamic Inbound RSS &amp; Atom Feed Management
-          </h1>
-          <p className="text-sm text-[#9CA3AF] mt-1 max-w-3xl">
-            Configure the live RSS 2.0 and Atom 1.0 feeds polled every 6 hours
-            by the Cloudflare Worker. Test candidate URLs before adding them,
-            pause noisy sources, or adjust items-per-poll—with every change
-            hash-chained in{" "}
-            <code className="text-[#C5A059] font-mono">audit_ledger</code>.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5">
           <Link
-            href="/admin/filters"
-            className="px-3.5 py-2 rounded-md bg-[#151C2C] hover:bg-[#1D263B] border border-[#2E3C56] font-mono text-xs text-[#E5C178] transition-colors"
+            href="/admin/incidents"
+            className="px-3.5 py-2 bg-[#0B0E14] border border-[#8A6D3B]/50 hover:border-[#C5A059] font-display text-xs uppercase tracking-wider text-[#C5A059]"
           >
-            Configure Triage Filters →
-          </Link>
-          <Link
-            href="/admin/audit?targetType=ingest_feed"
-            className="px-3.5 py-2 rounded-md bg-[#111622] hover:bg-[#182032] border border-[#263147] font-mono text-xs text-[#D6D1C7] transition-colors"
-          >
-            Inspect Feed Audit Log ({chainIntegrity?.totalEntries ?? "—"})
+            ← Back to Case Briefs
           </Link>
         </div>
-      </div>
+      )}
 
       {/* Status Banner */}
       {banner && (
         <div
-          className={`p-4 rounded-lg border font-mono text-xs flex items-start justify-between gap-4 ${
+          className={`p-4 border text-xs flex items-start justify-between gap-4 ${
             banner.type === "success"
-              ? "bg-emerald-950/50 border-emerald-500/50 text-emerald-200"
+              ? "bg-emerald-950/50 border-emerald-500/45 text-emerald-200"
               : "bg-red-950/60 border-red-500/50 text-red-200"
           }`}
         >
           <div>
-            <div className="font-bold uppercase tracking-wider">
+            <div className="font-display font-bold uppercase tracking-wider">
               {banner.title}
             </div>
-            <div className="mt-1 opacity-90">{banner.detail}</div>
+            <div className="font-serif text-sm mt-1 text-[#F3EFE6]/90">
+              {banner.detail}
+            </div>
           </div>
           <button
             type="button"
             onClick={() => setBanner(null)}
-            className="text-xs opacity-70 hover:opacity-100 cursor-pointer"
+            className="font-display text-xs uppercase tracking-wider opacity-75 hover:opacity-100 cursor-pointer"
           >
             ✕
           </button>
         </div>
       )}
 
-      {/* Telemetry Summary Strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-        <div className="bg-[#111622] border border-[#263147] rounded-lg p-4">
-          <div className="font-mono text-[11px] uppercase text-[#8E9BAE]">
-            Total Registered Feeds
-          </div>
-          <div className="text-2xl font-mono font-bold text-[#F3EFE6] mt-1">
-            {feeds.length}
-          </div>
-          <div className="text-[11px] font-mono text-[#8E9BAE] mt-1">
-            Stored in D1 <code>ingest_feeds</code>
-          </div>
-        </div>
-
-        <div className="bg-[#111622] border border-[#263147] rounded-lg p-4">
-          <div className="font-mono text-[11px] uppercase text-[#8E9BAE]">
-            Active Polling Sources
-          </div>
-          <div className="text-2xl font-mono font-bold text-emerald-400 mt-1">
-            {activeFeedsCount}
-          </div>
-          <div className="text-[11px] font-mono text-[#8E9BAE] mt-1">
-            {pausedFeedsCount} paused
-          </div>
-        </div>
-
-        <div className="bg-[#111622] border border-[#263147] rounded-lg p-4">
-          <div className="font-mono text-[11px] uppercase text-[#8E9BAE]">
-            Max Items / Poll Pass
-          </div>
-          <div className="text-2xl font-mono font-bold text-[#C5A059] mt-1">
-            {feeds
-              .filter((f) => f.enabled)
-              .reduce((s, f) => s + (f.itemsPerPoll || 5), 0)}
-          </div>
-          <div className="text-[11px] font-mono text-[#8E9BAE] mt-1">
-            Across all enabled feeds
-          </div>
-        </div>
-
-        <div className="bg-[#111622] border border-[#263147] rounded-lg p-4">
-          <div className="font-mono text-[11px] uppercase text-[#8E9BAE]">
-            Cumulative Tracked Dispatches
-          </div>
-          <div className="text-2xl font-mono font-bold text-sky-400 mt-1">
-            {totalIngestedAllFeeds}
-          </div>
-          <div className="text-[11px] font-mono text-[#8E9BAE] mt-1">
-            Net-new articles ingested via feeds
-          </div>
-        </div>
-      </div>
-
-      {/* Add New Feed + Live RSS/Atom URL Preview Studio */}
+      {/* Add New Feed + Live RSS/Atom URL Preview */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left: Add New Feed Form */}
-        <div className="lg:col-span-6 bg-[#111622] border border-[#263147] rounded-lg p-6 space-y-4">
-          <div className="flex items-center justify-between border-b border-[#263147] pb-3">
+        <div className="lg:col-span-6 relative bg-[#111726] border border-[#8A6D3B]/45 p-6 space-y-4 shadow-xl">
+          <span className="pointer-events-none absolute top-1.5 left-1.5 w-2 h-2 border-t border-l border-[#C5A059]/65" />
+          <span className="pointer-events-none absolute bottom-1.5 right-1.5 w-2 h-2 border-b border-r border-[#C5A059]/65" />
+
+          <div className="flex items-center justify-between border-b border-[#8A6D3B]/35 pb-3">
             <div>
-              <h2 className="text-lg font-serif font-bold text-[#F3EFE6]">
-                Add Inbound RSS / Atom Feed
+              <h2 className="font-display text-base sm:text-lg text-[#F3EFE6] tracking-wide">
+                Add RSS or Atom Source
               </h2>
-              <p className="text-xs text-[#8E9BAE] font-mono">
-                Emits <code>feed.create</code> to <code>audit_ledger</code>
+              <p className="font-serif text-xs text-[#94A3B8]">
+                Test a feed URL below, then add it to the monitored rotation.
               </p>
             </div>
-            <span className="px-2.5 py-0.5 rounded bg-[#C5A059]/15 border border-[#C5A059]/50 font-mono text-[11px] text-[#E5C178]">
-              RSS 2.0 / Atom 1.0
+            <span className="px-2.5 py-0.5 bg-[#0B0E14] border border-[#8A6D3B]/45 font-display text-[10px] uppercase tracking-wider text-[#C5A059]">
+              {activeFeedsCount} of {feeds.length} Active
             </span>
           </div>
 
           <form onSubmit={handleCreateFeed} className="space-y-4">
             <div>
-              <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
+              <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059] mb-1">
                 Feed URL (RSS or Atom XML) *
               </label>
               <div className="flex gap-2">
@@ -540,60 +451,60 @@ export function AdminFeedsClient({
                   value={newUrl}
                   onChange={(e) => setNewUrl(e.target.value)}
                   placeholder="https://www.cisa.gov/cybersecurity-advisories/all.xml"
-                  className="flex-1 bg-[#0B0E14] border border-[#263147] focus:border-[#C5A059] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6] outline-none"
+                  className="flex-1 bg-[#0B0E14] border border-[#8A6D3B]/45 focus:border-[#C5A059] px-3 py-2 text-xs font-mono text-[#F3EFE6] outline-none"
                 />
                 <button
                   type="button"
                   disabled={testingUrl}
                   onClick={() => handleTestUrl()}
-                  className="px-3.5 py-2 rounded bg-[#182032] hover:bg-[#222D45] border border-[#3A4A6B] text-xs font-mono text-[#E5C178] font-semibold transition-colors cursor-pointer shrink-0"
+                  className="px-3.5 py-2 bg-[#0B0E14] hover:border-[#C5A059] border border-[#8A6D3B]/55 text-xs font-display uppercase tracking-wider text-[#C5A059] font-semibold transition-all duration-200 ease-out cursor-pointer shrink-0"
                 >
-                  {testingUrl ? "Testing…" : "Test RSS URL"}
+                  {testingUrl ? "Testing…" : "Test Feed"}
                 </button>
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                  Display Name *
+                <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059] mb-1">
+                  Publication / Source Name *
                 </label>
                 <input
                   type="text"
                   required
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  placeholder="e.g. Reuters US Domestic"
-                  className="w-full bg-[#0B0E14] border border-[#263147] focus:border-[#C5A059] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6] outline-none"
+                  placeholder="e.g. Reuters Infrastructure"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 focus:border-[#C5A059] px-3 py-2 text-xs font-sans text-[#F3EFE6] outline-none"
                 />
               </div>
 
               <div>
-                <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                  Operational Focus Area *
+                <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059] mb-1">
+                  Editorial Beat / Focus *
                 </label>
                 <input
                   type="text"
                   required
                   value={newFocusArea}
                   onChange={(e) => setNewFocusArea(e.target.value)}
-                  placeholder="e.g. Federal Policy & Grid Security"
-                  className="w-full bg-[#0B0E14] border border-[#263147] focus:border-[#C5A059] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6] outline-none"
+                  placeholder="e.g. Grid Reliability & Public Policy"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 focus:border-[#C5A059] px-3 py-2 text-xs font-sans text-[#F3EFE6] outline-none"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                  Domain Sector Override (Optional)
+                <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                  Primary Topic Sector (Optional)
                 </label>
                 <select
                   value={newSectorOverride}
                   onChange={(e) => setNewSectorOverride(e.target.value)}
-                  className="w-full bg-[#0B0E14] border border-[#263147] focus:border-[#C5A059] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6] outline-none"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 focus:border-[#C5A059] px-3 py-2 text-xs font-sans text-[#F3EFE6] outline-none"
                 >
-                  <option value="">Auto-Infer from Dispatch Content</option>
+                  <option value="">Infer Automatically from Story</option>
                   {DOMAIN_SECTOR_OPTIONS.filter(Boolean).map((sec) => (
                     <option key={sec} value={sec}>
                       {sec}
@@ -603,8 +514,8 @@ export function AdminFeedsClient({
               </div>
 
               <div>
-                <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                  Items Inspected Per Poll (1–25)
+                <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                  Stories Checked Per Fetch (1–25)
                 </label>
                 <input
                   type="number"
@@ -616,94 +527,90 @@ export function AdminFeedsClient({
                       Math.min(25, Math.max(1, Number(e.target.value) || 5))
                     )
                   }
-                  className="w-full bg-[#0B0E14] border border-[#263147] focus:border-[#C5A059] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6] outline-none"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 focus:border-[#C5A059] px-3 py-2 text-xs font-mono text-[#F3EFE6] outline-none"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                Audit Disclosure Justification Reason
+              <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                Editorial Note (Recorded in Audit Ledger)
               </label>
               <input
                 type="text"
                 value={newReason}
                 onChange={(e) => setNewReason(e.target.value)}
-                placeholder="e.g. Expand primary-source infrastructure & regulatory telemetry coverage"
-                className="w-full bg-[#0B0E14] border border-[#263147] focus:border-[#C5A059] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6] outline-none"
+                placeholder="e.g. Expand primary-source infrastructure reporting"
+                className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 focus:border-[#C5A059] px-3 py-2 text-xs font-serif text-[#F3EFE6] outline-none"
               />
             </div>
 
             <button
               type="submit"
               disabled={!canMutate || submittingCreate}
-              className="w-full py-2.5 px-4 rounded bg-[#C5A059] hover:bg-[#d4b06a] disabled:opacity-50 text-[#0B0E14] font-mono text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
+              className="w-full py-2.5 px-4 bg-[#C5A059] hover:bg-[#d4b06a] disabled:opacity-50 text-[#0B0E14] font-display text-xs font-bold uppercase tracking-wider transition-all duration-200 ease-out cursor-pointer"
             >
-              {submittingCreate
-                ? "Registering Feed in D1…"
-                : "+ Add Feed & Record Audit Entry"}
+              {submittingCreate ? "Adding Source…" : "+ Add RSS Source"}
             </button>
           </form>
         </div>
 
         {/* Right: Live RSS/Atom Feed Preview Inspector */}
-        <div className="lg:col-span-6 bg-[#111622] border border-[#263147] rounded-lg p-6 flex flex-col justify-between space-y-4">
-          <div className="flex items-center justify-between border-b border-[#263147] pb-3">
+        <div className="lg:col-span-6 relative bg-[#111726] border border-[#8A6D3B]/45 p-6 flex flex-col justify-between space-y-4 shadow-xl">
+          <span className="pointer-events-none absolute top-1.5 left-1.5 w-2 h-2 border-t border-l border-[#C5A059]/65" />
+          <span className="pointer-events-none absolute bottom-1.5 right-1.5 w-2 h-2 border-b border-r border-[#C5A059]/65" />
+
+          <div className="flex items-center justify-between border-b border-[#8A6D3B]/35 pb-3">
             <div>
-              <h2 className="text-lg font-serif font-bold text-[#F3EFE6]">
-                Live RSS / Atom Parser Preview
+              <h2 className="font-display text-base sm:text-lg text-[#F3EFE6] tracking-wide">
+                Live Feed Preview
               </h2>
-              <p className="text-xs text-[#8E9BAE] font-mono">
-                Inspects raw XML, strips CDATA/HTML, and previews 5 dispatches
+              <p className="font-serif text-xs text-[#94A3B8]">
+                Preview incoming headlines and excerpts before adding a source.
               </p>
             </div>
             {previewResult && (
               <span
-                className={`px-2.5 py-0.5 rounded border font-mono text-[11px] font-semibold ${
+                className={`px-2.5 py-0.5 border font-display text-[10px] uppercase tracking-wider font-semibold ${
                   previewResult.ok
                     ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-300"
                     : "bg-red-950/60 border-red-500/40 text-red-300"
                 }`}
               >
                 {previewResult.ok
-                  ? `${(previewResult.feedFormat || "rss2").toUpperCase()} • ${
-                      previewResult.itemCount
-                    } ITEMS • ${previewResult.latencyMs}ms`
-                  : "PARSE FAILED"}
+                  ? `${previewResult.itemCount} Stories Found`
+                  : "Parse Error"}
               </span>
             )}
           </div>
 
           {!previewResult ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-center py-10 px-4 border border-dashed border-[#263147] rounded-lg bg-[#0B0E14]/50">
-              <div className="font-mono text-xs text-[#8E9BAE]">
-                Enter any candidate RSS 2.0 or Atom 1.0 URL on the left and
-                click{" "}
-                <span className="text-[#E5C178] font-semibold">
-                  &ldquo;Test RSS URL&rdquo;
+            <div className="flex-1 flex flex-col items-center justify-center text-center py-10 px-4 border border-dashed border-[#8A6D3B]/40 bg-[#0B0E14]/50">
+              <div className="font-serif text-sm text-[#94A3B8] max-w-md">
+                Enter an RSS or Atom URL on the left and click{" "}
+                <span className="text-[#C5A059] font-semibold">
+                  &ldquo;Test Feed&rdquo;
                 </span>{" "}
                 (or click{" "}
-                <span className="text-[#E5C178] font-semibold">
-                  &ldquo;Test Live&rdquo;
+                <span className="text-[#C5A059] font-semibold">
+                  &ldquo;Preview&rdquo;
                 </span>{" "}
-                on any existing feed below) to inspect live dispatches before
-                ingesting.
+                on any source below) to inspect its latest stories.
               </div>
             </div>
           ) : !previewResult.ok ? (
-            <div className="p-4 rounded border border-red-500/40 bg-red-950/30 font-mono text-xs text-red-200 space-y-2">
-              <div className="font-bold">
-                Unable to Parse Feed: {previewResult.url}
+            <div className="p-4 border border-red-500/40 bg-red-950/30 text-xs text-red-200 space-y-2">
+              <div className="font-display uppercase tracking-wider font-bold">
+                Unable to Read Feed: {previewResult.url}
               </div>
-              <div>Error: {previewResult.error}</div>
-              <div>Latency: {previewResult.latencyMs}ms</div>
+              <div className="font-serif">{previewResult.error}</div>
             </div>
           ) : (
             <div className="space-y-3 overflow-y-auto max-h-[340px] pr-1">
-              <div className="flex items-center justify-between bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono">
+              <div className="flex items-center justify-between bg-[#0B0E14] border border-[#8A6D3B]/40 px-3 py-2 text-xs">
                 <div className="truncate">
-                  <span className="text-[#8E9BAE]">Channel: </span>
-                  <span className="text-[#E5C178] font-semibold">
+                  <span className="text-[#94A3B8]">Channel: </span>
+                  <span className="font-display text-[#C5A059] font-semibold">
                     {previewResult.feedTitle}
                   </span>
                 </div>
@@ -713,9 +620,9 @@ export function AdminFeedsClient({
                     onClick={() =>
                       setNewName(previewResult.feedTitle!.slice(0, 60))
                     }
-                    className="text-[11px] text-[#C5A059] hover:underline ml-2 shrink-0 cursor-pointer"
+                    className="font-display text-[10px] uppercase tracking-wider text-[#C5A059] hover:underline ml-2 shrink-0 cursor-pointer"
                   >
-                    Use Title
+                    Use Name
                   </button>
                 )}
               </div>
@@ -723,27 +630,24 @@ export function AdminFeedsClient({
               {previewResult.items.map((item, idx) => (
                 <div
                   key={item.urlHash || idx}
-                  className="p-3 rounded bg-[#0B0E14] border border-[#263147] space-y-1.5"
+                  className="p-3 bg-[#0B0E14] border border-[#8A6D3B]/35 space-y-1.5"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <a
                       href={item.sourceUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs font-semibold text-[#F3EFE6] hover:text-[#C5A059] transition-colors"
+                      className="font-serif text-sm font-semibold text-[#F3EFE6] hover:text-[#C5A059] transition-colors"
                     >
                       {idx + 1}. {item.title} ↗
                     </a>
-                    <span className="font-mono text-[10px] text-[#8E9BAE] shrink-0">
+                    <span className="font-sans text-[11px] text-[#94A3B8] shrink-0">
                       {new Date(item.publishedAt).toLocaleDateString()}
                     </span>
                   </div>
-                  <p className="text-[11px] text-[#9CA3AF] line-clamp-2">
+                  <p className="font-serif text-xs text-[#94A3B8] line-clamp-2">
                     {item.rawExcerpt}
                   </p>
-                  <div className="font-mono text-[10px] text-[#64748B]">
-                    SHA-256 URL Hash: {item.urlHash.slice(0, 16)}…
-                  </div>
                 </div>
               ))}
             </div>
@@ -751,16 +655,16 @@ export function AdminFeedsClient({
         </div>
       </div>
 
-      {/* Registered Inbound Feeds Table */}
-      <div className="bg-[#111622] border border-[#263147] rounded-lg overflow-hidden">
-        <div className="px-6 py-4 border-b border-[#263147] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+      {/* Configured RSS Sources List */}
+      <div className="relative bg-[#111726] border border-[#8A6D3B]/45 shadow-xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-[#8A6D3B]/35 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <div>
-            <h2 className="text-lg font-serif font-bold text-[#F3EFE6]">
-              Configured Inbound Telemetry Feeds ({feeds.length})
+            <h2 className="font-display text-base sm:text-lg text-[#F3EFE6] tracking-wide">
+              Monitored RSS Sources ({feeds.length})
             </h2>
-            <p className="text-xs font-mono text-[#8E9BAE]">
-              Active feeds are polled on every scheduled 6-hour cron pass and
-              manual ingest run
+            <p className="font-serif text-xs text-[#94A3B8]">
+              Active sources are checked automatically every 6 hours and when
+              clicking &ldquo;Fetch Latest News&rdquo;.
             </p>
           </div>
         </div>
@@ -768,73 +672,75 @@ export function AdminFeedsClient({
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-[#263147] bg-[#0B0E14]/80 font-mono text-[11px] uppercase text-[#8E9BAE]">
+              <tr className="border-b border-[#8A6D3B]/35 bg-[#0B0E14]/90 font-display text-[11px] uppercase tracking-wider text-[#94A3B8]">
                 <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4">Feed Name &amp; URL</th>
-                <th className="py-3 px-4">Focus Area / Sector</th>
-                <th className="py-3 px-4">Items / Poll</th>
-                <th className="py-3 px-4">Ingested</th>
-                <th className="py-3 px-4">Last Poll Health</th>
+                <th className="py-3 px-4">Source &amp; Feed URL</th>
+                <th className="py-3 px-4">Beat &amp; Sector</th>
+                <th className="py-3 px-4">Stories / Fetch</th>
+                <th className="py-3 px-4">Collected</th>
+                <th className="py-3 px-4">Last Checked</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#263147]/60 text-xs">
+            <tbody className="divide-y divide-[#8A6D3B]/25 text-xs">
               {feeds.map((feed) => (
                 <tr
                   key={feed.id}
-                  className={`hover:bg-[#161D2B]/60 transition-colors ${
+                  className={`hover:bg-[#0B0E14]/50 transition-colors ${
                     !feed.enabled ? "opacity-60" : ""
                   }`}
                 >
-                  <td className="py-3.5 px-4 font-mono">
+                  <td className="py-3.5 px-4">
                     <button
                       type="button"
                       disabled={!canMutate}
                       onClick={() => handleToggleFeedEnabled(feed)}
                       title="Click to toggle Active / Paused"
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded border text-[11px] font-semibold cursor-pointer transition-colors ${
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 border font-display text-[10px] uppercase tracking-wider font-semibold cursor-pointer transition-colors ${
                         feed.enabled
                           ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-300 hover:border-emerald-400"
-                          : "bg-slate-900 border-slate-600 text-slate-400 hover:border-slate-400"
+                          : "bg-[#0B0E14] border-[#8A6D3B]/40 text-[#94A3B8]"
                       }`}
                     >
                       <span>{feed.enabled ? "●" : "⏸"}</span>
-                      <span>{feed.enabled ? "ACTIVE" : "PAUSED"}</span>
+                      <span>{feed.enabled ? "Active" : "Paused"}</span>
                     </button>
                   </td>
 
                   <td className="py-3.5 px-4">
-                    <div className="font-semibold text-[#F3EFE6]">
+                    <div className="font-display text-sm text-[#F3EFE6]">
                       {feed.name}
                     </div>
                     <a
                       href={feed.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="font-mono text-[11px] text-[#8E9BAE] hover:text-[#C5A059] break-all"
+                      className="font-mono text-[11px] text-[#94A3B8] hover:text-[#C5A059] break-all"
                     >
                       {feed.url}
                     </a>
                   </td>
 
                   <td className="py-3.5 px-4">
-                    <div className="text-[#D6D1C7]">{feed.focusArea}</div>
+                    <div className="font-serif text-xs text-[#F3EFE6]/90">
+                      {feed.focusArea}
+                    </div>
                     {feed.domainSectorOverride && (
-                      <span className="inline-block mt-1 px-2 py-0.5 rounded bg-[#182032] border border-[#2E3C56] font-mono text-[10px] text-[#C5A059]">
+                      <span className="inline-block mt-1 px-2 py-0.5 bg-[#0B0E14] border border-[#8A6D3B]/45 font-display text-[10px] uppercase tracking-wider text-[#C5A059]">
                         {feed.domainSectorOverride}
                       </span>
                     )}
                   </td>
 
-                  <td className="py-3.5 px-4 font-mono text-[#F3EFE6]">
-                    {feed.itemsPerPoll} items
+                  <td className="py-3.5 px-4 font-sans text-[#F3EFE6]">
+                    {feed.itemsPerPoll} stories
                   </td>
 
-                  <td className="py-3.5 px-4 font-mono text-sky-300 font-semibold">
+                  <td className="py-3.5 px-4 font-mono text-[#C5A059] font-semibold">
                     {feed.totalIngested}
                   </td>
 
-                  <td className="py-3.5 px-4 font-mono text-[11px]">
+                  <td className="py-3.5 px-4 text-[11px]">
                     <div className="flex items-center gap-1.5">
                       <span
                         className={`w-2 h-2 rounded-full ${
@@ -850,38 +756,31 @@ export function AdminFeedsClient({
                             : "text-emerald-300"
                         }
                       >
-                        {(feed.lastStatus || "nominal").toUpperCase()}
+                        {feed.lastStatus === "error" ? "Error" : "Healthy"}
                       </span>
                     </div>
-                    <div className="text-[10px] text-[#8E9BAE] mt-0.5">
+                    <div className="text-[11px] text-[#94A3B8] mt-0.5">
                       {feed.lastPolledAt
-                        ? `Polled ${new Date(
-                            feed.lastPolledAt
-                          ).toLocaleString()}`
-                        : "Awaiting next poll"}
+                        ? new Date(feed.lastPolledAt).toLocaleDateString()
+                        : "Ready"}
                     </div>
-                    {feed.lastError && (
-                      <div className="text-[10px] text-red-400 mt-0.5 truncate max-w-[200px]">
-                        {feed.lastError}
-                      </div>
-                    )}
                   </td>
 
-                  <td className="py-3.5 px-4 text-right font-mono">
-                    <div className="inline-flex items-center gap-1.5">
+                  <td className="py-3.5 px-4 text-right">
+                    <div className="inline-flex items-center gap-1.5 font-display text-[10px] uppercase tracking-wider">
                       <button
                         type="button"
                         onClick={() => handleTestUrl(feed.url)}
-                        className="px-2.5 py-1 rounded bg-[#182032] hover:bg-[#222D45] border border-[#2E3C56] text-[11px] text-[#E5C178] cursor-pointer"
+                        className="px-2.5 py-1 bg-[#0B0E14] hover:border-[#C5A059] border border-[#8A6D3B]/45 text-[#C5A059] cursor-pointer"
                       >
-                        Test Live
+                        Preview
                       </button>
                       {canMutate && (
                         <>
                           <button
                             type="button"
                             onClick={() => openEditModal(feed)}
-                            className="px-2.5 py-1 rounded bg-[#111622] hover:bg-[#1B2436] border border-[#263147] text-[11px] text-[#D6D1C7] cursor-pointer"
+                            className="px-2.5 py-1 bg-[#0B0E14] hover:border-[#C5A059] border border-[#8A6D3B]/45 text-[#F3EFE6] cursor-pointer"
                           >
                             Edit
                           </button>
@@ -891,9 +790,9 @@ export function AdminFeedsClient({
                               setDeletingFeed(feed);
                               setDeleteReason("");
                             }}
-                            className="px-2.5 py-1 rounded bg-red-950/40 hover:bg-red-900/60 border border-red-500/40 text-[11px] text-red-200 cursor-pointer"
+                            className="px-2.5 py-1 bg-red-950/40 hover:bg-red-900/60 border border-red-500/40 text-red-200 cursor-pointer"
                           >
-                            Delete
+                            Remove
                           </button>
                         </>
                       )}
@@ -906,76 +805,32 @@ export function AdminFeedsClient({
         </div>
       </div>
 
-      {/* Recent Feed Audit Ledger Entries */}
-      <div className="bg-[#111622] border border-[#263147] rounded-lg p-6 space-y-4">
-        <div className="flex items-center justify-between border-b border-[#263147] pb-3">
-          <div>
-            <h2 className="text-base font-serif font-bold text-[#F3EFE6]">
-              Recent Inbound Feed Audit Trail (<code>target_type = ingest_feed</code>)
-            </h2>
-            <p className="text-xs font-mono text-[#8E9BAE]">
-              Every feed addition, pause/resume toggle, edit, or removal is
-              cryptographically hash-chained and replayable
-            </p>
-          </div>
-          <Link
-            href="/admin/audit?targetType=ingest_feed"
-            className="font-mono text-xs text-[#C5A059] hover:underline"
-          >
-            Open in Replay Studio →
-          </Link>
-        </div>
-
-        {auditEntries.length === 0 ? (
-          <div className="text-xs font-mono text-[#8E9BAE] py-4">
-            No feed mutations recorded yet beyond baseline migration seed. Add
-            or edit a feed above to append a live hash-chained audit entry.
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {auditEntries.slice(0, 8).map((entry) => (
-              <div
-                key={entry.eventId}
-                className="p-3 rounded bg-[#0B0E14] border border-[#263147] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs font-mono"
-              >
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded bg-[#C5A059]/15 border border-[#C5A059]/40 text-[#E5C178] text-[10px] font-bold">
-                      {entry.actionType}
-                    </span>
-                    <span className="text-[#F3EFE6] font-semibold">
-                      Target #{entry.targetId}
-                    </span>
-                    <span className="text-[#8E9BAE]">by {entry.actorEmail}</span>
-                  </div>
-                  <div className="text-[#9CA3AF] text-[11px]">
-                    {entry.reason}
-                  </div>
-                </div>
-                <div className="text-right text-[10px] text-[#8E9BAE] shrink-0">
-                  <div>{new Date(entry.timestamp).toLocaleString()}</div>
-                  <div className="text-emerald-400">
-                    SHA-256: {entry.entryHash.slice(0, 14)}…
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+      {/* Subtle Footer Link to Feed Audit History */}
+      <div className="flex items-center justify-between pt-1 text-xs text-[#94A3B8]">
+        <span className="font-serif italic">
+          All RSS source additions, edits, and removals are recorded in the
+          immutable audit ledger.
+        </span>
+        <Link
+          href="/admin/audit?targetType=ingest_feed"
+          className="font-display uppercase tracking-wider text-[#C5A059] hover:text-[#F3EFE6] transition-colors"
+        >
+          View Source Audit History →
+        </Link>
       </div>
 
       {/* Edit Feed Modal */}
       {editingFeed && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
-          <div className="bg-[#111622] border border-[#C5A059] rounded-lg max-w-lg w-full p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-[#263147] pb-3">
-              <h3 className="text-lg font-serif font-bold text-[#F3EFE6]">
-                Edit Inbound Feed #{editingFeed.id}
+          <div className="bg-[#111726] border border-[#C5A059] max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[#8A6D3B]/35 pb-3">
+              <h3 className="font-display text-lg text-[#F3EFE6]">
+                Edit RSS Source — {editingFeed.name}
               </h3>
               <button
                 type="button"
                 onClick={() => setEditingFeed(null)}
-                className="text-xs font-mono text-[#8E9BAE] hover:text-white cursor-pointer"
+                className="text-xs font-display text-[#94A3B8] hover:text-white cursor-pointer"
               >
                 ✕
               </button>
@@ -983,20 +838,20 @@ export function AdminFeedsClient({
 
             <form onSubmit={handleSaveEdit} className="space-y-3">
               <div>
-                <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                  Display Name *
+                <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059] mb-1">
+                  Source Name *
                 </label>
                 <input
                   type="text"
                   required
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs text-[#F3EFE6]"
                 />
               </div>
 
               <div>
-                <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
+                <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059] mb-1">
                   Feed URL *
                 </label>
                 <input
@@ -1004,27 +859,27 @@ export function AdminFeedsClient({
                   required
                   value={editUrl}
                   onChange={(e) => setEditUrl(e.target.value)}
-                  className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-mono text-[#F3EFE6]"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                    Focus Area *
+                  <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059] mb-1">
+                    Editorial Beat *
                   </label>
                   <input
                     type="text"
                     required
                     value={editFocusArea}
                     onChange={(e) => setEditFocusArea(e.target.value)}
-                    className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                    className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs text-[#F3EFE6]"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                    Items Per Poll (1–25)
+                  <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059] mb-1">
+                    Stories Per Fetch (1–25)
                   </label>
                   <input
                     type="number"
@@ -1036,21 +891,21 @@ export function AdminFeedsClient({
                         Math.min(25, Math.max(1, Number(e.target.value) || 5))
                       )
                     }
-                    className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                    className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-mono text-[#F3EFE6]"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                  Domain Sector Override
+                <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                  Topic Sector Override
                 </label>
                 <select
                   value={editSectorOverride}
                   onChange={(e) => setEditSectorOverride(e.target.value)}
-                  className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs text-[#F3EFE6]"
                 >
-                  <option value="">Auto-Infer from Dispatch Content</option>
+                  <option value="">Infer Automatically from Story</option>
                   {DOMAIN_SECTOR_OPTIONS.filter(Boolean).map((sec) => (
                     <option key={sec} value={sec}>
                       {sec}
@@ -1068,22 +923,22 @@ export function AdminFeedsClient({
                 />
                 <label
                   htmlFor="edit-feed-enabled"
-                  className="font-mono text-xs text-[#D6D1C7]"
+                  className="font-sans text-xs text-[#F3EFE6]"
                 >
-                  Feed Enabled in Scheduled &amp; Manual Ingestion Passes
+                  Include source in scheduled and manual newsroom fetches
                 </label>
               </div>
 
               <div>
-                <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                  Audit Justification Reason
+                <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                  Editorial Note
                 </label>
                 <input
                   type="text"
                   value={editReason}
                   onChange={(e) => setEditReason(e.target.value)}
-                  placeholder="Reason for updating this feed configuration"
-                  className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                  placeholder="Reason for updating this source"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-serif text-[#F3EFE6]"
                 />
               </div>
 
@@ -1091,16 +946,16 @@ export function AdminFeedsClient({
                 <button
                   type="button"
                   onClick={() => setEditingFeed(null)}
-                  className="px-4 py-2 rounded border border-[#263147] text-xs font-mono text-[#9CA3AF] cursor-pointer"
+                  className="px-4 py-2 border border-[#8A6D3B]/45 text-xs font-display uppercase tracking-wider text-[#94A3B8] cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submittingEdit}
-                  className="px-4 py-2 rounded bg-[#C5A059] text-[#0B0E14] text-xs font-mono font-bold cursor-pointer"
+                  className="px-4 py-2 bg-[#C5A059] text-[#0B0E14] text-xs font-display uppercase tracking-wider font-bold cursor-pointer"
                 >
-                  {submittingEdit ? "Saving…" : "Save Changes & Audit"}
+                  {submittingEdit ? "Saving…" : "Save Changes"}
                 </button>
               </div>
             </form>
@@ -1111,44 +966,42 @@ export function AdminFeedsClient({
       {/* Delete Feed Confirmation Modal */}
       {deletingFeed && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
-          <div className="bg-[#111622] border border-red-500/60 rounded-lg max-w-md w-full p-6 space-y-4">
-            <h3 className="text-lg font-serif font-bold text-[#F3EFE6]">
-              Remove Inbound Feed &ldquo;{deletingFeed.name}&rdquo;?
+          <div className="bg-[#111726] border border-red-500/60 max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <h3 className="font-display text-lg text-[#F3EFE6]">
+              Remove RSS Source &ldquo;{deletingFeed.name}&rdquo;?
             </h3>
-            <p className="text-xs text-[#9CA3AF]">
-              This removes the feed from <code>ingest_feeds</code> and logs a{" "}
-              <code>feed.delete</code> record in <code>audit_ledger</code> with
-              its full <code>before_state_json</code> so it can be restored in
-              one click via Audit Replay.
+            <p className="font-serif text-xs text-[#94A3B8]">
+              This removes the feed from active rotation. A complete snapshot is
+              saved in the audit ledger so it can be restored in one click.
             </p>
             <form onSubmit={handleConfirmDelete} className="space-y-3">
               <div>
-                <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                  Audit Deletion Reason *
+                <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059] mb-1">
+                  Reason for Removal *
                 </label>
                 <input
                   type="text"
                   required
                   value={deleteReason}
                   onChange={(e) => setDeleteReason(e.target.value)}
-                  placeholder="e.g. Retired duplicate or low-signal RSS endpoint"
-                  className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                  placeholder="e.g. Retired duplicate or low-signal RSS feed"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-serif text-[#F3EFE6]"
                 />
               </div>
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setDeletingFeed(null)}
-                  className="px-4 py-2 rounded border border-[#263147] text-xs font-mono text-[#9CA3AF] cursor-pointer"
+                  className="px-4 py-2 border border-[#8A6D3B]/45 text-xs font-display uppercase tracking-wider text-[#94A3B8] cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submittingDelete}
-                  className="px-4 py-2 rounded bg-red-600 hover:bg-red-500 text-white text-xs font-mono font-bold cursor-pointer"
+                  className="px-4 py-2 bg-red-700 hover:bg-red-600 text-white text-xs font-display uppercase tracking-wider font-bold cursor-pointer"
                 >
-                  {submittingDelete ? "Deleting…" : "Confirm Delete & Audit"}
+                  {submittingDelete ? "Removing…" : "Confirm Removal"}
                 </button>
               </div>
             </form>

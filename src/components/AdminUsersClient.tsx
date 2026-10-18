@@ -337,65 +337,45 @@ export function AdminUsersClient({
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Top Admin Command Header */}
-      <div className="bg-[#111622] border border-[#263147] rounded-lg p-5 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <span className="font-mono text-xs uppercase tracking-widest text-[#C5A059] font-semibold">
-              CAB ADMIN CONSOLE // ACCESS CONTROL &amp; USER INVITES
-            </span>
-            {chainIntegrity?.valid !== false && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 font-mono text-[11px]">
-                ● AUDIT CHAIN VERIFIED ({chainIntegrity?.totalEntries ?? 1}{" "}
-                ENTRIES)
-              </span>
-            )}
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      {/* Top Section Header */}
+      <div className="relative bg-[#111726] border border-[#8A6D3B]/45 rounded-md p-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 shadow-lg">
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute top-0 left-0 w-2.5 h-2.5 border-t border-l border-[#C5A059]/60"
+        />
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute top-0 right-0 w-2.5 h-2.5 border-t border-r border-[#C5A059]/60"
+        />
+        <div className="space-y-1.5">
+          <div className="font-mono text-xs uppercase tracking-widest text-[#C5A059] font-semibold">
+            SETTINGS &amp; AUDIT // TEAM &amp; ACCESS
           </div>
-          <h1 className="font-cinzel text-2xl sm:text-3xl font-bold text-[#F3EFE6]">
-            Owner Access Lock, Email Invites &amp; Magic Link Governance
+          <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#F3EFE6] tracking-wide">
+            Team &amp; Access Governance
           </h1>
-          <p className="text-xs text-[#9CA3AF]">
-            Initial Owner Lock:{" "}
-            <span className="font-mono text-[#F3EFE6]">{ownerEmail}</span> —
-            Every invite, role change, revocation, and unauthorized login
-            attempt is recorded in <code className="text-[#C5A059]">audit_ledger</code>.
+          <p className="font-serif text-sm text-[#E5E0D8]/85 max-w-3xl">
+            Manage authorized Change Advisory Board accounts, single-use Magic
+            Links, and role assignments. Every invite, role change, or
+            revocation is recorded in the immutable audit ledger.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono">
-            <div className="text-[#F3EFE6] font-semibold">{actor.email}</div>
-            <div className="flex items-center gap-2 text-[10px] text-[#8E9BAE] mt-0.5">
-              <span className="uppercase text-[#C5A059] font-semibold">
-                {actor.role}
-              </span>
-              <span>•</span>
-              <span>{actor.authMethod}</span>
-            </div>
-          </div>
-
+        <div className="flex flex-wrap items-center gap-2.5">
           <Link
-            href="/admin"
-            className="px-3.5 py-2 rounded border border-[#263147] hover:border-[#C5A059] text-xs font-mono text-[#D6D1C7] transition-colors"
+            href="/admin/audit?targetType=user"
+            className="px-3.5 py-2 rounded-sm bg-[#0B0E14] border border-[#8A6D3B]/45 hover:border-[#C5A059] text-xs font-mono text-[#E5E0D8] hover:text-[#C5A059] transition-colors"
           >
-            Console Overview
+            View Access Audit History →
           </Link>
-
-          <button
-            type="button"
-            onClick={handleSignOut}
-            className="px-3.5 py-2 rounded bg-red-950/40 hover:bg-red-900/60 border border-red-500/40 text-red-200 text-xs font-mono transition-colors cursor-pointer"
-          >
-            Sign Out
-          </button>
         </div>
       </div>
 
       {/* Status Alert */}
       {statusMessage && (
         <div
-          className={`p-4 rounded-md border text-xs font-mono flex items-center justify-between ${
+          className={`p-4 rounded-sm border text-xs font-mono flex items-center justify-between ${
             statusMessage.type === "success"
               ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-200"
               : "bg-red-950/40 border-red-500/40 text-red-200"
@@ -414,14 +394,14 @@ export function AdminUsersClient({
 
       {/* One-Time Invite / Magic Link Copy Box */}
       {generatedLinkInfo && (
-        <div className="bg-[#161E2E] border-2 border-[#C5A059] rounded-lg p-5 space-y-3 shadow-xl">
+        <div className="bg-[#111726] border-2 border-[#C5A059] rounded-md p-5 space-y-3 shadow-xl">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <span className="font-mono text-xs uppercase tracking-wider text-[#C5A059] font-bold">
                 Single-Use Cryptographic Magic Link Generated
               </span>
               <span
-                className={`px-2 py-0.5 rounded font-mono text-[10px] ${
+                className={`px-2 py-0.5 rounded-sm font-mono text-[10px] ${
                   generatedLinkInfo.emailSent
                     ? "bg-emerald-950/60 border border-emerald-500/40 text-emerald-300"
                     : "bg-amber-950/60 border border-amber-500/40 text-amber-300"
@@ -435,13 +415,13 @@ export function AdminUsersClient({
             <button
               type="button"
               onClick={() => setGeneratedLinkInfo(null)}
-              className="text-xs font-mono text-[#8E9BAE] hover:text-[#F3EFE6] cursor-pointer"
+              className="text-xs font-mono text-[#9CA3AF] hover:text-[#F3EFE6] cursor-pointer"
             >
               Close ✕
             </button>
           </div>
 
-          <p className="text-xs text-[#D6D1C7]">
+          <p className="font-serif text-xs text-[#E5E0D8]">
             One-time login link for{" "}
             <strong className="font-mono text-[#F3EFE6]">
               {generatedLinkInfo.email}
@@ -457,12 +437,12 @@ export function AdminUsersClient({
               type="text"
               readOnly
               value={generatedLinkInfo.url}
-              className="flex-1 bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#C5A059] select-all"
+              className="flex-1 bg-[#0B0E14] border border-[#8A6D3B]/45 rounded-sm px-3 py-2 text-xs font-mono text-[#C5A059] select-all"
             />
             <button
               type="button"
               onClick={copyLinkToClipboard}
-              className="bg-[#C5A059] hover:bg-[#d4b26a] text-[#0B0E14] font-mono text-xs font-semibold uppercase px-4 py-2 rounded transition-colors cursor-pointer shrink-0"
+              className="bg-[#C5A059] hover:bg-[#d4b26a] text-[#0B0E14] font-mono text-xs font-semibold uppercase px-4 py-2 rounded-sm transition-colors cursor-pointer shrink-0"
             >
               {generatedLinkInfo.copied ? "✓ Copied!" : "Copy One-Time Link"}
             </button>
@@ -472,15 +452,15 @@ export function AdminUsersClient({
 
       {/* Invite User Form */}
       {canManageUsers && (
-        <div className="bg-[#111622] border border-[#263147] rounded-lg p-6 space-y-5">
+        <div className="bg-[#111726] border border-[#8A6D3B]/45 rounded-md p-6 space-y-5 shadow-md">
           <div>
             <div className="font-mono text-xs uppercase tracking-widest text-[#C5A059]">
-              INVITE USER BY EMAIL // GOOGLE OAUTH OR MAGIC LINK FALLBACK
+              INVITE TEAM MEMBER // GOOGLE OAUTH OR MAGIC LINK
             </div>
-            <h2 className="font-cinzel text-xl font-bold text-[#F3EFE6] mt-1">
+            <h2 className="font-display text-xl font-bold text-[#F3EFE6] mt-1">
               Authorize New Change Advisory Board Account
             </h2>
-            <p className="text-xs text-[#9CA3AF] mt-1">
+            <p className="font-serif text-xs text-[#9CA3AF] mt-1">
               Invited users with Google accounts can click &ldquo;Continue with
               Google&rdquo;, while non-Google users can sign in via the
               single-use cryptographic Magic Link sent to their email.
@@ -492,7 +472,7 @@ export function AdminUsersClient({
             className="grid grid-cols-1 md:grid-cols-12 gap-4"
           >
             <div className="md:col-span-4 space-y-1">
-              <label className="block font-mono text-[11px] uppercase text-[#8E9BAE]">
+              <label className="block font-mono text-[11px] uppercase text-[#9CA3AF]">
                 Email Address *
               </label>
               <input
@@ -501,12 +481,12 @@ export function AdminUsersClient({
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
                 placeholder="reviewer@example.org"
-                className="w-full bg-[#0B0E14] border border-[#263147] focus:border-[#C5A059] rounded px-3 py-2 text-sm text-[#F3EFE6] font-mono outline-none"
+                className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 focus:border-[#C5A059] rounded-sm px-3 py-2 text-sm text-[#F3EFE6] font-mono outline-none"
               />
             </div>
 
             <div className="md:col-span-3 space-y-1">
-              <label className="block font-mono text-[11px] uppercase text-[#8E9BAE]">
+              <label className="block font-mono text-[11px] uppercase text-[#9CA3AF]">
                 Display Name
               </label>
               <input
@@ -514,12 +494,12 @@ export function AdminUsersClient({
                 value={inviteDisplayName}
                 onChange={(e) => setInviteDisplayName(e.target.value)}
                 placeholder="Jane Doe (CAB Reviewer)"
-                className="w-full bg-[#0B0E14] border border-[#263147] focus:border-[#C5A059] rounded px-3 py-2 text-sm text-[#F3EFE6] outline-none"
+                className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 focus:border-[#C5A059] rounded-sm px-3 py-2 text-sm text-[#F3EFE6] outline-none"
               />
             </div>
 
             <div className="md:col-span-2 space-y-1">
-              <label className="block font-mono text-[11px] uppercase text-[#8E9BAE]">
+              <label className="block font-mono text-[11px] uppercase text-[#9CA3AF]">
                 Assigned Role *
               </label>
               <select
@@ -527,7 +507,7 @@ export function AdminUsersClient({
                 onChange={(e) =>
                   setInviteRole(e.target.value as AdminUserRole)
                 }
-                className="w-full bg-[#0B0E14] border border-[#263147] focus:border-[#C5A059] rounded px-3 py-2 text-sm text-[#F3EFE6] font-mono outline-none"
+                className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 focus:border-[#C5A059] rounded-sm px-3 py-2 text-sm text-[#F3EFE6] font-mono outline-none"
               >
                 <option value="editor">Editor</option>
                 <option value="admin">Admin</option>
@@ -536,7 +516,7 @@ export function AdminUsersClient({
             </div>
 
             <div className="md:col-span-3 space-y-1">
-              <label className="block font-mono text-[11px] uppercase text-[#8E9BAE]">
+              <label className="block font-mono text-[11px] uppercase text-[#9CA3AF]">
                 Auth Method Preference
               </label>
               <select
@@ -544,7 +524,7 @@ export function AdminUsersClient({
                 onChange={(e) =>
                   setInviteAuthPref(e.target.value as AdminAuthProviderPref)
                 }
-                className="w-full bg-[#0B0E14] border border-[#263147] focus:border-[#C5A059] rounded px-3 py-2 text-sm text-[#F3EFE6] font-mono outline-none"
+                className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 focus:border-[#C5A059] rounded-sm px-3 py-2 text-sm text-[#F3EFE6] font-mono outline-none"
               >
                 <option value="any">Google OAuth or Magic Link</option>
                 <option value="google">Google OAuth Preferred</option>
@@ -553,7 +533,7 @@ export function AdminUsersClient({
             </div>
 
             <div className="md:col-span-8 space-y-1">
-              <label className="block font-mono text-[11px] uppercase text-[#8E9BAE]">
+              <label className="block font-mono text-[11px] uppercase text-[#9CA3AF]">
                 Audit Disclosure Reason (Recorded in Immutable Ledger) *
               </label>
               <input
@@ -562,12 +542,12 @@ export function AdminUsersClient({
                 value={inviteReason}
                 onChange={(e) => setInviteReason(e.target.value)}
                 placeholder="Authorized by CAB Owner for editorial review and post-mortem verification"
-                className="w-full bg-[#0B0E14] border border-[#263147] focus:border-[#C5A059] rounded px-3 py-2 text-sm text-[#F3EFE6] outline-none"
+                className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 focus:border-[#C5A059] rounded-sm px-3 py-2 text-sm text-[#F3EFE6] outline-none"
               />
             </div>
 
             <div className="md:col-span-4 flex flex-col justify-end gap-2">
-              <label className="inline-flex items-center gap-2 text-xs text-[#D6D1C7] cursor-pointer">
+              <label className="inline-flex items-center gap-2 text-xs text-[#E5E0D8] cursor-pointer">
                 <input
                   type="checkbox"
                   checked={sendEmail}
@@ -579,7 +559,7 @@ export function AdminUsersClient({
               <button
                 type="submit"
                 disabled={submittingInvite}
-                className="w-full bg-[#C5A059] hover:bg-[#d4b26a] text-[#0B0E14] font-mono text-xs font-semibold uppercase tracking-wider py-2.5 px-4 rounded transition-colors disabled:opacity-50 cursor-pointer"
+                className="w-full bg-[#C5A059] hover:bg-[#d4b26a] text-[#0B0E14] font-mono text-xs font-semibold uppercase tracking-wider py-2.5 px-4 rounded-sm transition-colors disabled:opacity-50 cursor-pointer"
               >
                 {submittingInvite
                   ? "Authorizing & Auditing..."
@@ -591,17 +571,17 @@ export function AdminUsersClient({
       )}
 
       {/* Users Table */}
-      <div className="bg-[#111622] border border-[#263147] rounded-lg overflow-hidden">
-        <div className="px-6 py-4 border-b border-[#263147] flex items-center justify-between">
+      <div className="bg-[#111726] border border-[#8A6D3B]/45 rounded-md overflow-hidden shadow-md">
+        <div className="px-6 py-4 border-b border-[#8A6D3B]/35 flex items-center justify-between">
           <div>
-            <h2 className="font-cinzel text-lg font-bold text-[#F3EFE6]">
+            <h2 className="font-display text-lg font-bold text-[#F3EFE6]">
               Authorized &amp; Invited Change Advisory Board Accounts (
               {users.length})
             </h2>
-            <p className="text-xs text-[#8E9BAE]">
+            <p className="font-serif text-xs text-[#9CA3AF]">
               Any email address not listed below with{" "}
-              <code className="text-emerald-300">active</code> or{" "}
-              <code className="text-amber-300">invited</code> status is strictly
+              <code className="text-emerald-300 font-mono">active</code> or{" "}
+              <code className="text-amber-300 font-mono">invited</code> status is strictly
               rejected with HTTP 403.
             </p>
           </div>
@@ -610,7 +590,7 @@ export function AdminUsersClient({
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-[#0B0E14] border-b border-[#263147] font-mono text-[11px] uppercase text-[#8E9BAE]">
+              <tr className="bg-[#0B0E14] border-b border-[#8A6D3B]/35 font-mono text-[11px] uppercase text-[#9CA3AF]">
                 <th className="py-3 px-4">User / Email</th>
                 <th className="py-3 px-4">Role</th>
                 <th className="py-3 px-4">Status</th>
@@ -620,7 +600,7 @@ export function AdminUsersClient({
                 <th className="py-3 px-4 text-right">Governance Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#263147]">
+            <tbody className="divide-y divide-[#8A6D3B]/25">
               {users.map((u) => {
                 const isOwnerRow =
                   u.role === "owner" ||
@@ -629,13 +609,13 @@ export function AdminUsersClient({
                 return (
                   <tr
                     key={u.id}
-                    className="hover:bg-[#161D2B]/60 transition-colors"
+                    className="hover:bg-[#0B0E14]/50 transition-colors"
                   >
                     <td className="py-3.5 px-4">
                       <div className="font-mono font-semibold text-[#F3EFE6]">
                         {u.email}
                       </div>
-                      <div className="text-[11px] text-[#8E9BAE]">
+                      <div className="text-[11px] text-[#9CA3AF]">
                         {u.displayName || "—"}
                         {u.invitedByEmail
                           ? ` • Invited by ${u.invitedByEmail}`
@@ -645,7 +625,7 @@ export function AdminUsersClient({
 
                     <td className="py-3.5 px-4 font-mono">
                       <span
-                        className={`inline-block px-2 py-0.5 rounded uppercase text-[10px] font-semibold ${
+                        className={`inline-block px-2 py-0.5 rounded-sm uppercase text-[10px] font-semibold ${
                           u.role === "owner"
                             ? "bg-[#C5A059]/20 border border-[#C5A059]/50 text-[#C5A059]"
                             : u.role === "admin"
@@ -661,7 +641,7 @@ export function AdminUsersClient({
 
                     <td className="py-3.5 px-4 font-mono">
                       <span
-                        className={`inline-block px-2 py-0.5 rounded uppercase text-[10px] font-semibold ${
+                        className={`inline-block px-2 py-0.5 rounded-sm uppercase text-[10px] font-semibold ${
                           u.status === "active"
                             ? "bg-emerald-950/60 border border-emerald-500/40 text-emerald-300"
                             : u.status === "invited"
@@ -673,15 +653,15 @@ export function AdminUsersClient({
                       </span>
                     </td>
 
-                    <td className="py-3.5 px-4 font-mono text-[#D6D1C7]">
+                    <td className="py-3.5 px-4 font-mono text-[#E5E0D8]">
                       {u.authProviderPref}
                     </td>
 
-                    <td className="py-3.5 px-4 font-mono text-[#D6D1C7]">
+                    <td className="py-3.5 px-4 font-mono text-[#E5E0D8]">
                       {u.activeSessionCount ?? 0}
                     </td>
 
-                    <td className="py-3.5 px-4 font-mono text-[#8E9BAE]">
+                    <td className="py-3.5 px-4 font-mono text-[#9CA3AF]">
                       {u.lastLoginAt
                         ? new Date(u.lastLoginAt).toLocaleString()
                         : "Never"}
@@ -690,7 +670,7 @@ export function AdminUsersClient({
                     <td className="py-3.5 px-4 text-right">
                       {isOwnerRow ? (
                         <span className="font-mono text-[11px] text-[#C5A059]">
-                          Immutable Owner Lock
+                          Primary Owner
                         </span>
                       ) : (
                         canManageUsers && (
@@ -702,7 +682,7 @@ export function AdminUsersClient({
                                   onClick={() =>
                                     handleGenerateDirectMagicLink(u)
                                   }
-                                  className="px-2.5 py-1 rounded bg-[#1C2536] hover:bg-[#263147] border border-[#C5A059]/40 text-[#C5A059] font-mono text-[11px] cursor-pointer"
+                                  className="px-2.5 py-1 rounded-sm bg-[#0B0E14] hover:bg-[#111726] border border-[#C5A059]/45 text-[#C5A059] font-mono text-[11px] cursor-pointer"
                                 >
                                   Send / Copy Magic Link
                                 </button>
@@ -716,7 +696,7 @@ export function AdminUsersClient({
                                       newRole: e.target.value as AdminUserRole,
                                     })
                                   }
-                                  className="bg-[#0B0E14] border border-[#263147] rounded px-2 py-1 font-mono text-[11px] text-[#D6D1C7]"
+                                  className="bg-[#0B0E14] border border-[#8A6D3B]/45 rounded-sm px-2 py-1 font-mono text-[11px] text-[#E5E0D8]"
                                 >
                                   <option value="editor">Role: Editor</option>
                                   <option value="admin">Role: Admin</option>
@@ -729,7 +709,7 @@ export function AdminUsersClient({
                                     setRevokeTarget(u);
                                     setRevokeReason("");
                                   }}
-                                  className="px-2.5 py-1 rounded bg-red-950/50 hover:bg-red-900/70 border border-red-500/40 text-red-200 font-mono text-[11px] cursor-pointer"
+                                  className="px-2.5 py-1 rounded-sm bg-red-950/50 hover:bg-red-900/70 border border-red-500/40 text-red-200 font-mono text-[11px] cursor-pointer"
                                 >
                                   Revoke
                                 </button>
@@ -747,7 +727,7 @@ export function AdminUsersClient({
                                     `Re-inviting previously revoked user ${u.email}`
                                   );
                                 }}
-                                className="px-2.5 py-1 rounded bg-amber-950/50 hover:bg-amber-900/60 border border-amber-500/40 text-amber-200 font-mono text-[11px] cursor-pointer"
+                                className="px-2.5 py-1 rounded-sm bg-amber-950/50 hover:bg-amber-900/60 border border-amber-500/40 text-amber-200 font-mono text-[11px] cursor-pointer"
                               >
                                 Re-Invite
                               </button>
@@ -769,23 +749,23 @@ export function AdminUsersClient({
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
           <form
             onSubmit={handleConfirmRevoke}
-            className="bg-[#111622] border border-red-500/50 rounded-lg max-w-md w-full p-6 space-y-4 shadow-2xl"
+            className="bg-[#111726] border border-red-500/50 rounded-md max-w-md w-full p-6 space-y-4 shadow-2xl"
           >
             <div className="font-mono text-xs uppercase text-red-400 font-semibold">
               Confirm Access Revocation // Audit Required
             </div>
-            <h3 className="font-cinzel text-lg font-bold text-[#F3EFE6]">
+            <h3 className="font-display text-lg font-bold text-[#F3EFE6]">
               Revoke {revokeTarget.email}?
             </h3>
-            <p className="text-xs text-[#D6D1C7] leading-relaxed">
+            <p className="font-serif text-xs text-[#E5E0D8] leading-relaxed">
               This will immediately set the user status to{" "}
-              <code className="text-red-300">revoked</code>, invalidate all
+              <code className="text-red-300 font-mono">revoked</code>, invalidate all
               active sessions and unused Magic Links, and append a permanent{" "}
-              <code className="text-[#C5A059]">user.revoke</code> entry to{" "}
-              <code>audit_ledger</code>.
+              <code className="text-[#C5A059] font-mono">user.revoke</code> entry to{" "}
+              <code className="font-mono">audit_ledger</code>.
             </p>
             <div className="space-y-1">
-              <label className="block font-mono text-[11px] uppercase text-[#8E9BAE]">
+              <label className="block font-mono text-[11px] uppercase text-[#9CA3AF]">
                 Mandatory Audit Reason *
               </label>
               <input
@@ -794,21 +774,21 @@ export function AdminUsersClient({
                 value={revokeReason}
                 onChange={(e) => setRevokeReason(e.target.value)}
                 placeholder="Completed review rotation / access no longer required"
-                className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs text-[#F3EFE6] outline-none"
+                className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 rounded-sm px-3 py-2 text-xs text-[#F3EFE6] outline-none"
               />
             </div>
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setRevokeTarget(null)}
-                className="px-3 py-1.5 rounded border border-[#263147] text-xs font-mono text-[#8E9BAE] cursor-pointer"
+                className="px-3 py-1.5 rounded-sm border border-[#8A6D3B]/45 text-xs font-mono text-[#9CA3AF] cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={revoking}
-                className="px-4 py-1.5 rounded bg-red-600 hover:bg-red-500 text-white text-xs font-mono font-semibold cursor-pointer disabled:opacity-50"
+                className="px-4 py-1.5 rounded-sm bg-red-600 hover:bg-red-500 text-white text-xs font-mono font-semibold cursor-pointer disabled:opacity-50"
               >
                 {revoking ? "Revoking..." : "Confirm Revoke & Audit"}
               </button>
@@ -822,17 +802,17 @@ export function AdminUsersClient({
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
           <form
             onSubmit={handleConfirmRoleChange}
-            className="bg-[#111622] border border-[#C5A059]/60 rounded-lg max-w-md w-full p-6 space-y-4 shadow-2xl"
+            className="bg-[#111726] border border-[#C5A059]/60 rounded-md max-w-md w-full p-6 space-y-4 shadow-2xl"
           >
             <div className="font-mono text-xs uppercase text-[#C5A059] font-semibold">
               Confirm Role Update // Audit Required
             </div>
-            <h3 className="font-cinzel text-lg font-bold text-[#F3EFE6]">
+            <h3 className="font-display text-lg font-bold text-[#F3EFE6]">
               Change role for {roleTarget.user.email} to{" "}
               {roleTarget.newRole.toUpperCase()}?
             </h3>
             <div className="space-y-1">
-              <label className="block font-mono text-[11px] uppercase text-[#8E9BAE]">
+              <label className="block font-mono text-[11px] uppercase text-[#9CA3AF]">
                 Mandatory Audit Reason *
               </label>
               <input
@@ -841,21 +821,21 @@ export function AdminUsersClient({
                 value={roleReason}
                 onChange={(e) => setRoleReason(e.target.value)}
                 placeholder={`Updated role from ${roleTarget.user.role} to ${roleTarget.newRole}`}
-                className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs text-[#F3EFE6] outline-none"
+                className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 rounded-sm px-3 py-2 text-xs text-[#F3EFE6] outline-none"
               />
             </div>
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setRoleTarget(null)}
-                className="px-3 py-1.5 rounded border border-[#263147] text-xs font-mono text-[#8E9BAE] cursor-pointer"
+                className="px-3 py-1.5 rounded-sm border border-[#8A6D3B]/45 text-xs font-mono text-[#9CA3AF] cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={updatingRole}
-                className="px-4 py-1.5 rounded bg-[#C5A059] text-[#0B0E14] text-xs font-mono font-semibold cursor-pointer disabled:opacity-50"
+                className="px-4 py-1.5 rounded-sm bg-[#C5A059] text-[#0B0E14] text-xs font-mono font-semibold cursor-pointer disabled:opacity-50"
               >
                 {updatingRole ? "Saving..." : "Update Role & Audit"}
               </button>
@@ -864,88 +844,25 @@ export function AdminUsersClient({
         </div>
       )}
 
-      {/* Recent User & Access Audit Ledger Entries */}
-      <div className="bg-[#111622] border border-[#263147] rounded-lg overflow-hidden">
-        <div className="px-6 py-4 border-b border-[#263147] flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="font-cinzel text-lg font-bold text-[#F3EFE6]">
-              Immutable Access Control Audit Trail (<code>audit_ledger</code>)
-            </h2>
-            <p className="text-xs text-[#8E9BAE]">
-              Cryptographically hash-chained record of{" "}
-              <code>user.invite</code>, <code>user.revoke</code>,{" "}
-              <code>user.role_change</code>, and{" "}
-              <code>auth.unauthorized_attempt</code> events.
-            </p>
-          </div>
+      {/* Subtle Footer Link to Audit Ledger */}
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-2 text-xs font-mono text-[#9CA3AF]">
+        <span>
+          {auditEntries.length} recent access governance events recorded in the
+          immutable ledger.
+        </span>
+        <div className="flex items-center gap-4">
           <a
             href="/api/admin/audit/export?targetType=user&format=md"
-            className="px-3 py-1.5 rounded border border-[#C5A059]/50 text-[#C5A059] font-mono text-xs hover:bg-[#C5A059]/10 transition-colors"
+            className="text-[#C5A059] hover:underline"
           >
             Export Access Disclosure (.md)
           </a>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="bg-[#0B0E14] border-b border-[#263147] font-mono text-[11px] uppercase text-[#8E9BAE]">
-                <th className="py-3 px-4">Timestamp</th>
-                <th className="py-3 px-4">Action</th>
-                <th className="py-3 px-4">Actor</th>
-                <th className="py-3 px-4">Target</th>
-                <th className="py-3 px-4">Disclosure Reason</th>
-                <th className="py-3 px-4">SHA-256 Entry Hash</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#263147]">
-              {auditEntries.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="py-6 px-4 text-center font-mono text-[#8E9BAE]"
-                  >
-                    No user access audit events recorded yet.
-                  </td>
-                </tr>
-              ) : (
-                auditEntries.map((entry) => (
-                  <tr key={entry.eventId} className="hover:bg-[#161D2B]/50">
-                    <td className="py-3 px-4 font-mono text-[#8E9BAE] whitespace-nowrap">
-                      {new Date(entry.timestamp).toLocaleString()}
-                    </td>
-                    <td className="py-3 px-4 font-mono">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[11px] ${
-                          entry.actionType === "auth.unauthorized_attempt" ||
-                          entry.actionType === "user.revoke"
-                            ? "bg-red-950/60 border border-red-500/40 text-red-300"
-                            : "bg-emerald-950/60 border border-emerald-500/40 text-emerald-300"
-                        }`}
-                      >
-                        {entry.actionType}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 font-mono text-[#F3EFE6]">
-                      {entry.actorEmail}
-                      <span className="block text-[10px] text-[#8E9BAE]">
-                        {entry.authMethod}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 font-mono text-[#D6D1C7]">
-                      {entry.targetId}
-                    </td>
-                    <td className="py-3 px-4 text-[#D6D1C7]">
-                      {entry.reason}
-                    </td>
-                    <td className="py-3 px-4 font-mono text-[11px] text-[#C5A059]">
-                      {entry.entryHash.slice(0, 16)}…
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+          <Link
+            href="/admin/audit?targetType=user"
+            className="text-[#C5A059] hover:underline"
+          >
+            Inspect in Audit Ledger →
+          </Link>
         </div>
       </div>
     </div>

@@ -22,8 +22,9 @@ interface AdminFiltersClientProps {
   initialFilters: IngestFilterRecord[];
   initialThresholds: SystemSettingsMap;
   initialFeeds: IngestFeedRecord[];
-  initialAuditEntries: AuditLedgerEntry[];
+  initialAuditEntries?: AuditLedgerEntry[];
   chainIntegrity?: AuditChainVerificationResult;
+  embedded?: boolean;
 }
 
 const FILTER_TYPES: {
@@ -34,38 +35,38 @@ const FILTER_TYPES: {
 }[] = [
   {
     value: "Drop_Keyword_Regex",
-    label: "Drop Keyword / Regex",
+    label: "Exclude Keywords / Phrases",
     badgeColor: "bg-red-950/60 border-red-500/40 text-red-300",
-    desc: "Drops matching dispatches before System-2 synthesis",
+    desc: "Filters out matching stories before case briefs are drafted",
   },
   {
     value: "Boost_Systemic_Prob",
-    label: "Boost Systemic Probability",
+    label: "Boost Topic Relevance",
     badgeColor: "bg-emerald-950/60 border-emerald-500/40 text-emerald-300",
-    desc: "Adjusts Jev systemic probability by configured delta (e.g. +0.18)",
+    desc: "Raises the relevance score for high-priority topics",
   },
   {
     value: "Force_Working_Tool",
-    label: "Force Working Tool",
-    badgeColor: "bg-[#C5A059]/20 border-[#C5A059] text-[#E5C178]",
-    desc: "Assigns a primary Masonic Working Tool when pattern matches",
+    label: "Assign Working Tool",
+    badgeColor: "bg-[#C5A059]/20 border-[#C5A059] text-[#C5A059]",
+    desc: "Assigns a primary Working Tool when keywords match",
   },
   {
     value: "Block_Source_Pattern",
-    label: "Block Source URL Pattern",
+    label: "Block URL Pattern",
     badgeColor: "bg-amber-950/60 border-amber-500/40 text-amber-300",
-    desc: "Blocks matching URL paths or query parameters",
+    desc: "Excludes matching URL paths or sections",
   },
   {
     value: "Require_Keyword_Regex",
-    label: "Require Keyword / Regex",
+    label: "Require Keywords",
     badgeColor: "bg-sky-950/60 border-sky-500/40 text-sky-300",
-    desc: "Requires pattern to be present or drops the item",
+    desc: "Requires matching keywords to be present in the story",
   },
 ];
 
 const WORKING_TOOL_KEYS = [
-  { value: "square", label: "The Square (Policy / Constitutional Drift)" },
+  { value: "square", label: "The Square (Policy & Governance Alignment)" },
   { value: "plumb", label: "The Plumb (Integrity & Conduct Under Pressure)" },
   {
     value: "twenty_four_inch_gauge",
@@ -75,8 +76,8 @@ const WORKING_TOOL_KEYS = [
     value: "common_gavel",
     label: "Common Gavel (Stripping Theater & Blame-Shifting)",
   },
-  { value: "level", label: "The Level (Asymmetric Accountability)" },
-  { value: "trowel", label: "The Trowel (Cross-Silo Trust & Coordination)" },
+  { value: "level", label: "The Level (Shared Accountability)" },
+  { value: "trowel", label: "The Trowel (Cross-Silo Coordination)" },
 ];
 
 export function AdminFiltersClient({
@@ -84,20 +85,16 @@ export function AdminFiltersClient({
   initialFilters,
   initialThresholds,
   initialFeeds,
-  initialAuditEntries,
-  chainIntegrity,
+  embedded = false,
 }: AdminFiltersClientProps) {
   const router = useRouter();
   const [filters, setFilters] = useState<IngestFilterRecord[]>(initialFilters);
-  const [thresholds, setThresholds] =
-    useState<SystemSettingsMap>(initialThresholds);
-  const [auditEntries, setAuditEntries] =
-    useState<AuditLedgerEntry[]>(initialAuditEntries);
+  const [, setThresholds] = useState<SystemSettingsMap>(initialThresholds);
 
   // Filter table tab
   const [selectedTypeTab, setSelectedTypeTab] = useState<string>("all");
 
-  // Global Jev threshold slider state
+  // Minimum Relevance Score slider state
   const [minSysProb, setMinSysProb] = useState<number>(
     initialThresholds.jevMinSystemicProb
   );
@@ -165,29 +162,6 @@ export function AdminFiltersClient({
     actor.role === "admin" ||
     actor.role === "editor";
 
-  async function refreshAuditLog() {
-    try {
-      const res = await fetch("/api/admin/audit?limit=25", {
-        cache: "no-store",
-      });
-      if (res.ok) {
-        const data = (await res.json()) as { entries?: AuditLedgerEntry[] };
-        if (Array.isArray(data.entries)) {
-          setAuditEntries(
-            data.entries.filter(
-              (e) =>
-                e.targetType === "ingest_filter" ||
-                e.targetType === "system_settings"
-            )
-          );
-        }
-      }
-    } catch {
-      // ignore
-    }
-    router.refresh();
-  }
-
   function handleNewTypeChange(nextType: IngestFilterType) {
     setNewType(nextType);
     if (nextType === "Boost_Systemic_Prob") {
@@ -219,23 +193,20 @@ export function AdminFiltersClient({
           maxNetNewPerRun: maxNetNew,
           reason:
             thresholdReason.trim() ||
-            `Adjusted Jev systemic probability threshold to ${minSysProb.toFixed(
-              2
-            )} (confidence >= ${minConf.toFixed(
-              2
-            )}, maxNetNew = ${maxNetNew})`,
+            `Updated Minimum Relevance Score to ${Math.round(
+              minSysProb * 100
+            )}% (classification confidence >= ${Math.round(minConf * 100)}%)`,
         }),
       });
       const data = (await res.json()) as {
         ok?: boolean;
         error?: string;
         thresholds?: SystemSettingsMap;
-        auditEntry?: AuditLedgerEntry;
       };
       if (!res.ok || !data.ok) {
         setBanner({
           type: "error",
-          title: "Threshold Update Failed",
+          title: "Relevance Settings Update Failed",
           detail: data.error || `HTTP ${res.status}`,
         });
       } else {
@@ -248,15 +219,12 @@ export function AdminFiltersClient({
         setThresholdReason("");
         setBanner({
           type: "success",
-          title: "Global Jev Thresholds Updated & Audited",
-          detail: `jev_min_systemic_prob = ${minSysProb.toFixed(
-            2
-          )} committed to D1 system_settings (${data.auditEntry?.entryHash.slice(
-            0,
-            12
-          )}…).`,
+          title: "Relevance Thresholds Saved",
+          detail: `Minimum Relevance Score set to ${Math.round(
+            minSysProb * 100
+          )}% and recorded in the audit ledger.`,
         });
-        await refreshAuditLog();
+        router.refresh();
       }
     } catch (err) {
       setBanner({
@@ -293,9 +261,8 @@ export function AdminFiltersClient({
         payload.customSamples = [
           {
             title: customTestHeadline.trim(),
-            excerpt:
-              customTestExcerpt.trim() || customTestHeadline.trim(),
-            sourceFeed: "Admin Custom Dry-Run Headline",
+            excerpt: customTestExcerpt.trim() || customTestHeadline.trim(),
+            sourceFeed: "Custom Sample Headline",
             sourceUrl: "https://thecabcall.com/admin/filters/dry-run",
           },
         ];
@@ -312,7 +279,7 @@ export function AdminFiltersClient({
       if (!res.ok || !data.ok) {
         setBanner({
           type: "error",
-          title: "Filter Dry-Run Failed",
+          title: "Filter Preview Failed",
           detail: data.error || `HTTP ${res.status}`,
         });
       } else {
@@ -321,7 +288,7 @@ export function AdminFiltersClient({
     } catch (err) {
       setBanner({
         type: "error",
-        title: "Dry-Run Error",
+        title: "Filter Preview Error",
         detail: err instanceof Error ? err.message : String(err),
       });
     } finally {
@@ -350,7 +317,7 @@ export function AdminFiltersClient({
           enabled: true,
           reason:
             newReason.trim() ||
-            `Added triage filter rule "${newName.trim()}" (${newType})`,
+            `Added editorial filter rule "${newName.trim()}"`,
         }),
       });
 
@@ -359,13 +326,12 @@ export function AdminFiltersClient({
         error?: string;
         filter?: IngestFilterRecord;
         filters?: IngestFilterRecord[];
-        auditEntry?: AuditLedgerEntry;
       };
 
       if (!res.ok || !data.ok) {
         setBanner({
           type: "error",
-          title: "Failed to Create Triage Filter",
+          title: "Failed to Create Filter Rule",
           detail: data.error || `HTTP ${res.status}`,
         });
       } else {
@@ -380,13 +346,10 @@ export function AdminFiltersClient({
         setNewReason("");
         setBanner({
           type: "success",
-          title: `Created Filter "${data.filter?.name}"`,
-          detail: `Recorded filter.create in audit_ledger (${data.auditEntry?.entryHash.slice(
-            0,
-            12
-          )}…).`,
+          title: `Created Filter Rule "${data.filter?.name}"`,
+          detail: "Rule saved and recorded in the audit ledger.",
         });
-        await refreshAuditLog();
+        router.refresh();
       }
     } catch (err) {
       setBanner({
@@ -437,7 +400,7 @@ export function AdminFiltersClient({
           enabled: editEnabled,
           reason:
             editReason.trim() ||
-            `Updated triage filter rule "${editName.trim()}"`,
+            `Updated editorial filter rule "${editName.trim()}"`,
         }),
       });
       const data = (await res.json()) as {
@@ -445,13 +408,12 @@ export function AdminFiltersClient({
         error?: string;
         filter?: IngestFilterRecord;
         filters?: IngestFilterRecord[];
-        auditEntry?: AuditLedgerEntry;
       };
 
       if (!res.ok || !data.ok) {
         setBanner({
           type: "error",
-          title: "Failed to Update Filter",
+          title: "Failed to Update Rule",
           detail: data.error || `HTTP ${res.status}`,
         });
       } else {
@@ -461,13 +423,10 @@ export function AdminFiltersClient({
         setEditingFilter(null);
         setBanner({
           type: "success",
-          title: `Updated Filter "${data.filter?.name}"`,
-          detail: `Recorded filter.update in audit_ledger (${data.auditEntry?.entryHash.slice(
-            0,
-            12
-          )}…).`,
+          title: `Updated Rule "${data.filter?.name}"`,
+          detail: "Changes saved and recorded in the audit ledger.",
         });
-        await refreshAuditLog();
+        router.refresh();
       }
     } catch (err) {
       setBanner({
@@ -492,19 +451,20 @@ export function AdminFiltersClient({
           action: "update_filter",
           id: filter.id,
           enabled: nextEnabled,
-          reason: `${nextEnabled ? "Enabled" : "Paused"} triage filter "${filter.name}"`,
+          reason: `${nextEnabled ? "Enabled" : "Paused"} filter rule "${
+            filter.name
+          }"`,
         }),
       });
       const data = (await res.json()) as {
         ok?: boolean;
         error?: string;
         filters?: IngestFilterRecord[];
-        auditEntry?: AuditLedgerEntry;
       };
       if (!res.ok || !data.ok) {
         setBanner({
           type: "error",
-          title: "Toggle Filter Failed",
+          title: "Toggle Rule Failed",
           detail: data.error || `HTTP ${res.status}`,
         });
       } else {
@@ -514,12 +474,9 @@ export function AdminFiltersClient({
         setBanner({
           type: "success",
           title: `${nextEnabled ? "Enabled" : "Paused"} "${filter.name}"`,
-          detail: `Recorded filter.update in audit_ledger (${data.auditEntry?.entryHash.slice(
-            0,
-            12
-          )}…).`,
+          detail: "Rule status updated and recorded in the audit ledger.",
         });
-        await refreshAuditLog();
+        router.refresh();
       }
     } catch (err) {
       setBanner({
@@ -544,19 +501,18 @@ export function AdminFiltersClient({
           id: deletingFilter.id,
           reason:
             deleteReason.trim() ||
-            `Deleted triage filter "${deletingFilter.name}"`,
+            `Removed editorial filter rule "${deletingFilter.name}"`,
         }),
       });
       const data = (await res.json()) as {
         ok?: boolean;
         error?: string;
         filters?: IngestFilterRecord[];
-        auditEntry?: AuditLedgerEntry;
       };
       if (!res.ok || !data.ok) {
         setBanner({
           type: "error",
-          title: "Delete Filter Failed",
+          title: "Remove Rule Failed",
           detail: data.error || `HTTP ${res.status}`,
         });
       } else {
@@ -570,18 +526,16 @@ export function AdminFiltersClient({
         setDeleteReason("");
         setBanner({
           type: "success",
-          title: `Deleted Filter "${removedName}"`,
-          detail: `Recorded filter.delete with full before_state_json in audit_ledger (${data.auditEntry?.entryHash.slice(
-            0,
-            12
-          )}…).`,
+          title: `Removed Rule "${removedName}"`,
+          detail:
+            "Full snapshot preserved in the audit ledger for 1-click restoration.",
         });
-        await refreshAuditLog();
+        router.refresh();
       }
     } catch (err) {
       setBanner({
         type: "error",
-        title: "Delete Error",
+        title: "Remove Error",
         detail: err instanceof Error ? err.message : String(err),
       });
     } finally {
@@ -602,8 +556,8 @@ export function AdminFiltersClient({
     const spec = FILTER_TYPES.find((t) => t.value === type);
     return (
       <span
-        className={`inline-block px-2 py-0.5 rounded border font-mono text-[10px] font-semibold ${
-          spec?.badgeColor || "bg-slate-900 border-slate-600 text-slate-300"
+        className={`inline-block px-2 py-0.5 border font-display text-[10px] uppercase tracking-wider font-semibold ${
+          spec?.badgeColor || "bg-[#0B0E14] border-[#8A6D3B]/45 text-[#94A3B8]"
         }`}
       >
         {spec?.label || type}
@@ -612,92 +566,93 @@ export function AdminFiltersClient({
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Page Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-[#263147] pb-6">
-        <div>
-          <div className="font-mono text-xs uppercase tracking-widest text-[#C5A059]">
-            STAGE 2 &amp; 3 TRIAGE GATE // D1 INGEST_FILTERS &amp; JEV THRESHOLDS
+    <div
+      className={
+        embedded
+          ? "space-y-6"
+          : "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6"
+      }
+    >
+      {!embedded && (
+        <div className="relative bg-[#111726] border border-[#8A6D3B]/45 p-6 shadow-xl flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="space-y-1">
+            <div className="font-display text-[11px] uppercase tracking-[0.18em] text-[#C5A059]">
+              Editorial &amp; Feeds • Editorial Tone &amp; Filtering
+            </div>
+            <h1 className="font-display text-2xl sm:text-3xl text-[#F3EFE6]">
+              Editorial Tone &amp; Filtering Rules
+            </h1>
+            <p className="font-serif text-sm text-[#94A3B8] max-w-2xl">
+              Configure the Minimum Relevance Score, keyword exclusion rules,
+              topic relevance boosts, and Working Tool assignments.
+            </p>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-serif font-bold text-[#F3EFE6] mt-1">
-            Triage Filter Rules &amp; Jev Systemic Gate Thresholds
-          </h1>
-          <p className="text-sm text-[#9CA3AF] mt-1 max-w-3xl">
-            Manage keyword/regex noise drop rules, institutional signal boost
-            rules, working-tool routing overrides, and the global TypeSafe Jev (
-            <code>jev-1.14.0</code>) systemic probability gate threshold—backed
-            by the immutable SHA-256 audit ledger.
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2.5">
           <Link
-            href="/admin/feeds"
-            className="px-3.5 py-2 rounded-md bg-[#151C2C] hover:bg-[#1D263B] border border-[#2E3C56] font-mono text-xs text-[#E5C178] transition-colors"
+            href="/admin/incidents"
+            className="px-3.5 py-2 bg-[#0B0E14] border border-[#8A6D3B]/50 hover:border-[#C5A059] font-display text-xs uppercase tracking-wider text-[#C5A059]"
           >
-            ← Manage Inbound Feeds
-          </Link>
-          <Link
-            href="/admin/audit?targetType=ingest_filter"
-            className="px-3.5 py-2 rounded-md bg-[#111622] hover:bg-[#182032] border border-[#263147] font-mono text-xs text-[#D6D1C7] transition-colors"
-          >
-            Inspect Filter Audit Log ({chainIntegrity?.totalEntries ?? "—"})
+            ← Back to Case Briefs
           </Link>
         </div>
-      </div>
+      )}
 
       {/* Status Banner */}
       {banner && (
         <div
-          className={`p-4 rounded-lg border font-mono text-xs flex items-start justify-between gap-4 ${
+          className={`p-4 border text-xs flex items-start justify-between gap-4 ${
             banner.type === "success"
-              ? "bg-emerald-950/50 border-emerald-500/50 text-emerald-200"
+              ? "bg-emerald-950/50 border-emerald-500/45 text-emerald-200"
               : "bg-red-950/60 border-red-500/50 text-red-200"
           }`}
         >
           <div>
-            <div className="font-bold uppercase tracking-wider">
+            <div className="font-display font-bold uppercase tracking-wider">
               {banner.title}
             </div>
-            <div className="mt-1 opacity-90">{banner.detail}</div>
+            <div className="font-serif text-sm mt-1 text-[#F3EFE6]/90">
+              {banner.detail}
+            </div>
           </div>
           <button
             type="button"
             onClick={() => setBanner(null)}
-            className="text-xs opacity-70 hover:opacity-100 cursor-pointer"
+            className="font-display text-xs uppercase tracking-wider opacity-75 hover:opacity-100 cursor-pointer"
           >
             ✕
           </button>
         </div>
       )}
 
-      {/* Top Row: Global Jev Systemic Threshold Slider + Add New Filter Rule */}
+      {/* Top Row: Minimum Relevance Score Slider + Add New Filtering Rule */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left: Global Jev Systemic Probability Threshold Control */}
-        <div className="lg:col-span-5 bg-[#111622] border border-[#263147] rounded-lg p-6 space-y-5">
-          <div className="flex items-center justify-between border-b border-[#263147] pb-3">
+        {/* Left: Minimum Relevance Score Control */}
+        <div className="lg:col-span-5 relative bg-[#111726] border border-[#8A6D3B]/45 p-6 space-y-5 shadow-xl">
+          <span className="pointer-events-none absolute top-1.5 left-1.5 w-2 h-2 border-t border-l border-[#C5A059]/65" />
+          <span className="pointer-events-none absolute bottom-1.5 right-1.5 w-2 h-2 border-b border-r border-[#C5A059]/65" />
+
+          <div className="flex items-center justify-between border-b border-[#8A6D3B]/35 pb-3">
             <div>
-              <h2 className="text-lg font-serif font-bold text-[#F3EFE6]">
-                System-1 Jev Gate Thresholds
+              <h2 className="font-display text-base sm:text-lg text-[#F3EFE6] tracking-wide">
+                Story Relevance Thresholds
               </h2>
-              <p className="text-xs font-mono text-[#8E9BAE]">
-                Stored in D1 <code>system_settings</code> • Emits{" "}
-                <code>settings.threshold_update</code>
+              <p className="font-serif text-xs text-[#94A3B8]">
+                Stories scoring below the Minimum Relevance Score are filtered
+                out as low-signal noise.
               </p>
             </div>
-            <span className="px-2.5 py-1 rounded bg-[#C5A059]/20 border border-[#C5A059] font-mono text-xs font-bold text-[#E5C178]">
+            <span className="px-2.5 py-1 bg-[#C5A059]/15 border border-[#C5A059] font-display text-xs font-bold text-[#C5A059]">
               ≥ {Math.round(minSysProb * 100)}%
             </span>
           </div>
 
           <form onSubmit={handleSaveThresholds} className="space-y-4">
             <div className="space-y-2">
-              <div className="flex items-center justify-between font-mono text-xs">
-                <label className="text-[#D6D1C7]">
-                  Min Systemic Probability (<code>jev_min_systemic_prob</code>)
+              <div className="flex items-center justify-between text-xs">
+                <label className="font-display uppercase tracking-wider text-[#F3EFE6]">
+                  Minimum Relevance Score
                 </label>
-                <span className="text-[#E5C178] font-bold">
-                  {minSysProb.toFixed(2)} ({Math.round(minSysProb * 100)}%)
+                <span className="font-mono text-[#C5A059] font-bold">
+                  {Math.round(minSysProb * 100)}%
                 </span>
               </div>
               <input
@@ -709,17 +664,17 @@ export function AdminFiltersClient({
                 onChange={(e) => setMinSysProb(parseFloat(e.target.value))}
                 className="w-full accent-[#C5A059] cursor-pointer"
               />
-              <div className="flex justify-between font-mono text-[10px] text-[#8E9BAE]">
-                <span>0.50 (Permissive)</span>
-                <span>0.70 (CAB Baseline)</span>
-                <span>0.95 (Strict High-Sev)</span>
+              <div className="flex justify-between font-sans text-[11px] text-[#94A3B8]">
+                <span>50% (Broad)</span>
+                <span>70% (Recommended)</span>
+                <span>95% (Strict)</span>
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3 pt-1">
               <div>
-                <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                  Min Tool Confidence (0.30–0.95)
+                <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                  Minimum Classification Confidence
                 </label>
                 <input
                   type="number"
@@ -729,16 +684,19 @@ export function AdminFiltersClient({
                   value={minConf}
                   onChange={(e) =>
                     setMinConf(
-                      Math.min(0.95, Math.max(0.3, Number(e.target.value) || 0.5))
+                      Math.min(
+                        0.95,
+                        Math.max(0.3, Number(e.target.value) || 0.5)
+                      )
                     )
                   }
-                  className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-mono text-[#F3EFE6]"
                 />
               </div>
 
               <div>
-                <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                  Max Net-New / Run (1–50)
+                <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                  Max Stories / Fetch (1–50)
                 </label>
                 <input
                   type="number"
@@ -750,21 +708,21 @@ export function AdminFiltersClient({
                       Math.min(50, Math.max(1, Number(e.target.value) || 10))
                     )
                   }
-                  className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-mono text-[#F3EFE6]"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                Audit Justification Reason
+              <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                Editorial Note (Recorded in Audit Ledger)
               </label>
               <input
                 type="text"
                 value={thresholdReason}
                 onChange={(e) => setThresholdReason(e.target.value)}
-                placeholder="e.g. Tighten systemic triage gate during high-volume news cycle"
-                className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                placeholder="e.g. Tighten relevance threshold during high-volume news week"
+                className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-serif text-[#F3EFE6]"
               />
             </div>
 
@@ -772,45 +730,43 @@ export function AdminFiltersClient({
               <button
                 type="submit"
                 disabled={!canMutate || savingThresholds}
-                className="flex-1 py-2.5 px-4 rounded bg-[#C5A059] hover:bg-[#d4b06a] disabled:opacity-50 text-[#0B0E14] font-mono text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                className="flex-1 py-2.5 px-4 bg-[#C5A059] hover:bg-[#d4b06a] disabled:opacity-50 text-[#0B0E14] font-display text-xs font-bold uppercase tracking-wider transition-all duration-200 ease-out cursor-pointer"
               >
-                {savingThresholds
-                  ? "Committing…"
-                  : "Commit Thresholds & Audit"}
+                {savingThresholds ? "Saving…" : "Save Relevance Settings"}
               </button>
               <button
                 type="button"
                 disabled={runningDryRun}
                 onClick={() => handleRunDryRun(false)}
-                className="px-3.5 py-2.5 rounded bg-[#182032] hover:bg-[#222D45] border border-[#3A4A6B] font-mono text-xs text-[#E5C178] cursor-pointer"
+                className="px-3.5 py-2.5 bg-[#0B0E14] hover:border-[#C5A059] border border-[#8A6D3B]/55 font-display text-xs uppercase tracking-wider text-[#C5A059] cursor-pointer"
               >
-                Dry-Run @ {minSysProb.toFixed(2)}
+                Preview @ {Math.round(minSysProb * 100)}%
               </button>
             </div>
           </form>
         </div>
 
-        {/* Right: Create New Triage Filter Rule */}
-        <div className="lg:col-span-7 bg-[#111622] border border-[#263147] rounded-lg p-6 space-y-4">
-          <div className="flex items-center justify-between border-b border-[#263147] pb-3">
+        {/* Right: Create New Filtering Rule */}
+        <div className="lg:col-span-7 relative bg-[#111726] border border-[#8A6D3B]/45 p-6 space-y-4 shadow-xl">
+          <span className="pointer-events-none absolute top-1.5 left-1.5 w-2 h-2 border-t border-l border-[#C5A059]/65" />
+          <span className="pointer-events-none absolute bottom-1.5 right-1.5 w-2 h-2 border-b border-r border-[#C5A059]/65" />
+
+          <div className="flex items-center justify-between border-b border-[#8A6D3B]/35 pb-3">
             <div>
-              <h2 className="text-lg font-serif font-bold text-[#F3EFE6]">
-                Add New Triage Filter Rule
+              <h2 className="font-display text-base sm:text-lg text-[#F3EFE6] tracking-wide">
+                Add Filtering or Routing Rule
               </h2>
-              <p className="text-xs font-mono text-[#8E9BAE]">
-                Supports regular expressions (e.g.{" "}
-                <code>\b(wordle|horoscope)\b</code>) or comma-separated keywords
+              <p className="font-serif text-xs text-[#94A3B8]">
+                Exclude noisy keywords, boost key topics, or assign a Working
+                Tool when patterns match.
               </p>
             </div>
-            <span className="px-2.5 py-0.5 rounded bg-[#182032] border border-[#2E3C56] font-mono text-[11px] text-[#D6D1C7]">
-              Emits <code>filter.create</code>
-            </span>
           </div>
 
           <form onSubmit={handleCreateFilter} className="space-y-3.5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
+                <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059] mb-1">
                   Rule Name *
                 </label>
                 <input
@@ -818,21 +774,21 @@ export function AdminFiltersClient({
                   required
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  placeholder="e.g. Crypto Pump & Meme Coin Drop"
-                  className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                  placeholder="e.g. Exclude Celebrity & Sports Gossip"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-sans text-[#F3EFE6]"
                 />
               </div>
 
               <div>
-                <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                  Filter Type *
+                <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059] mb-1">
+                  Rule Action *
                 </label>
                 <select
                   value={newType}
                   onChange={(e) =>
                     handleNewTypeChange(e.target.value as IngestFilterType)
                   }
-                  className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-sans text-[#F3EFE6]"
                 >
                   {FILTER_TYPES.map((ft) => (
                     <option key={ft.value} value={ft.value}>
@@ -845,33 +801,33 @@ export function AdminFiltersClient({
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                  Match Target
+                <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                  Check Field
                 </label>
                 <select
                   value={newTarget}
                   onChange={(e) =>
                     setNewTarget(e.target.value as IngestFilterMatchTarget)
                   }
-                  className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-sans text-[#F3EFE6]"
                 >
-                  <option value="title_and_excerpt">Title + Excerpt</option>
-                  <option value="title">Headline Title Only</option>
-                  <option value="excerpt">Excerpt Body Only</option>
-                  <option value="url">Article URL</option>
+                  <option value="title_and_excerpt">Headline &amp; Excerpt</option>
+                  <option value="title">Headline Only</option>
+                  <option value="excerpt">Excerpt Only</option>
+                  <option value="url">Story URL</option>
                 </select>
               </div>
 
               <div>
-                <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                  Feed Scope
+                <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                  Source Scope
                 </label>
                 <select
                   value={newScopeFeedId}
                   onChange={(e) => setNewScopeFeedId(e.target.value)}
-                  className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-sans text-[#F3EFE6]"
                 >
-                  <option value="">All Inbound Feeds (Global)</option>
+                  <option value="">All Monitored Sources</option>
                   {initialFeeds.map((f) => (
                     <option key={f.id} value={String(f.id)}>
                       Only: {f.name}
@@ -881,14 +837,14 @@ export function AdminFiltersClient({
               </div>
 
               <div>
-                <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                  Action Value
+                <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                  Effect Value
                 </label>
                 {newType === "Force_Working_Tool" ? (
                   <select
                     value={newActionValue}
                     onChange={(e) => setNewActionValue(e.target.value)}
-                    className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                    className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-sans text-[#F3EFE6]"
                   >
                     {WORKING_TOOL_KEYS.map((wt) => (
                       <option key={wt.value} value={wt.value}>
@@ -904,50 +860,50 @@ export function AdminFiltersClient({
                     placeholder={
                       newType === "Boost_Systemic_Prob" ? "+0.18" : "drop"
                     }
-                    className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                    className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-mono text-[#F3EFE6]"
                   />
                 )}
               </div>
             </div>
 
             <div>
-              <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                Keyword List or Regular Expression Pattern *
+              <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059] mb-1">
+                Keywords or Pattern *
               </label>
               <input
                 type="text"
                 required
                 value={newPattern}
                 onChange={(e) => setNewPattern(e.target.value)}
-                placeholder="e.g. \b(dogecoin|memecoin|airdrop|nft floor)\b or comma-separated keywords"
-                className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#E5C178]"
+                placeholder="e.g. \b(wordle|horoscope|box office)\b or comma-separated keywords"
+                className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-mono text-[#C5A059]"
               />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                  Operational Description
+                <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                  Rule Description
                 </label>
                 <input
                   type="text"
                   value={newDesc}
                   onChange={(e) => setNewDesc(e.target.value)}
-                  placeholder="Explains why this pattern is filtered or boosted"
-                  className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                  placeholder="Explains why this pattern is excluded or boosted"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-serif text-[#F3EFE6]"
                 />
               </div>
 
               <div>
-                <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                  Audit Justification Reason
+                <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                  Editorial Note (Recorded in Audit Ledger)
                 </label>
                 <input
                   type="text"
                   value={newReason}
                   onChange={(e) => setNewReason(e.target.value)}
-                  placeholder="Reason recorded in public disclosure log"
-                  className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                  placeholder="Reason recorded in audit log"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-serif text-[#F3EFE6]"
                 />
               </div>
             </div>
@@ -956,76 +912,70 @@ export function AdminFiltersClient({
               <button
                 type="submit"
                 disabled={!canMutate || submittingCreate}
-                className="flex-1 py-2.5 px-4 rounded bg-[#C5A059] hover:bg-[#d4b06a] disabled:opacity-50 text-[#0B0E14] font-mono text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer"
+                className="flex-1 py-2.5 px-4 bg-[#C5A059] hover:bg-[#d4b06a] disabled:opacity-50 text-[#0B0E14] font-display text-xs font-bold uppercase tracking-wider transition-all duration-200 ease-out cursor-pointer"
               >
-                {submittingCreate
-                  ? "Saving Rule…"
-                  : "+ Create Filter Rule & Audit"}
+                {submittingCreate ? "Saving Rule…" : "+ Add Filtering Rule"}
               </button>
               <button
                 type="button"
                 disabled={runningDryRun}
                 onClick={() => handleRunDryRun(true)}
-                className="px-4 py-2.5 rounded bg-[#182032] hover:bg-[#222D45] border border-[#3A4A6B] font-mono text-xs text-[#E5C178] font-semibold cursor-pointer"
+                className="px-4 py-2.5 bg-[#0B0E14] hover:border-[#C5A059] border border-[#8A6D3B]/55 font-display text-xs uppercase tracking-wider text-[#C5A059] font-semibold cursor-pointer"
               >
-                {runningDryRun
-                  ? "Running Dry-Run…"
-                  : "Dry-Run Preview Candidate Pattern"}
+                {runningDryRun ? "Testing…" : "Test Rule on Recent Stories"}
               </button>
             </div>
           </form>
         </div>
       </div>
 
-      {/* Interactive Filter Dry-Run Tester Studio */}
-      <div className="bg-[#111622] border border-[#263147] rounded-lg p-6 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#263147] pb-4">
+      {/* Interactive Rule Tester */}
+      <div className="relative bg-[#111726] border border-[#8A6D3B]/45 p-6 space-y-4 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#8A6D3B]/35 pb-4">
           <div>
-            <h2 className="text-lg font-serif font-bold text-[#F3EFE6]">
-              Interactive Filter Dry-Run Tester
+            <h2 className="font-display text-base sm:text-lg text-[#F3EFE6] tracking-wide">
+              Test Filtering Rules Against Recent Headlines
             </h2>
-            <p className="text-xs font-mono text-[#8E9BAE]">
-              Non-destructively evaluates all {filters.filter((f) => f.enabled).length}{" "}
-              active filters (plus any candidate rule above) against live D1
-              dispatches &amp; synthetic control headlines
+            <p className="font-serif text-xs text-[#94A3B8]">
+              Preview how your active rules and Minimum Relevance Score evaluate
+              recent stories or a custom sample headline.
             </p>
           </div>
           <button
             type="button"
             disabled={runningDryRun}
             onClick={() => handleRunDryRun(Boolean(newPattern.trim()))}
-            className="px-4 py-2 rounded bg-[#C5A059]/20 hover:bg-[#C5A059]/30 border border-[#C5A059] font-mono text-xs text-[#E5C178] font-bold cursor-pointer shrink-0"
+            className="px-4 py-2 bg-[#C5A059]/15 hover:bg-[#C5A059]/25 border border-[#C5A059] font-display text-xs uppercase tracking-wider text-[#C5A059] font-bold cursor-pointer shrink-0"
           >
             {runningDryRun
-              ? "Evaluating Corpus…"
-              : "▶ Run Filter Dry-Run Against Recent Headlines"}
+              ? "Evaluating Headlines…"
+              : "▶ Test Rules Against Recent Headlines"}
           </button>
         </div>
 
-        {/* Optional Custom Sample Input for Dry-Run */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-[#0B0E14] border border-[#263147] rounded p-3.5">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-[#0B0E14] border border-[#8A6D3B]/40 p-3.5">
           <div className="md:col-span-5">
-            <label className="block font-mono text-[11px] text-[#8E9BAE] mb-1">
-              Optional Custom Test Headline
+            <label className="block font-display text-[10px] uppercase tracking-wider text-[#94A3B8] mb-1">
+              Sample Headline (Optional)
             </label>
             <input
               type="text"
               value={customTestHeadline}
               onChange={(e) => setCustomTestHeadline(e.target.value)}
               placeholder="e.g. Inspector General Audit Finds Skipped FAA Failover Checks"
-              className="w-full bg-[#111622] border border-[#263147] rounded px-2.5 py-1.5 text-xs font-mono text-[#F3EFE6]"
+              className="w-full bg-[#111726] border border-[#8A6D3B]/45 px-2.5 py-1.5 text-xs font-serif text-[#F3EFE6]"
             />
           </div>
           <div className="md:col-span-5">
-            <label className="block font-mono text-[11px] text-[#8E9BAE] mb-1">
-              Optional Custom Test Excerpt
+            <label className="block font-display text-[10px] uppercase tracking-wider text-[#94A3B8] mb-1">
+              Sample Excerpt (Optional)
             </label>
             <input
               type="text"
               value={customTestExcerpt}
               onChange={(e) => setCustomTestExcerpt(e.target.value)}
-              placeholder="Enter sample paragraph to test keyword/regex matching and Jev boost…"
-              className="w-full bg-[#111622] border border-[#263147] rounded px-2.5 py-1.5 text-xs font-mono text-[#F3EFE6]"
+              placeholder="Enter sample paragraph to test keyword matching…"
+              className="w-full bg-[#111726] border border-[#8A6D3B]/45 px-2.5 py-1.5 text-xs font-serif text-[#F3EFE6]"
             />
           </div>
           <div className="md:col-span-2 flex items-end">
@@ -1033,7 +983,7 @@ export function AdminFiltersClient({
               type="button"
               disabled={runningDryRun}
               onClick={() => handleRunDryRun(Boolean(newPattern.trim()))}
-              className="w-full py-1.5 px-3 rounded bg-[#182032] hover:bg-[#222D45] border border-[#3A4A6B] font-mono text-xs text-[#E5C178] cursor-pointer"
+              className="w-full py-1.5 px-3 bg-[#111726] hover:border-[#C5A059] border border-[#8A6D3B]/55 font-display text-xs uppercase tracking-wider text-[#C5A059] cursor-pointer"
             >
               Test Sample
             </button>
@@ -1042,66 +992,60 @@ export function AdminFiltersClient({
 
         {dryRunResult && (
           <div className="space-y-4 pt-2">
-            <div className="flex flex-wrap items-center gap-3 font-mono text-xs">
-              <span className="px-3 py-1 rounded bg-[#0B0E14] border border-[#263147] text-[#D6D1C7]">
-                Tested: <strong>{dryRunResult.totalTested}</strong> items
+            <div className="flex flex-wrap items-center gap-3 text-xs">
+              <span className="px-3 py-1 bg-[#0B0E14] border border-[#8A6D3B]/45 font-sans text-[#F3EFE6]">
+                Evaluated: <strong>{dryRunResult.totalTested}</strong> stories
               </span>
-              <span className="px-3 py-1 rounded bg-emerald-950/60 border border-emerald-500/40 text-emerald-300">
-                Triaged:{" "}
-                <strong>{dryRunResult.triagedCount}</strong> (≥{" "}
-                {dryRunResult.thresholds.jevMinSystemicProb.toFixed(2)})
+              <span className="px-3 py-1 bg-emerald-950/60 border border-emerald-500/40 font-sans text-emerald-300">
+                Accepted: <strong>{dryRunResult.triagedCount}</strong> (≥{" "}
+                {Math.round(
+                  dryRunResult.thresholds.jevMinSystemicProb * 100
+                )}
+                %)
               </span>
-              <span className="px-3 py-1 rounded bg-red-950/60 border border-red-500/40 text-red-300">
-                Dropped as Noise: <strong>{dryRunResult.droppedCount}</strong>
+              <span className="px-3 py-1 bg-red-950/60 border border-red-500/40 font-sans text-red-300">
+                Filtered Out: <strong>{dryRunResult.droppedCount}</strong>
               </span>
-              {dryRunResult.candidateFilterSummary && (
-                <span className="px-3 py-1 rounded bg-[#C5A059]/20 border border-[#C5A059] text-[#E5C178]">
-                  Candidate Rule &ldquo;
-                  {dryRunResult.candidateFilterSummary.name}&rdquo; Matched:{" "}
-                  <strong>
-                    {dryRunResult.candidateFilterSummary.matchCount}
-                  </strong>{" "}
-                  items
-                </span>
-              )}
             </div>
 
-            <div className="overflow-x-auto max-h-[380px] border border-[#263147] rounded">
+            <div className="overflow-x-auto max-h-[360px] border border-[#8A6D3B]/40">
               <table className="w-full text-left border-collapse text-xs">
-                <thead className="bg-[#0B0E14] sticky top-0 font-mono text-[11px] uppercase text-[#8E9BAE] border-b border-[#263147]">
+                <thead className="bg-[#0B0E14] sticky top-0 font-display text-[11px] uppercase tracking-wider text-[#94A3B8] border-b border-[#8A6D3B]/35">
                   <tr>
-                    <th className="py-2.5 px-3">Verdict</th>
+                    <th className="py-2.5 px-3">Outcome</th>
                     <th className="py-2.5 px-3">Headline &amp; Source</th>
-                    <th className="py-2.5 px-3">Systemic Prob</th>
-                    <th className="py-2.5 px-3">Primary Tool</th>
-                    <th className="py-2.5 px-3">Matched Filter Rules</th>
+                    <th className="py-2.5 px-3">Relevance Score</th>
+                    <th className="py-2.5 px-3">Working Tool</th>
+                    <th className="py-2.5 px-3">Matched Rules</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#263147]/60 bg-[#0E131D]">
+                <tbody className="divide-y divide-[#8A6D3B]/25 bg-[#0B0E14]/60">
                   {dryRunResult.results.map((item, idx) => (
-                    <tr key={idx} className="hover:bg-[#151D2D]">
-                      <td className="py-2.5 px-3 font-mono">
+                    <tr key={idx} className="hover:bg-[#111726]">
+                      <td className="py-2.5 px-3">
                         <span
-                          className={`inline-block px-2 py-0.5 rounded border text-[10px] font-bold uppercase ${
+                          className={`inline-block px-2 py-0.5 border font-display text-[10px] font-bold uppercase tracking-wider ${
                             item.finalOutcome === "triaged"
                               ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-300"
                               : "bg-red-950/60 border-red-500/40 text-red-300"
                           }`}
                         >
-                          {item.finalOutcome}
+                          {item.finalOutcome === "triaged"
+                            ? "Accepted"
+                            : "Filtered"}
                         </span>
                       </td>
                       <td className="py-2.5 px-3">
-                        <div className="font-semibold text-[#F3EFE6]">
+                        <div className="font-serif text-sm text-[#F3EFE6]">
                           {item.title}
                         </div>
-                        <div className="text-[11px] font-mono text-[#8E9BAE]">
+                        <div className="text-[11px] font-sans text-[#94A3B8]">
                           {item.sourceFeed}
                         </div>
                       </td>
                       <td className="py-2.5 px-3 font-mono">
-                        <span className="text-[#8E9BAE]">
-                          {item.baseSystemicProb.toFixed(2)}
+                        <span className="text-[#94A3B8]">
+                          {Math.round(item.baseSystemicProb * 100)}%
                         </span>{" "}
                         →{" "}
                         <span
@@ -1111,23 +1055,23 @@ export function AdminFiltersClient({
                               : "text-red-300"
                           }`}
                         >
-                          {item.adjustedSystemicProb.toFixed(2)}
+                          {Math.round(item.adjustedSystemicProb * 100)}%
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 font-mono text-[#E5C178]">
+                      <td className="py-2.5 px-3 font-display text-xs text-[#C5A059]">
                         {item.finalPrimaryTool}
                       </td>
                       <td className="py-2.5 px-3">
                         {item.matchedFilters.length === 0 ? (
-                          <span className="font-mono text-[11px] text-[#64748B]">
-                            No filter match (pure Jev score)
+                          <span className="font-serif italic text-xs text-[#94A3B8]">
+                            No rule match
                           </span>
                         ) : (
                           <div className="space-y-1">
                             {item.matchedFilters.map((mf, mIdx) => (
                               <div
                                 key={mIdx}
-                                className="font-mono text-[11px] text-[#D6D1C7]"
+                                className="font-sans text-[11px] text-[#F3EFE6]"
                               >
                                 <span className="text-[#C5A059] font-semibold">
                                   [{mf.filterName}]
@@ -1147,16 +1091,16 @@ export function AdminFiltersClient({
         )}
       </div>
 
-      {/* Configured Triage Filters Table */}
-      <div className="bg-[#111622] border border-[#263147] rounded-lg overflow-hidden">
-        <div className="px-6 py-4 border-b border-[#263147] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      {/* Configured Filtering Rules Table */}
+      <div className="relative bg-[#111726] border border-[#8A6D3B]/45 shadow-xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-[#8A6D3B]/35 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h2 className="text-lg font-serif font-bold text-[#F3EFE6]">
-              Configured Triage Filter Rules ({visibleFilters.length} of{" "}
+            <h2 className="font-display text-base sm:text-lg text-[#F3EFE6] tracking-wide">
+              Active Filtering &amp; Routing Rules ({visibleFilters.length} of{" "}
               {filters.length})
             </h2>
-            <p className="text-xs font-mono text-[#8E9BAE]">
-              Evaluated on every ingestion pass before and after TypeSafe Jev
+            <p className="font-serif text-xs text-[#94A3B8]">
+              Evaluated on every newsroom fetch before drafting case briefs.
             </p>
           </div>
 
@@ -1164,10 +1108,10 @@ export function AdminFiltersClient({
             <button
               type="button"
               onClick={() => setSelectedTypeTab("all")}
-              className={`px-2.5 py-1 rounded border font-mono text-[11px] cursor-pointer ${
+              className={`px-2.5 py-1 border font-display text-[10px] uppercase tracking-wider cursor-pointer ${
                 selectedTypeTab === "all"
-                  ? "bg-[#C5A059]/20 border-[#C5A059] text-[#E5C178]"
-                  : "bg-[#0B0E14] border-[#263147] text-[#9CA3AF]"
+                  ? "bg-[#C5A059] border-[#C5A059] text-[#0B0E14] font-bold"
+                  : "bg-[#0B0E14] border-[#8A6D3B]/40 text-[#94A3B8]"
               }`}
             >
               All ({filters.length})
@@ -1181,10 +1125,10 @@ export function AdminFiltersClient({
                   key={ft.value}
                   type="button"
                   onClick={() => setSelectedTypeTab(ft.value)}
-                  className={`px-2.5 py-1 rounded border font-mono text-[11px] cursor-pointer ${
+                  className={`px-2.5 py-1 border font-display text-[10px] uppercase tracking-wider cursor-pointer ${
                     selectedTypeTab === ft.value
-                      ? "bg-[#C5A059]/20 border-[#C5A059] text-[#E5C178]"
-                      : "bg-[#0B0E14] border-[#263147] text-[#9CA3AF]"
+                      ? "bg-[#C5A059] border-[#C5A059] text-[#0B0E14] font-bold"
+                      : "bg-[#0B0E14] border-[#8A6D3B]/40 text-[#94A3B8]"
                   }`}
                 >
                   {ft.label} ({count})
@@ -1197,68 +1141,70 @@ export function AdminFiltersClient({
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-[#263147] bg-[#0B0E14]/80 font-mono text-[11px] uppercase text-[#8E9BAE]">
+              <tr className="border-b border-[#8A6D3B]/35 bg-[#0B0E14]/90 font-display text-[11px] uppercase tracking-wider text-[#94A3B8]">
                 <th className="py-3 px-4">State</th>
-                <th className="py-3 px-4">Rule Name &amp; Type</th>
-                <th className="py-3 px-4">Target &amp; Scope</th>
-                <th className="py-3 px-4">Pattern (Regex / Keywords)</th>
-                <th className="py-3 px-4">Action</th>
-                <th className="py-3 px-4">Hits</th>
+                <th className="py-3 px-4">Rule Name &amp; Action</th>
+                <th className="py-3 px-4">Field &amp; Scope</th>
+                <th className="py-3 px-4">Keywords / Pattern</th>
+                <th className="py-3 px-4">Effect</th>
+                <th className="py-3 px-4">Matches</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#263147]/60 text-xs">
+            <tbody className="divide-y divide-[#8A6D3B]/25 text-xs">
               {visibleFilters.map((filter) => (
                 <tr
                   key={filter.id}
-                  className={`hover:bg-[#161D2B]/60 transition-colors ${
+                  className={`hover:bg-[#0B0E14]/50 transition-colors ${
                     !filter.enabled ? "opacity-60" : ""
                   }`}
                 >
-                  <td className="py-3.5 px-4 font-mono">
+                  <td className="py-3.5 px-4">
                     <button
                       type="button"
                       disabled={!canMutate}
                       onClick={() => handleToggleFilterEnabled(filter)}
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded border text-[11px] font-semibold cursor-pointer ${
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 border font-display text-[10px] uppercase tracking-wider font-semibold cursor-pointer ${
                         filter.enabled
                           ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-300"
-                          : "bg-slate-900 border-slate-600 text-slate-400"
+                          : "bg-[#0B0E14] border-[#8A6D3B]/40 text-[#94A3B8]"
                       }`}
                     >
                       <span>{filter.enabled ? "●" : "⏸"}</span>
-                      <span>{filter.enabled ? "ACTIVE" : "PAUSED"}</span>
+                      <span>{filter.enabled ? "Active" : "Paused"}</span>
                     </button>
                   </td>
 
                   <td className="py-3.5 px-4">
-                    <div className="font-semibold text-[#F3EFE6]">
+                    <div className="font-display text-sm text-[#F3EFE6]">
                       {filter.name}
                     </div>
                     <div className="mt-1">
                       {getFilterTypeBadge(filter.filterType)}
                     </div>
                     {filter.description && (
-                      <div className="text-[11px] text-[#8E9BAE] mt-1 max-w-xs">
+                      <div className="font-serif text-xs text-[#94A3B8] mt-1 max-w-xs">
                         {filter.description}
                       </div>
                     )}
                   </td>
 
-                  <td className="py-3.5 px-4 font-mono text-[11px]">
-                    <div className="text-[#D6D1C7]">{filter.matchTarget}</div>
-                    <div className="text-[#8E9BAE] mt-0.5">
+                  <td className="py-3.5 px-4 font-sans text-xs">
+                    <div className="text-[#F3EFE6]">
+                      {filter.matchTarget.replace(/_/g, " ")}
+                    </div>
+                    <div className="text-[#94A3B8] text-[11px] mt-0.5">
                       {filter.scopeFeedId
-                        ? `Feed: ${
+                        ? `Source: ${
                             feedNameById.get(filter.scopeFeedId) ||
                             `#${filter.scopeFeedId}`
                           }`
-                        : "Global (All Feeds)"}
+                        : "All Monitored Sources"}
                     </div>
                   </td>
 
-                  <td className="py-3.5 px-4 font-mono text-[11px] text-[#E5C178] max-w-xs break-all">
-                    <code className="bg-[#0B0E14] border border-[#263147] px-2 py-1 rounded block">
+                  <td className="py-3.5 px-4 font-mono text-[11px] text-[#C5A059] max-w-xs break-all">
+                    <code className="bg-[#0B0E14] border border-[#8A6D3B]/40 px-2 py-1 block">
                       {filter.pattern}
                     </code>
                   </td>
@@ -1267,17 +1213,17 @@ export function AdminFiltersClient({
                     {filter.actionValue || "drop"}
                   </td>
 
-                  <td className="py-3.5 px-4 font-mono text-sky-300 font-semibold">
+                  <td className="py-3.5 px-4 font-mono text-[#C5A059] font-semibold">
                     {filter.hitCount}
                   </td>
 
-                  <td className="py-3.5 px-4 text-right font-mono">
+                  <td className="py-3.5 px-4 text-right">
                     {canMutate && (
-                      <div className="inline-flex items-center gap-1.5">
+                      <div className="inline-flex items-center gap-1.5 font-display text-[10px] uppercase tracking-wider">
                         <button
                           type="button"
                           onClick={() => openEditModal(filter)}
-                          className="px-2.5 py-1 rounded bg-[#111622] hover:bg-[#1B2436] border border-[#263147] text-[11px] text-[#D6D1C7] cursor-pointer"
+                          className="px-2.5 py-1 bg-[#0B0E14] hover:border-[#C5A059] border border-[#8A6D3B]/45 text-[#F3EFE6] cursor-pointer"
                         >
                           Edit
                         </button>
@@ -1287,9 +1233,9 @@ export function AdminFiltersClient({
                             setDeletingFilter(filter);
                             setDeleteReason("");
                           }}
-                          className="px-2.5 py-1 rounded bg-red-950/40 hover:bg-red-900/60 border border-red-500/40 text-[11px] text-red-200 cursor-pointer"
+                          className="px-2.5 py-1 bg-red-950/40 hover:bg-red-900/60 border border-red-500/40 text-red-200 cursor-pointer"
                         >
-                          Delete
+                          Remove
                         </button>
                       </div>
                     )}
@@ -1301,75 +1247,32 @@ export function AdminFiltersClient({
         </div>
       </div>
 
-      {/* Recent Filter & Threshold Audit Ledger Entries */}
-      <div className="bg-[#111622] border border-[#263147] rounded-lg p-6 space-y-4">
-        <div className="flex items-center justify-between border-b border-[#263147] pb-3">
-          <div>
-            <h2 className="text-base font-serif font-bold text-[#F3EFE6]">
-              Recent Filter &amp; Threshold Audit Trail
-            </h2>
-            <p className="text-xs font-mono text-[#8E9BAE]">
-              All filter creations, updates, deletions, and threshold changes
-              are recorded in <code>audit_ledger</code>
-            </p>
-          </div>
-          <Link
-            href="/admin/audit?targetType=ingest_filter"
-            className="font-mono text-xs text-[#C5A059] hover:underline"
-          >
-            Open in Replay Studio →
-          </Link>
-        </div>
-
-        {auditEntries.length === 0 ? (
-          <div className="text-xs font-mono text-[#8E9BAE] py-4">
-            No filter or threshold mutations recorded yet beyond baseline seed.
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {auditEntries.slice(0, 8).map((entry) => (
-              <div
-                key={entry.eventId}
-                className="p-3 rounded bg-[#0B0E14] border border-[#263147] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs font-mono"
-              >
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded bg-[#C5A059]/15 border border-[#C5A059]/40 text-[#E5C178] text-[10px] font-bold">
-                      {entry.actionType}
-                    </span>
-                    <span className="text-[#F3EFE6] font-semibold">
-                      {entry.targetType} #{entry.targetId}
-                    </span>
-                    <span className="text-[#8E9BAE]">by {entry.actorEmail}</span>
-                  </div>
-                  <div className="text-[#9CA3AF] text-[11px]">
-                    {entry.reason}
-                  </div>
-                </div>
-                <div className="text-right text-[10px] text-[#8E9BAE] shrink-0">
-                  <div>{new Date(entry.timestamp).toLocaleString()}</div>
-                  <div className="text-emerald-400">
-                    SHA-256: {entry.entryHash.slice(0, 14)}…
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+      {/* Subtle Footer Link to Filter Audit History */}
+      <div className="flex items-center justify-between pt-1 text-xs text-[#94A3B8]">
+        <span className="font-serif italic">
+          All filtering rules and relevance threshold adjustments are recorded
+          in the immutable audit ledger.
+        </span>
+        <Link
+          href="/admin/audit?targetType=ingest_filter"
+          className="font-display uppercase tracking-wider text-[#C5A059] hover:text-[#F3EFE6] transition-colors"
+        >
+          View Filtering Audit History →
+        </Link>
       </div>
 
       {/* Edit Filter Modal */}
       {editingFilter && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
-          <div className="bg-[#111622] border border-[#C5A059] rounded-lg max-w-lg w-full p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-[#263147] pb-3">
-              <h3 className="text-lg font-serif font-bold text-[#F3EFE6]">
-                Edit Triage Filter #{editingFilter.id}
+          <div className="bg-[#111726] border border-[#C5A059] max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[#8A6D3B]/35 pb-3">
+              <h3 className="font-display text-lg text-[#F3EFE6]">
+                Edit Filtering Rule — {editingFilter.name}
               </h3>
               <button
                 type="button"
                 onClick={() => setEditingFilter(null)}
-                className="text-xs font-mono text-[#8E9BAE] hover:text-white cursor-pointer"
+                className="text-xs font-display text-[#94A3B8] hover:text-white cursor-pointer"
               >
                 ✕
               </button>
@@ -1377,7 +1280,7 @@ export function AdminFiltersClient({
 
             <form onSubmit={handleSaveEdit} className="space-y-3">
               <div>
-                <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
+                <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059] mb-1">
                   Rule Name *
                 </label>
                 <input
@@ -1385,21 +1288,21 @@ export function AdminFiltersClient({
                   required
                   value={editName}
                   onChange={(e) => setEditName(e.target.value)}
-                  className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs text-[#F3EFE6]"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                    Filter Type
+                  <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059] mb-1">
+                    Rule Action
                   </label>
                   <select
                     value={editType}
                     onChange={(e) =>
                       setEditType(e.target.value as IngestFilterType)
                     }
-                    className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                    className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs text-[#F3EFE6]"
                   >
                     {FILTER_TYPES.map((ft) => (
                       <option key={ft.value} value={ft.value}>
@@ -1410,60 +1313,62 @@ export function AdminFiltersClient({
                 </div>
 
                 <div>
-                  <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                    Match Target
+                  <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059] mb-1">
+                    Check Field
                   </label>
                   <select
                     value={editTarget}
                     onChange={(e) =>
                       setEditTarget(e.target.value as IngestFilterMatchTarget)
                     }
-                    className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                    className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs text-[#F3EFE6]"
                   >
-                    <option value="title_and_excerpt">Title + Excerpt</option>
-                    <option value="title">Headline Title Only</option>
-                    <option value="excerpt">Excerpt Body Only</option>
-                    <option value="url">Article URL</option>
+                    <option value="title_and_excerpt">
+                      Headline &amp; Excerpt
+                    </option>
+                    <option value="title">Headline Only</option>
+                    <option value="excerpt">Excerpt Only</option>
+                    <option value="url">Story URL</option>
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                  Pattern (Regex or Keywords) *
+                <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059] mb-1">
+                  Keywords or Pattern *
                 </label>
                 <input
                   type="text"
                   required
                   value={editPattern}
                   onChange={(e) => setEditPattern(e.target.value)}
-                  className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#E5C178]"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-mono text-[#C5A059]"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                    Action Value
+                  <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                    Effect Value
                   </label>
                   <input
                     type="text"
                     value={editActionValue}
                     onChange={(e) => setEditActionValue(e.target.value)}
-                    className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                    className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-mono text-[#F3EFE6]"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                    Scope Feed
+                  <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                    Source Scope
                   </label>
                   <select
                     value={editScopeFeedId}
                     onChange={(e) => setEditScopeFeedId(e.target.value)}
-                    className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                    className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs text-[#F3EFE6]"
                   >
-                    <option value="">All Inbound Feeds</option>
+                    <option value="">All Monitored Sources</option>
                     {initialFeeds.map((f) => (
                       <option key={f.id} value={String(f.id)}>
                         Only: {f.name}
@@ -1474,14 +1379,14 @@ export function AdminFiltersClient({
               </div>
 
               <div>
-                <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
+                <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
                   Description
                 </label>
                 <input
                   type="text"
                   value={editDesc}
                   onChange={(e) => setEditDesc(e.target.value)}
-                  className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-serif text-[#F3EFE6]"
                 />
               </div>
 
@@ -1494,22 +1399,22 @@ export function AdminFiltersClient({
                 />
                 <label
                   htmlFor="edit-filter-enabled"
-                  className="font-mono text-xs text-[#D6D1C7]"
+                  className="font-sans text-xs text-[#F3EFE6]"
                 >
                   Rule Enabled
                 </label>
               </div>
 
               <div>
-                <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                  Audit Justification Reason
+                <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                  Editorial Note
                 </label>
                 <input
                   type="text"
                   value={editReason}
                   onChange={(e) => setEditReason(e.target.value)}
-                  placeholder="Reason for updating this filter rule"
-                  className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                  placeholder="Reason for updating this rule"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-serif text-[#F3EFE6]"
                 />
               </div>
 
@@ -1517,16 +1422,16 @@ export function AdminFiltersClient({
                 <button
                   type="button"
                   onClick={() => setEditingFilter(null)}
-                  className="px-4 py-2 rounded border border-[#263147] text-xs font-mono text-[#9CA3AF] cursor-pointer"
+                  className="px-4 py-2 border border-[#8A6D3B]/45 text-xs font-display uppercase tracking-wider text-[#94A3B8] cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submittingEdit}
-                  className="px-4 py-2 rounded bg-[#C5A059] text-[#0B0E14] text-xs font-mono font-bold cursor-pointer"
+                  className="px-4 py-2 bg-[#C5A059] text-[#0B0E14] text-xs font-display uppercase tracking-wider font-bold cursor-pointer"
                 >
-                  {submittingEdit ? "Saving…" : "Save Changes & Audit"}
+                  {submittingEdit ? "Saving…" : "Save Changes"}
                 </button>
               </div>
             </form>
@@ -1537,44 +1442,42 @@ export function AdminFiltersClient({
       {/* Delete Filter Confirmation Modal */}
       {deletingFilter && (
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
-          <div className="bg-[#111622] border border-red-500/60 rounded-lg max-w-md w-full p-6 space-y-4">
-            <h3 className="text-lg font-serif font-bold text-[#F3EFE6]">
-              Delete Filter Rule &ldquo;{deletingFilter.name}&rdquo;?
+          <div className="bg-[#111726] border border-red-500/60 max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <h3 className="font-display text-lg text-[#F3EFE6]">
+              Remove Rule &ldquo;{deletingFilter.name}&rdquo;?
             </h3>
-            <p className="text-xs text-[#9CA3AF]">
-              This deletes the rule from <code>ingest_filters</code> and records
-              a <code>filter.delete</code> entry in <code>audit_ledger</code>{" "}
-              with its full <code>before_state_json</code> so it can be restored
-              anytime via Audit Replay.
+            <p className="font-serif text-xs text-[#94A3B8]">
+              This removes the filtering rule. A complete snapshot is preserved
+              in the audit ledger for 1-click restoration.
             </p>
             <form onSubmit={handleConfirmDelete} className="space-y-3">
               <div>
-                <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                  Audit Deletion Reason *
+                <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059] mb-1">
+                  Reason for Removal *
                 </label>
                 <input
                   type="text"
                   required
                   value={deleteReason}
                   onChange={(e) => setDeleteReason(e.target.value)}
-                  placeholder="e.g. Consolidated into broader noise exclusion regex"
-                  className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                  placeholder="e.g. Consolidated into broader keyword exclusion rule"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-serif text-[#F3EFE6]"
                 />
               </div>
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setDeletingFilter(null)}
-                  className="px-4 py-2 rounded border border-[#263147] text-xs font-mono text-[#9CA3AF] cursor-pointer"
+                  className="px-4 py-2 border border-[#8A6D3B]/45 text-xs font-display uppercase tracking-wider text-[#94A3B8] cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submittingDelete}
-                  className="px-4 py-2 rounded bg-red-600 hover:bg-red-500 text-white text-xs font-mono font-bold cursor-pointer"
+                  className="px-4 py-2 bg-red-700 hover:bg-red-600 text-white text-xs font-display uppercase tracking-wider font-bold cursor-pointer"
                 >
-                  {submittingDelete ? "Deleting…" : "Confirm Delete & Audit"}
+                  {submittingDelete ? "Removing…" : "Confirm Removal"}
                 </button>
               </div>
             </form>

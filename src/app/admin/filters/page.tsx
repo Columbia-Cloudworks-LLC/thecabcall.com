@@ -1,13 +1,14 @@
 import { redirect } from "next/navigation";
-import { AdminFiltersClient } from "@/components/AdminFiltersClient";
+import { AdminIncidentsClient } from "@/components/AdminIncidentsClient";
 import { getAuditLedgerEntries } from "@/lib/audit";
 import { getCurrentAdminSession } from "@/lib/auth";
 import { getIngestFiltersAndThresholdsBridge } from "@/lib/feeds-filters";
+import { getAdminIncidentsAndTransformsBridge } from "@/lib/incidents";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Triage Filters & Jev Thresholds Studio — The CAB Call Admin",
+  title: "Editorial Tone & Filtering — Editorial & Feeds | The CAB Call",
 };
 
 export default async function AdminFiltersPage() {
@@ -16,24 +17,28 @@ export default async function AdminFiltersPage() {
     redirect("/admin/login?next=/admin/filters");
   }
 
-  const [{ filters, thresholds, feeds }, auditResult] = await Promise.all([
+  const [
+    { incidents, transforms, counts },
+    { filters, thresholds, feeds },
+    auditResult,
+  ] = await Promise.all([
+    getAdminIncidentsAndTransformsBridge({ limit: 100 }),
     getIngestFiltersAndThresholdsBridge(),
     getAuditLedgerEntries({ limit: 35 }),
   ]);
 
-  const filterAndThresholdAuditEntries = auditResult.entries.filter(
-    (e) =>
-      e.targetType === "ingest_filter" || e.targetType === "system_settings"
-  );
-
   return (
-    <AdminFiltersClient
+    <AdminIncidentsClient
       actor={actor}
+      initialIncidents={incidents}
+      initialTransforms={transforms}
+      initialCounts={counts}
+      initialFeeds={feeds}
       initialFilters={filters}
       initialThresholds={thresholds}
-      initialFeeds={feeds}
-      initialAuditEntries={filterAndThresholdAuditEntries}
+      initialAuditEntries={auditResult.entries}
       chainIntegrity={auditResult.chainIntegrity}
+      defaultView="rules"
     />
   );
 }

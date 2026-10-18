@@ -2,13 +2,13 @@ import { redirect } from "next/navigation";
 import { AdminIncidentsClient } from "@/components/AdminIncidentsClient";
 import { getAuditLedgerEntries } from "@/lib/audit";
 import { getCurrentAdminSession } from "@/lib/auth";
+import { getIngestFiltersAndThresholdsBridge } from "@/lib/feeds-filters";
 import { getAdminIncidentsAndTransformsBridge } from "@/lib/incidents";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title:
-    "Incident Editorial Studio & Headline De-Escalation — The CAB Call Admin",
+  title: "Editorial & Feeds — The Editor's Study | The CAB Call",
 };
 
 export default async function AdminIncidentsPage() {
@@ -17,8 +17,13 @@ export default async function AdminIncidentsPage() {
     redirect("/admin/login?next=/admin/incidents");
   }
 
-  const [{ incidents, transforms, counts }, auditResult] = await Promise.all([
+  const [
+    { incidents, transforms, counts },
+    { filters, thresholds, feeds },
+    auditResult,
+  ] = await Promise.all([
     getAdminIncidentsAndTransformsBridge({ limit: 100 }),
+    getIngestFiltersAndThresholdsBridge(),
     getAuditLedgerEntries({ limit: 35 }),
   ]);
 
@@ -28,9 +33,12 @@ export default async function AdminIncidentsPage() {
       initialIncidents={incidents}
       initialTransforms={transforms}
       initialCounts={counts}
+      initialFeeds={feeds}
+      initialFilters={filters}
+      initialThresholds={thresholds}
       initialAuditEntries={auditResult.entries}
       chainIntegrity={auditResult.chainIntegrity}
-      defaultTab="incidents"
+      defaultView="stories"
     />
   );
 }

@@ -73,3 +73,17 @@
   background: transparent;
 }
 
+/* The Editor's Study — Admin Trestleboard Card & Surface Utilities */
+.admin-study-card {
+  position: relative;
+  background-color: #111726;
+  border: 1px solid rgba(138, 109, 59, 0.45);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  transition: border-color 200ms ease-out, box-shadow 200ms ease-out;
+}
+
+.admin-study-card:hover {
+  border-color: rgba(197, 160, 89, 0.7);
+}
+
+

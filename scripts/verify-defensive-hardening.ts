@@ -2161,8 +2161,111 @@ async function runVerificationSuite() {
   console.log(
     "  ✓ Epic #33 (Issues #34–#38) Podcast Archive Unification, Description Sanitization, Colophon Deduplication, Square Artwork & Episode Guide Drawer verified."
   );
+
+  // -------------------------------------------------------------------------
+  // 14. OBJECTIVE 14 (EPIC #21 / ISSUES #22–#26): ADMIN DASHBOARD REDESIGN ("THE EDITOR'S STUDY")
+  // -------------------------------------------------------------------------
   console.log(
-    "\n=== ALL 13 DEFENSIVE HARDENING, CRAFT PROSE, KRUG USABILITY, MASTHEAD & PODCAST ARCHIVE OBJECTIVES PASSED (100%) ==="
+    "\n[14/14] Verifying Objective 14 (Epic #21 / Issues #22–#26): Admin Dashboard Redesign ('The Editor's Study')..."
+  );
+
+  const adminShellNavSource = fs.readFileSync(
+    path.join(process.cwd(), "src/components/AdminShellNav.tsx"),
+    "utf8"
+  );
+  const adminOverviewSource = fs.readFileSync(
+    path.join(process.cwd(), "src/components/AdminOverviewClient.tsx"),
+    "utf8"
+  );
+  const adminEpisodesSource = fs.readFileSync(
+    path.join(process.cwd(), "src/components/AdminEpisodesClient.tsx"),
+    "utf8"
+  );
+  const adminIncidentsSource = fs.readFileSync(
+    path.join(process.cwd(), "src/components/AdminIncidentsClient.tsx"),
+    "utf8"
+  );
+  const adminFeedsSource = fs.readFileSync(
+    path.join(process.cwd(), "src/components/AdminFeedsClient.tsx"),
+    "utf8"
+  );
+  const adminFiltersSource = fs.readFileSync(
+    path.join(process.cwd(), "src/components/AdminFiltersClient.tsx"),
+    "utf8"
+  );
+
+  // Issue #22: Single Unified Admin Header & 4-Tab Navigation Consolidation
+  assert.ok(
+    adminShellNavSource.includes("ADMIN_NAV_TABS") &&
+      adminShellNavSource.includes("Overview") &&
+      adminShellNavSource.includes("Editorial & Feeds") &&
+      adminShellNavSource.includes("Podcast Studio") &&
+      adminShellNavSource.includes("Settings & Audit") &&
+      adminShellNavSource.includes("SETTINGS_SUB_NAV_ITEMS") &&
+      adminShellNavSource.includes("Ledger Verified") &&
+      !adminShellNavSource.includes("Owner Lock:") &&
+      siteHeaderSource.includes("if (isAdminContext && !isLoginRoute)") &&
+      siteHeaderSource.includes("return null;"),
+    "Issue #22: AdminShellNav.tsx and SiteHeader.tsx must implement a single unified admin header with 4 primary non-scrolling tabs, Settings & Audit sub-navigation, and a single Ledger Verified indicator"
+  );
+
+  // Issue #23: Overview Dashboard Declutter & Plain-English Action Cards
+  assert.ok(
+    adminOverviewSource.includes("Fetch Latest News") &&
+      adminOverviewSource.includes("Synthesize Case Briefs") &&
+      adminOverviewSource.includes("Generate Weekly Episode") &&
+      adminOverviewSource.includes("Verify Ledger") &&
+      adminOverviewSource.includes("Auto-draft briefs when fetching news") &&
+      adminOverviewSource.includes("Active Stories") &&
+      adminOverviewSource.includes("Monitored Feeds") &&
+      adminOverviewSource.includes("Filter Rules") &&
+      adminOverviewSource.includes("Published Episodes") &&
+      adminOverviewSource.includes("Recent Activity &amp; Pipeline Runs") &&
+      !adminOverviewSource.includes("System-1: jev-1.14.0") &&
+      !adminOverviewSource.includes("Chain System-2 Synthesis on Ingest"),
+    "Issue #23: AdminOverviewClient.tsx must render 4 plain-English action cards, a 5-metric horizontal summary strip, and a 5-item plain-English Recent Activity feed without internal model version strings"
+  );
+
+  // Issue #24: Podcast Episode Studio — Scannable List & Slide-Out Inspector Drawer
+  assert.ok(
+    adminEpisodesSource.includes("line-clamp-2") &&
+      adminEpisodesSource.includes("fixed inset-y-0 right-0 z-50 w-full max-w-2xl bg-[#111726]") &&
+      adminEpisodesSource.includes("Inspect &amp; Edit →") &&
+      adminEpisodesSource.includes("Technical Storage &amp; Feed Metadata") &&
+      !adminEpisodesSource.includes("Recent Episode Lifecycle Events (<code>audit_ledger</code>)"),
+    "Issue #24: AdminEpisodesClient.tsx must render a compact scannable episode list with line-clamp-2 descriptions and a right-hand slide-out Inspector Drawer with single audio player and collapsible storage metadata"
+  );
+
+  // Issue #25: Unified "Editorial & Feeds" Workspace & Plain-English Rule Controls
+  assert.ok(
+    adminIncidentsSource.includes("1. Case Briefs &amp; Stories") &&
+      adminIncidentsSource.includes("2. RSS Sources") &&
+      adminIncidentsSource.includes("3. Editorial Tone &amp; Filtering") &&
+      adminIncidentsSource.includes("Calm Headline Rewrite") &&
+      adminFeedsSource.includes("Monitored RSS Sources") &&
+      adminFiltersSource.includes("Minimum Relevance Score") &&
+      adminFiltersSource.includes("Minimum Classification Confidence") &&
+      adminFiltersSource.includes("Exclude Keywords / Phrases") &&
+      adminFiltersSource.includes("Boost Topic Relevance") &&
+      adminFiltersSource.includes("Assign Working Tool"),
+    "Issue #25: AdminIncidentsClient.tsx, AdminFeedsClient.tsx, and AdminFiltersClient.tsx must provide the unified 3-view 'Editorial & Feeds' workspace and plain-English labels"
+  );
+
+  // Issue #26: Trestleboard Visual Polish Across /admin ("The Editor's Study")
+  assert.ok(
+    globalsCssSource.includes(".admin-study-card") &&
+      adminShellNavSource.includes("SquareAndCompassesCrest") &&
+      adminOverviewSource.includes("bg-[#111726]") &&
+      adminEpisodesSource.includes("bg-[#111726]") &&
+      adminIncidentsSource.includes("bg-[#111726]"),
+    "Issue #26: Admin components and globals.css must apply The Editor's Study Trestleboard aesthetic (#111726, brass hairlines, SquareAndCompassesCrest, and .admin-study-card)"
+  );
+
+  console.log(
+    "  ✓ Epic #21 (Issues #22–#26) Admin Dashboard Redesign ('The Editor's Study') verified."
+  );
+  console.log(
+    "\n=== ALL 14 DEFENSIVE HARDENING, CRAFT PROSE, KRUG USABILITY, MASTHEAD, PODCAST ARCHIVE & ADMIN STUDY OBJECTIVES PASSED (100%) ==="
   );
 }
 

@@ -486,16 +486,23 @@ export function AdminAuditClient({
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* 1. Cryptographic Chain Verifier Banner */}
-      <div className="bg-[#111622] border border-[#263147] rounded-lg p-6 space-y-4">
+      <div className="relative bg-[#111726] border border-[#8A6D3B]/45 rounded-md p-6 space-y-4 shadow-lg">
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute top-0 left-0 w-2.5 h-2.5 border-t border-l border-[#C5A059]/60"
+        />
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute top-0 right-0 w-2.5 h-2.5 border-t border-r border-[#C5A059]/60"
+        />
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2.5">
               <span className="font-mono text-xs uppercase tracking-widest text-[#C5A059] font-semibold">
-                IMMUTABLE AUDIT LEDGER // CRYPTOGRAPHIC PROVENANCE &amp; REPLAY
-                STUDIO
+                SETTINGS &amp; AUDIT // IMMUTABLE AUDIT LEDGER
               </span>
               <span
-                className={`inline-flex items-center gap-1.5 px-3 py-0.5 rounded border font-mono text-xs font-bold ${
+                className={`inline-flex items-center gap-1.5 px-3 py-0.5 rounded-sm border font-mono text-xs font-bold ${
                   chainIntegrity.valid
                     ? "bg-emerald-950/70 border-emerald-500/50 text-emerald-300"
                     : "bg-red-950/80 border-red-500 text-red-200"
@@ -510,14 +517,14 @@ export function AdminAuditClient({
               </span>
             </div>
 
-            <h1 className="font-cinzel text-2xl sm:text-3xl font-bold text-[#F3EFE6]">
+            <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#F3EFE6] tracking-wide">
               Audit Trail Explorer, Diff Inspector &amp; State Replay Studio
             </h1>
-            <p className="text-xs text-[#9CA3AF] max-w-3xl">
+            <p className="font-serif text-sm text-[#E5E0D8]/85 max-w-3xl">
               Every administrative and editorial mutation is protected by SQLite{" "}
-              <code className="text-[#C5A059]">BEFORE UPDATE</code> and{" "}
-              <code className="text-[#C5A059]">BEFORE DELETE</code> immutability
-              triggers and chained from <code className="text-emerald-300">GENESIS</code>{" "}
+              <code className="text-[#C5A059] font-mono text-xs">BEFORE UPDATE</code> and{" "}
+              <code className="text-[#C5A059] font-mono text-xs">BEFORE DELETE</code> immutability
+              triggers and chained from <code className="text-emerald-300 font-mono text-xs">GENESIS</code>{" "}
               via SHA-256 digests. Inspect field-level diffs, deterministically
               revert or re-apply state, or export signed public disclosure
               reports.
@@ -529,7 +536,7 @@ export function AdminAuditClient({
               type="button"
               disabled={verifyingChain}
               onClick={handleVerifyChainNow}
-              className="px-4 py-2.5 rounded bg-emerald-950/60 hover:bg-emerald-900/70 border border-emerald-500/50 text-emerald-200 font-mono text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+              className="px-4 py-2.5 rounded-sm bg-emerald-950/60 hover:bg-emerald-900/70 border border-emerald-500/50 text-emerald-200 font-mono text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
             >
               {verifyingChain
                 ? "Recomputing SHA-256 Chain…"
@@ -540,21 +547,21 @@ export function AdminAuditClient({
               type="button"
               disabled={loadingDisclosure}
               onClick={handlePreviewDisclosure}
-              className="px-3.5 py-2.5 rounded bg-[#161E2E] hover:bg-[#1E293B] border border-[#2E3C56] hover:border-[#C5A059] text-[#F3EFE6] font-mono text-xs transition-colors cursor-pointer"
+              className="px-3.5 py-2.5 rounded-sm bg-[#0B0E14] hover:bg-[#111726] border border-[#8A6D3B]/45 hover:border-[#C5A059] text-[#F3EFE6] font-mono text-xs transition-colors cursor-pointer"
             >
               {loadingDisclosure ? "Building Report…" : "Preview Disclosure"}
             </button>
 
             <a
               href={`/api/admin/audit/export?format=md${exportQuerySuffix}`}
-              className="px-3.5 py-2.5 rounded bg-[#C5A059] hover:bg-[#d4b26a] text-[#0B0E14] font-mono text-xs font-bold uppercase transition-colors"
+              className="px-3.5 py-2.5 rounded-sm bg-[#C5A059] hover:bg-[#d4b26a] text-[#0B0E14] font-mono text-xs font-bold uppercase transition-colors"
             >
               Export .MD
             </a>
 
             <a
               href={`/api/admin/audit/export?format=json${exportQuerySuffix}`}
-              className="px-3.5 py-2.5 rounded border border-[#C5A059]/60 hover:border-[#C5A059] text-[#C5A059] font-mono text-xs font-semibold uppercase transition-colors"
+              className="px-3.5 py-2.5 rounded-sm border border-[#C5A059]/60 hover:border-[#C5A059] text-[#C5A059] font-mono text-xs font-semibold uppercase transition-colors"
             >
               Export .JSON
             </a>
@@ -562,9 +569,9 @@ export function AdminAuditClient({
         </div>
 
         {/* Cryptographic Chain Digest Bar */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2 border-t border-[#1E2738] font-mono text-xs">
-          <div className="bg-[#0B0E14] border border-[#263147] rounded p-3">
-            <div className="text-[10px] uppercase text-[#8E9BAE]">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2 border-t border-[#8A6D3B]/35 font-mono text-xs">
+          <div className="bg-[#0B0E14] border border-[#8A6D3B]/35 rounded-sm p-3">
+            <div className="text-[10px] uppercase text-[#9CA3AF]">
               Total Chained Entries
             </div>
             <div className="text-lg font-bold text-[#F3EFE6] mt-0.5">
@@ -575,9 +582,9 @@ export function AdminAuditClient({
             </div>
           </div>
 
-          <div className="bg-[#0B0E14] border border-[#263147] rounded p-3">
+          <div className="bg-[#0B0E14] border border-[#8A6D3B]/35 rounded-sm p-3">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase text-[#8E9BAE]">
+              <span className="text-[10px] uppercase text-[#9CA3AF]">
                 GENESIS Entry Digest (Row #1)
               </span>
               <button
@@ -591,19 +598,19 @@ export function AdminAuditClient({
               </button>
             </div>
             <div
-              className="text-xs text-[#D6D1C7] mt-1 truncate"
+              className="text-xs text-[#E5E0D8] mt-1 truncate"
               title={chainIntegrity.genesisHash || "GENESIS"}
             >
               {chainIntegrity.genesisHash || "GENESIS"}
             </div>
-            <div className="text-[10px] text-[#8E9BAE] mt-0.5">
+            <div className="text-[10px] text-[#9CA3AF] mt-0.5">
               prev_hash: GENESIS
             </div>
           </div>
 
-          <div className="bg-[#0B0E14] border border-[#263147] rounded p-3">
+          <div className="bg-[#0B0E14] border border-[#8A6D3B]/35 rounded-sm p-3">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase text-[#8E9BAE]">
+              <span className="text-[10px] uppercase text-[#9CA3AF]">
                 Current HEAD Digest
               </span>
               <button
@@ -620,13 +627,13 @@ export function AdminAuditClient({
             >
               {chainIntegrity.headHash}
             </div>
-            <div className="text-[10px] text-[#8E9BAE] mt-0.5 truncate">
+            <div className="text-[10px] text-[#9CA3AF] mt-0.5 truncate">
               HEAD Time: {chainIntegrity.headTimestamp || "—"}
             </div>
           </div>
 
-          <div className="bg-[#0B0E14] border border-[#263147] rounded p-3">
-            <div className="text-[10px] uppercase text-[#8E9BAE]">
+          <div className="bg-[#0B0E14] border border-[#8A6D3B]/35 rounded-sm p-3">
+            <div className="text-[10px] uppercase text-[#9CA3AF]">
               Chain Verification Timestamp
             </div>
             <div className="text-xs text-[#F3EFE6] mt-1">
@@ -642,7 +649,7 @@ export function AdminAuditClient({
       {/* Feedback Banner */}
       {statusBanner && (
         <div
-          className={`p-4 rounded-lg border font-mono text-xs flex items-start justify-between gap-4 ${
+          className={`p-4 rounded-sm border font-mono text-xs flex items-start justify-between gap-4 ${
             statusBanner.type === "success"
               ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-200"
               : "bg-red-950/40 border-red-500/40 text-red-200"
@@ -652,7 +659,7 @@ export function AdminAuditClient({
             <div className="font-bold uppercase tracking-wider">
               {statusBanner.title}
             </div>
-            <div className="text-[#D6D1C7]">{statusBanner.detail}</div>
+            <div className="text-[#E5E0D8]">{statusBanner.detail}</div>
           </div>
           <button
             type="button"
@@ -667,7 +674,7 @@ export function AdminAuditClient({
       {/* 2. Filterable Event Log Controls */}
       <form
         onSubmit={handleApplyFilters}
-        className="bg-[#111622] border border-[#263147] rounded-lg p-5 space-y-4"
+        className="bg-[#111726] border border-[#8A6D3B]/45 rounded-md p-5 space-y-4 shadow-md"
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="font-mono text-xs uppercase tracking-wider text-[#C5A059] font-semibold">
@@ -677,14 +684,14 @@ export function AdminAuditClient({
             <button
               type="button"
               onClick={handleResetFilters}
-              className="px-3 py-1.5 rounded border border-[#263147] hover:border-[#8E9BAE] font-mono text-xs text-[#9CA3AF] hover:text-[#F3EFE6] transition-colors cursor-pointer"
+              className="px-3 py-1.5 rounded-sm border border-[#8A6D3B]/45 hover:border-[#C5A059] font-mono text-xs text-[#9CA3AF] hover:text-[#F3EFE6] transition-colors cursor-pointer"
             >
               Reset Filters
             </button>
             <button
               type="submit"
               disabled={loadingList}
-              className="px-4 py-1.5 rounded bg-[#C5A059] hover:bg-[#d4b26a] text-[#0B0E14] font-mono text-xs font-bold uppercase transition-colors cursor-pointer disabled:opacity-50"
+              className="px-4 py-1.5 rounded-sm bg-[#C5A059] hover:bg-[#d4b26a] text-[#0B0E14] font-mono text-xs font-bold uppercase transition-colors cursor-pointer disabled:opacity-50"
             >
               {loadingList ? "Filtering…" : "Apply Filters"}
             </button>
@@ -693,13 +700,13 @@ export function AdminAuditClient({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 font-mono text-xs">
           <div>
-            <label className="block text-[10px] uppercase text-[#8E9BAE] mb-1">
+            <label className="block text-[10px] uppercase text-[#9CA3AF] mb-1">
               Action Type
             </label>
             <select
               value={actionType}
               onChange={(e) => setActionType(e.target.value)}
-              className="w-full rounded bg-[#0B0E14] border border-[#263147] px-2.5 py-2 text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
+              className="w-full rounded-sm bg-[#0B0E14] border border-[#8A6D3B]/45 px-2.5 py-2 text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
             >
               {actionTypeOptions.map((act) => (
                 <option key={act} value={act}>
@@ -710,13 +717,13 @@ export function AdminAuditClient({
           </div>
 
           <div>
-            <label className="block text-[10px] uppercase text-[#8E9BAE] mb-1">
+            <label className="block text-[10px] uppercase text-[#9CA3AF] mb-1">
               Target Type
             </label>
             <select
               value={targetType}
               onChange={(e) => setTargetType(e.target.value)}
-              className="w-full rounded bg-[#0B0E14] border border-[#263147] px-2.5 py-2 text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
+              className="w-full rounded-sm bg-[#0B0E14] border border-[#8A6D3B]/45 px-2.5 py-2 text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
             >
               {targetTypeOptions.map((tgt) => (
                 <option key={tgt} value={tgt}>
@@ -727,7 +734,7 @@ export function AdminAuditClient({
           </div>
 
           <div>
-            <label className="block text-[10px] uppercase text-[#8E9BAE] mb-1">
+            <label className="block text-[10px] uppercase text-[#9CA3AF] mb-1">
               Actor Email
             </label>
             <input
@@ -735,12 +742,12 @@ export function AdminAuditClient({
               value={actorEmail}
               onChange={(e) => setActorEmail(e.target.value)}
               placeholder="e.g. system@thecabcall.com"
-              className="w-full rounded bg-[#0B0E14] border border-[#263147] px-2.5 py-2 text-[#F3EFE6] placeholder-[#4B5563] focus:border-[#C5A059] focus:outline-none"
+              className="w-full rounded-sm bg-[#0B0E14] border border-[#8A6D3B]/45 px-2.5 py-2 text-[#F3EFE6] placeholder-[#9CA3AF]/60 focus:border-[#C5A059] focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="block text-[10px] uppercase text-[#8E9BAE] mb-1">
+            <label className="block text-[10px] uppercase text-[#9CA3AF] mb-1">
               Target ID
             </label>
             <input
@@ -748,37 +755,37 @@ export function AdminAuditClient({
               value={targetId}
               onChange={(e) => setTargetId(e.target.value)}
               placeholder="e.g. cabcall-db or slug"
-              className="w-full rounded bg-[#0B0E14] border border-[#263147] px-2.5 py-2 text-[#F3EFE6] placeholder-[#4B5563] focus:border-[#C5A059] focus:outline-none"
+              className="w-full rounded-sm bg-[#0B0E14] border border-[#8A6D3B]/45 px-2.5 py-2 text-[#F3EFE6] placeholder-[#9CA3AF]/60 focus:border-[#C5A059] focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="block text-[10px] uppercase text-[#8E9BAE] mb-1">
+            <label className="block text-[10px] uppercase text-[#9CA3AF] mb-1">
               From Date (ISO)
             </label>
             <input
               type="date"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
-              className="w-full rounded bg-[#0B0E14] border border-[#263147] px-2.5 py-2 text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
+              className="w-full rounded-sm bg-[#0B0E14] border border-[#8A6D3B]/45 px-2.5 py-2 text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
             />
           </div>
 
           <div>
-            <label className="block text-[10px] uppercase text-[#8E9BAE] mb-1">
+            <label className="block text-[10px] uppercase text-[#9CA3AF] mb-1">
               To Date (ISO)
             </label>
             <input
               type="date"
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
-              className="w-full rounded bg-[#0B0E14] border border-[#263147] px-2.5 py-2 text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
+              className="w-full rounded-sm bg-[#0B0E14] border border-[#8A6D3B]/45 px-2.5 py-2 text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
             />
           </div>
         </div>
 
         <div>
-          <label className="block font-mono text-[10px] uppercase text-[#8E9BAE] mb-1">
+          <label className="block font-mono text-[10px] uppercase text-[#9CA3AF] mb-1">
             Full-Text Search (Event UUID, Reason, Before/After JSON State)
           </label>
           <input
@@ -786,7 +793,7 @@ export function AdminAuditClient({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search across event_id, disclosure reason, before_state_json, after_state_json…"
-            className="w-full rounded bg-[#0B0E14] border border-[#263147] px-3 py-2 font-mono text-xs text-[#F3EFE6] placeholder-[#4B5563] focus:border-[#C5A059] focus:outline-none"
+            className="w-full rounded-sm bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 font-mono text-xs text-[#F3EFE6] placeholder-[#9CA3AF]/60 focus:border-[#C5A059] focus:outline-none"
           />
         </div>
       </form>
@@ -794,19 +801,19 @@ export function AdminAuditClient({
       {/* 3. Master-Detail Grid: Event Table (Left) + Side-by-Side Diff & Replay Studio (Right) */}
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
         {/* Left Column: Filterable Event Log Table (5 cols on xl) */}
-        <div className="xl:col-span-5 bg-[#111622] border border-[#263147] rounded-lg overflow-hidden">
-          <div className="p-4 border-b border-[#263147] bg-[#0D111A] flex items-center justify-between">
+        <div className="xl:col-span-5 bg-[#111726] border border-[#8A6D3B]/45 rounded-md overflow-hidden shadow-md">
+          <div className="p-4 border-b border-[#8A6D3B]/35 bg-[#0B0E14] flex items-center justify-between">
             <span className="font-mono text-xs font-bold uppercase text-[#F3EFE6]">
               Hash-Chained Event Log ({entries.length})
             </span>
-            <span className="font-mono text-[11px] text-[#8E9BAE]">
+            <span className="font-mono text-[11px] text-[#9CA3AF]">
               Click any row to inspect &amp; replay
             </span>
           </div>
 
-          <div className="divide-y divide-[#1E2738] max-h-[820px] overflow-y-auto">
+          <div className="divide-y divide-[#8A6D3B]/25 max-h-[820px] overflow-y-auto">
             {entries.length === 0 ? (
-              <div className="p-8 text-center font-mono text-xs text-[#8E9BAE]">
+              <div className="p-8 text-center font-mono text-xs text-[#9CA3AF]">
                 No audit ledger events match the current filter criteria.
               </div>
             ) : (
@@ -819,8 +826,8 @@ export function AdminAuditClient({
                     onClick={() => setSelectedEventId(entry.eventId)}
                     className={`w-full text-left p-4 transition-colors cursor-pointer block ${
                       isSelected
-                        ? "bg-[#1A2438] border-l-4 border-l-[#C5A059]"
-                        : "hover:bg-[#161E2E]/60"
+                        ? "bg-[#0B0E14] border-l-4 border-l-[#C5A059]"
+                        : "hover:bg-[#0B0E14]/50"
                     }`}
                   >
                     <div className="flex items-center justify-between gap-2">
@@ -828,34 +835,34 @@ export function AdminAuditClient({
                         <span className="font-mono text-xs font-bold text-[#F3EFE6]">
                           #{entry.id}
                         </span>
-                        <span className="px-2 py-0.5 rounded bg-[#0B0E14] border border-[#2E3C56] font-mono text-[11px] text-[#C5A059] font-semibold">
+                        <span className="px-2 py-0.5 rounded-sm bg-[#0B0E14] border border-[#8A6D3B]/45 font-mono text-[11px] text-[#C5A059] font-semibold">
                           {entry.actionType}
                         </span>
                       </div>
-                      <span className="font-mono text-[11px] text-[#8E9BAE]">
+                      <span className="font-mono text-[11px] text-[#9CA3AF]">
                         {entry.timestamp.replace("T", " ").slice(0, 19)} UTC
                       </span>
                     </div>
 
                     <div className="mt-2 flex flex-wrap items-center justify-between gap-2 font-mono text-[11px]">
-                      <span className="text-[#D6D1C7]">
+                      <span className="text-[#E5E0D8]">
                         Target:{" "}
                         <strong className="text-[#F3EFE6]">
                           {entry.targetType}:{entry.targetId}
                         </strong>
                       </span>
-                      <span className="text-[#8E9BAE]">
+                      <span className="text-[#9CA3AF]">
                         {entry.actorEmail} ({entry.authMethod})
                       </span>
                     </div>
 
                     {entry.reason && (
-                      <p className="mt-1.5 text-xs text-[#9CA3AF] line-clamp-2">
+                      <p className="mt-1.5 font-serif text-xs text-[#E5E0D8]/80 line-clamp-2">
                         {entry.reason}
                       </p>
                     )}
 
-                    <div className="mt-2 pt-2 border-t border-[#1E2738]/80 flex items-center justify-between font-mono text-[10px] text-[#8E9BAE]">
+                    <div className="mt-2 pt-2 border-t border-[#8A6D3B]/20 flex items-center justify-between font-mono text-[10px] text-[#9CA3AF]">
                       <span>
                         prev:{" "}
                         {entry.prevHash === "GENESIS"
@@ -874,25 +881,25 @@ export function AdminAuditClient({
         </div>
 
         {/* Right Column: Side-by-Side Diff & Replay Drawer (7 cols on xl) */}
-        <div className="xl:col-span-7 bg-[#111622] border border-[#263147] rounded-lg overflow-hidden">
+        <div className="xl:col-span-7 bg-[#111726] border border-[#8A6D3B]/45 rounded-md overflow-hidden shadow-md">
           {!selectedEntry ? (
-            <div className="p-12 text-center font-mono text-xs text-[#8E9BAE]">
+            <div className="p-12 text-center font-mono text-xs text-[#9CA3AF]">
               Select an audit ledger event on the left to inspect its SHA-256
               chain link, before/after state diff, and replay options.
             </div>
           ) : (
             <div className="p-6 space-y-6">
               {/* Inspector Header & Replay Action Buttons */}
-              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 pb-4 border-b border-[#263147]">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 pb-4 border-b border-[#8A6D3B]/35">
                 <div className="space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-xs uppercase text-[#C5A059] font-bold">
                       EVENT #{selectedEntry.id} INSPECTOR
                     </span>
-                    <span className="px-2 py-0.5 rounded bg-[#182032] border border-[#2E3C56] font-mono text-xs text-[#F3EFE6] font-semibold">
+                    <span className="px-2 py-0.5 rounded-sm bg-[#0B0E14] border border-[#8A6D3B]/45 font-mono text-xs text-[#F3EFE6] font-semibold">
                       {selectedEntry.actionType}
                     </span>
-                    <span className="font-mono text-xs text-[#8E9BAE]">
+                    <span className="font-mono text-xs text-[#9CA3AF]">
                       {selectedEntry.timestamp}
                     </span>
                   </div>
@@ -934,7 +941,7 @@ export function AdminAuditClient({
                       onClick={() =>
                         openReplayModal(selectedEntry, "revert_to_before")
                       }
-                      className="px-3.5 py-2 rounded bg-amber-950/60 hover:bg-amber-900/70 border border-amber-500/50 text-amber-200 font-mono text-xs font-semibold transition-colors cursor-pointer"
+                      className="px-3.5 py-2 rounded-sm bg-amber-950/60 hover:bg-amber-900/70 border border-amber-500/50 text-amber-200 font-mono text-xs font-semibold transition-colors cursor-pointer"
                     >
                       ↺ Revert to Before State
                     </button>
@@ -943,7 +950,7 @@ export function AdminAuditClient({
                       onClick={() =>
                         openReplayModal(selectedEntry, "reapply_after")
                       }
-                      className="px-3.5 py-2 rounded bg-[#161E2E] hover:bg-[#1E293B] border border-[#2E3C56] hover:border-[#C5A059] text-[#F3EFE6] font-mono text-xs font-semibold transition-colors cursor-pointer"
+                      className="px-3.5 py-2 rounded-sm bg-[#0B0E14] hover:bg-[#111726] border border-[#8A6D3B]/45 hover:border-[#C5A059] text-[#F3EFE6] font-mono text-xs font-semibold transition-colors cursor-pointer"
                     >
                       ↻ Re-Apply After State
                     </button>
@@ -952,32 +959,32 @@ export function AdminAuditClient({
               </div>
 
               {/* Disclosure Reason Box */}
-              <div className="bg-[#0B0E14] border border-[#263147] rounded-md p-4">
+              <div className="bg-[#0B0E14] border border-[#8A6D3B]/35 rounded-sm p-4">
                 <div className="font-mono text-[10px] uppercase tracking-wider text-[#C5A059] font-semibold">
                   Editorial / Governance Disclosure Justification (reason)
                 </div>
-                <p className="text-sm text-[#F3EFE6] mt-1">
+                <p className="font-serif text-sm text-[#F3EFE6] mt-1">
                   {selectedEntry.reason ||
                     "No explicit reason recorded for this event."}
                 </p>
               </div>
 
               {/* Cryptographic Chain Provenance Box */}
-              <div className="bg-[#0B0E14] border border-[#263147] rounded-md p-4 space-y-2 font-mono text-xs">
+              <div className="bg-[#0B0E14] border border-[#8A6D3B]/35 rounded-sm p-4 space-y-2 font-mono text-xs">
                 <div className="text-[10px] uppercase tracking-wider text-emerald-300 font-semibold">
                   Cryptographic SHA-256 Chain Link
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <div className="text-[10px] text-[#8E9BAE]">
+                    <div className="text-[10px] text-[#9CA3AF]">
                       Previous Entry Hash (prev_hash)
                     </div>
-                    <div className="text-[#D6D1C7] break-all mt-0.5">
+                    <div className="text-[#E5E0D8] break-all mt-0.5">
                       {selectedEntry.prevHash}
                     </div>
                   </div>
                   <div>
-                    <div className="text-[10px] text-[#8E9BAE]">
+                    <div className="text-[10px] text-[#9CA3AF]">
                       Entry SHA-256 Digest (entry_hash)
                     </div>
                     <div className="text-emerald-300 break-all mt-0.5">
@@ -998,28 +1005,28 @@ export function AdminAuditClient({
                       type="checkbox"
                       checked={showUnchangedFields}
                       onChange={(e) => setShowUnchangedFields(e.target.checked)}
-                      className="rounded border-[#263147] bg-[#0B0E14]"
+                      className="rounded-sm border-[#8A6D3B]/45 bg-[#0B0E14] accent-[#C5A059]"
                     />
                     <span>Show Unchanged Fields</span>
                   </label>
                 </div>
 
                 {visibleFieldDiffs.length === 0 ? (
-                  <div className="p-4 rounded bg-[#0B0E14] border border-[#263147] font-mono text-xs text-[#8E9BAE]">
+                  <div className="p-4 rounded-sm bg-[#0B0E14] border border-[#8A6D3B]/35 font-mono text-xs text-[#9CA3AF]">
                     No field differences to display.
                   </div>
                 ) : (
-                  <div className="overflow-x-auto border border-[#263147] rounded-md">
+                  <div className="overflow-x-auto border border-[#8A6D3B]/35 rounded-sm">
                     <table className="w-full text-left border-collapse font-mono text-xs">
                       <thead>
-                        <tr className="bg-[#0D111A] border-b border-[#263147] text-[10px] uppercase text-[#8E9BAE]">
+                        <tr className="bg-[#0B0E14] border-b border-[#8A6D3B]/35 text-[10px] uppercase text-[#9CA3AF]">
                           <th className="py-2.5 px-3">Field</th>
                           <th className="py-2.5 px-3">Delta</th>
                           <th className="py-2.5 px-3">Before State</th>
                           <th className="py-2.5 px-3">After State</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-[#1E2738]">
+                      <tbody className="divide-y divide-[#8A6D3B]/20">
                         {visibleFieldDiffs.map((row) => (
                           <tr
                             key={row.key}
@@ -1038,14 +1045,14 @@ export function AdminAuditClient({
                             </td>
                             <td className="py-2.5 px-3 align-top whitespace-nowrap">
                               <span
-                                className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-bold ${
+                                className={`px-1.5 py-0.5 rounded-sm text-[10px] uppercase font-bold ${
                                   row.status === "added"
                                     ? "bg-emerald-950/80 text-emerald-300 border border-emerald-500/40"
                                     : row.status === "removed"
                                     ? "bg-red-950/80 text-red-300 border border-red-500/40"
                                     : row.status === "modified"
                                     ? "bg-amber-950/80 text-amber-300 border border-amber-500/40"
-                                    : "bg-[#161E2E] text-[#8E9BAE]"
+                                    : "bg-[#111726] text-[#9CA3AF]"
                                 }`}
                               >
                                 {row.status}
@@ -1067,22 +1074,22 @@ export function AdminAuditClient({
 
               {/* Side-by-Side Raw JSON Snapshots */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-[#0B0E14] border border-[#263147] rounded-md p-3">
+                <div className="bg-[#0B0E14] border border-[#8A6D3B]/35 rounded-sm p-3">
                   <div className="font-mono text-[10px] uppercase text-red-300 font-semibold mb-2">
                     before_state_json (Prior Snapshot)
                   </div>
-                  <pre className="font-mono text-[11px] text-[#D6D1C7] overflow-x-auto max-h-64 whitespace-pre-wrap break-all">
+                  <pre className="font-mono text-[11px] text-[#E5E0D8] overflow-x-auto max-h-64 whitespace-pre-wrap break-all">
                     {selectedEntry.beforeState
                       ? JSON.stringify(selectedEntry.beforeState, null, 2)
                       : "null (Created new entity — no prior state)"}
                   </pre>
                 </div>
 
-                <div className="bg-[#0B0E14] border border-[#263147] rounded-md p-3">
+                <div className="bg-[#0B0E14] border border-[#8A6D3B]/35 rounded-sm p-3">
                   <div className="font-mono text-[10px] uppercase text-emerald-300 font-semibold mb-2">
                     after_state_json (Post-Mutation Snapshot)
                   </div>
-                  <pre className="font-mono text-[11px] text-[#D6D1C7] overflow-x-auto max-h-64 whitespace-pre-wrap break-all">
+                  <pre className="font-mono text-[11px] text-[#E5E0D8] overflow-x-auto max-h-64 whitespace-pre-wrap break-all">
                     {selectedEntry.afterState
                       ? JSON.stringify(selectedEntry.afterState, null, 2)
                       : "null (Entity deleted)"}
@@ -1091,8 +1098,8 @@ export function AdminAuditClient({
               </div>
 
               {/* Deterministic Replay Command Payload */}
-              <div className="bg-[#0B0E14] border border-[#263147] rounded-md p-3">
-                <div className="font-mono text-[10px] uppercase text-[#8E9BAE] font-semibold mb-1">
+              <div className="bg-[#0B0E14] border border-[#8A6D3B]/35 rounded-sm p-3">
+                <div className="font-mono text-[10px] uppercase text-[#9CA3AF] font-semibold mb-1">
                   Deterministic Replay Command (replay_command_json)
                 </div>
                 <pre className="font-mono text-[11px] text-[#9CA3AF] overflow-x-auto whitespace-pre-wrap">
@@ -1109,7 +1116,7 @@ export function AdminAuditClient({
         <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
           <form
             onSubmit={handleConfirmReplay}
-            className="bg-[#111622] border-2 border-[#C5A059] rounded-lg max-w-lg w-full p-6 space-y-4 shadow-2xl"
+            className="bg-[#111726] border-2 border-[#C5A059] rounded-md max-w-lg w-full p-6 space-y-4 shadow-2xl"
           >
             <div className="flex items-center justify-between">
               <span className="font-mono text-xs uppercase tracking-wider text-[#C5A059] font-bold">
@@ -1118,36 +1125,36 @@ export function AdminAuditClient({
               <button
                 type="button"
                 onClick={() => setReplayModal(null)}
-                className="font-mono text-xs text-[#8E9BAE] hover:text-[#F3EFE6] cursor-pointer"
+                className="font-mono text-xs text-[#9CA3AF] hover:text-[#F3EFE6] cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
-            <h3 className="font-cinzel text-xl font-bold text-[#F3EFE6]">
+            <h3 className="font-display text-xl font-bold text-[#F3EFE6]">
               {replayModal.mode === "revert_to_before"
                 ? `Revert Event #${replayModal.entry.id} to Prior State`
                 : `Re-Apply Event #${replayModal.entry.id} After State`}
             </h3>
 
-            <p className="text-xs text-[#D6D1C7]">
+            <p className="font-serif text-xs text-[#E5E0D8]">
               This operation will restore{" "}
               <strong className="font-mono text-[#F3EFE6]">
                 {replayModal.entry.targetType}:{replayModal.entry.targetId}
               </strong>{" "}
               in Cloudflare D1 to its{" "}
-              <code className="text-[#C5A059]">
+              <code className="text-[#C5A059] font-mono">
                 {replayModal.mode === "revert_to_before"
                   ? "before_state_json"
                   : "after_state_json"}
               </code>{" "}
               snapshot and append a new cryptographically hash-chained{" "}
-              <code className="text-emerald-300">audit.replay</code> record to{" "}
-              <code>audit_ledger</code>.
+              <code className="text-emerald-300 font-mono">audit.replay</code> record to{" "}
+              <code className="font-mono">audit_ledger</code>.
             </p>
 
             <div>
-              <label className="block font-mono text-xs uppercase text-[#8E9BAE] mb-1.5">
+              <label className="block font-mono text-xs uppercase text-[#9CA3AF] mb-1.5">
                 Mandatory Disclosure Reason for Audit Ledger
               </label>
               <textarea
@@ -1155,7 +1162,7 @@ export function AdminAuditClient({
                 required
                 value={replayReason}
                 onChange={(e) => setReplayReason(e.target.value)}
-                className="w-full rounded bg-[#0B0E14] border border-[#263147] p-3 font-mono text-xs text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
+                className="w-full rounded-sm bg-[#0B0E14] border border-[#8A6D3B]/45 p-3 font-mono text-xs text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
               />
             </div>
 
@@ -1163,14 +1170,14 @@ export function AdminAuditClient({
               <button
                 type="button"
                 onClick={() => setReplayModal(null)}
-                className="px-4 py-2 rounded border border-[#263147] font-mono text-xs text-[#9CA3AF] hover:text-[#F3EFE6] cursor-pointer"
+                className="px-4 py-2 rounded-sm border border-[#8A6D3B]/45 font-mono text-xs text-[#9CA3AF] hover:text-[#F3EFE6] cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={executingReplay}
-                className="px-4 py-2 rounded bg-[#C5A059] hover:bg-[#d4b26a] text-[#0B0E14] font-mono text-xs font-bold uppercase cursor-pointer disabled:opacity-50"
+                className="px-4 py-2 rounded-sm bg-[#C5A059] hover:bg-[#d4b26a] text-[#0B0E14] font-mono text-xs font-bold uppercase cursor-pointer disabled:opacity-50"
               >
                 {executingReplay
                   ? "Executing Replay…"
@@ -1184,13 +1191,13 @@ export function AdminAuditClient({
       {/* Inline Public Disclosure Report Preview Modal */}
       {disclosurePreview && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
-          <div className="bg-[#111622] border border-[#C5A059] rounded-lg max-w-4xl w-full max-h-[88vh] flex flex-col overflow-hidden shadow-2xl">
-            <div className="p-4 border-b border-[#263147] flex flex-wrap items-center justify-between gap-2 bg-[#0D111A]">
+          <div className="bg-[#111726] border border-[#C5A059] rounded-md max-w-4xl w-full max-h-[88vh] flex flex-col overflow-hidden shadow-2xl">
+            <div className="p-4 border-b border-[#8A6D3B]/35 flex flex-wrap items-center justify-between gap-2 bg-[#0B0E14]">
               <div>
                 <div className="font-mono text-xs uppercase text-[#C5A059] font-bold">
                   SIGNED PUBLIC DISCLOSURE REPORT PREVIEW
                 </div>
-                <div className="font-mono text-[11px] text-[#8E9BAE]">
+                <div className="font-mono text-[11px] text-[#9CA3AF]">
                   Bundle Signature SHA-256:{" "}
                   <span className="text-emerald-300">
                     {disclosurePreview.bundleSignatureHash}
@@ -1207,14 +1214,14 @@ export function AdminAuditClient({
                     );
                     setCopiedMarkdown(true);
                   }}
-                  className="px-3 py-1.5 rounded bg-[#C5A059] text-[#0B0E14] font-mono text-xs font-bold uppercase cursor-pointer"
+                  className="px-3 py-1.5 rounded-sm bg-[#C5A059] text-[#0B0E14] font-mono text-xs font-bold uppercase cursor-pointer"
                 >
                   {copiedMarkdown ? "Copied Markdown!" : "Copy Markdown"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setDisclosurePreview(null)}
-                  className="px-3 py-1.5 rounded border border-[#263147] font-mono text-xs text-[#9CA3AF] hover:text-[#F3EFE6] cursor-pointer"
+                  className="px-3 py-1.5 rounded-sm border border-[#8A6D3B]/45 font-mono text-xs text-[#9CA3AF] hover:text-[#F3EFE6] cursor-pointer"
                 >
                   Close ✕
                 </button>
@@ -1222,7 +1229,7 @@ export function AdminAuditClient({
             </div>
 
             <div className="p-5 overflow-y-auto flex-1 bg-[#0B0E14]">
-              <pre className="font-mono text-xs text-[#D6D1C7] whitespace-pre-wrap">
+              <pre className="font-mono text-xs text-[#E5E0D8] whitespace-pre-wrap">
                 {disclosurePreview.markdownReport}
               </pre>
             </div>

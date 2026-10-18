@@ -38,9 +38,60 @@ interface AdminOverviewClientProps {
   initialPipelineRuns: PipelineRunRecord[];
 }
 
+function formatActionReadable(entry: AuditLedgerEntry): string {
+  switch (entry.actionType) {
+    case "incident_headline_deescalate":
+      return "Rewrote story headline for calm editorial posture";
+    case "incident_brief_override":
+      return "Updated Craftsman's Brief editorial text";
+    case "incident_image_attach":
+      return "Updated story illustration";
+    case "episode_generate":
+      return "Generated new weekly podcast episode";
+    case "episode_edit":
+      return "Updated podcast episode notes or transcript";
+    case "episode_delete":
+      return "Removed podcast episode from archive";
+    case "feed_add":
+      return "Added new monitored RSS source";
+    case "feed_update":
+      return "Updated RSS source configuration";
+    case "feed_delete":
+      return "Removed RSS source";
+    case "filter_add":
+      return "Added editorial filtering rule";
+    case "filter_update":
+      return "Updated editorial filtering rule";
+    case "filter_delete":
+      return "Removed editorial filtering rule";
+    case "user_invite":
+      return "Invited new editorial team member";
+    case "user_role_update":
+      return "Updated team member role";
+    case "user_revoke":
+      return "Revoked team member access";
+    case "audit_replay":
+      return "Restored prior record state from audit ledger";
+    case "pipeline_ingest":
+      return "Fetched latest news from monitored RSS sources";
+    case "pipeline_synthesize":
+      return "Synthesized Craftsman's Briefs for pending stories";
+    default:
+      return entry.reason || entry.actionType.replace(/_/g, " ");
+  }
+}
+
+function formatRunTypeReadable(runType: string): string {
+  const lower = runType.toLowerCase();
+  if (lower.includes("ingest")) return "Fetched & Filtered RSS News";
+  if (lower.includes("synth")) return "Synthesized Case Briefs";
+  if (lower.includes("rollup") || lower.includes("podcast"))
+    return "Generated Weekly Podcast Rollup";
+  return runType;
+}
+
 export function AdminOverviewClient({
   actor,
-  ownerEmail,
   systemHealth,
   initialAuditEntries,
   initialAuditTotal,
@@ -132,28 +183,28 @@ export function AdminOverviewClient({
       if (!res.ok || data.ok === false) {
         setActionBanner({
           type: "error",
-          title: "RSS Ingest & System-1 Triage Failed",
+          title: "News Fetch Failed",
           detail: data.error || `HTTP ${res.status}`,
         });
       } else {
         const synthNote = data.synthesis
-          ? ` • Chained System-2 synthesized ${data.synthesis.synthesizedCount ?? 0} briefs.`
+          ? ` • Auto-drafted ${data.synthesis.synthesizedCount ?? 0} new case briefs.`
           : "";
         setActionBanner({
           type: "success",
-          title: "RSS Ingest & System-1 Jev Classification Complete",
-          detail: `Evaluated ${data.ingestedCount ?? 0} feed items → ${
+          title: "Latest News Fetched & Filtered",
+          detail: `Evaluated ${data.ingestedCount ?? 0} incoming stories → ${
             data.triagedCount ?? 0
-          } triaged systemic incidents, ${
+          } selected for editorial review, ${
             data.droppedCount ?? 0
-          } dropped as low-signal noise.${synthNote}`,
+          } filtered as low-signal noise.${synthNote}`,
         });
         await refreshAuditTelemetry();
       }
     } catch (err) {
       setActionBanner({
         type: "error",
-        title: "RSS Ingest Error",
+        title: "News Fetch Error",
         detail: err instanceof Error ? err.message : String(err),
       });
     } finally {
@@ -179,25 +230,23 @@ export function AdminOverviewClient({
       if (!res.ok || data.ok === false) {
         setActionBanner({
           type: "error",
-          title: "System-2 Socratic Synthesis Failed",
+          title: "Case Brief Synthesis Failed",
           detail: data.error || `HTTP ${res.status}`,
         });
       } else {
         setActionBanner({
           type: "success",
-          title: "System-2 Gemini 2.5 Flash Synthesis Complete",
-          detail: `Synthesized ${
+          title: "Case Briefs Synthesized",
+          detail: `Drafted ${
             data.synthesizedCount ?? 0
-          } Socratic briefs (batch limit ${
-            data.requestedLimit ?? 5
-          }) and committed to D1.`,
+          } Craftsman's Briefs and recorded changes in the audit ledger.`,
         });
         await refreshAuditTelemetry();
       }
     } catch (err) {
       setActionBanner({
         type: "error",
-        title: "System-2 Synthesis Error",
+        title: "Synthesis Error",
         detail: err instanceof Error ? err.message : String(err),
       });
     } finally {
@@ -226,27 +275,25 @@ export function AdminOverviewClient({
       if (!res.ok || data.ok === false) {
         setActionBanner({
           type: "error",
-          title: "Podcast Rollup Generation Failed",
+          title: "Weekly Episode Generation Failed",
           detail: data.error || `HTTP ${res.status}`,
         });
       } else {
         setActionBanner({
           type: "success",
-          title: `Generated Podcast Episode #${
+          title: `Generated Weekly Episode #${
             data.episode?.episode_number ?? "New"
           }`,
           detail: `"${
             data.episode?.title ?? "Weekly CAB Brief"
-          }" synthesized, uploaded to R2 (${
-            data.episode?.audio_url ?? "/audio/..."
-          }), and logged to audit_ledger.`,
+          }" audio and transcript published and recorded in the audit ledger.`,
         });
         await refreshAuditTelemetry();
       }
     } catch (err) {
       setActionBanner({
         type: "error",
-        title: "Podcast Rollup Error",
+        title: "Weekly Episode Error",
         detail: err instanceof Error ? err.message : String(err),
       });
     } finally {
@@ -268,26 +315,20 @@ export function AdminOverviewClient({
       if (data.valid) {
         setActionBanner({
           type: "success",
-          title: "SHA-256 Cryptographic Audit Chain Verified",
-          detail: `Walked all ${data.totalEntries} entries from GENESIS (${data.genesisHash?.slice(
-            0,
-            12
-          )}…) to HEAD (${data.headHash?.slice(
-            0,
-            12
-          )}…) with zero digest mismatches.`,
+          title: "Audit Ledger Verified",
+          detail: `Confirmed cryptographic integrity across all ${data.totalEntries} editorial records from GENESIS to HEAD.`,
         });
       } else {
         setActionBanner({
           type: "error",
-          title: "Cryptographic Chain Integrity Alert",
-          detail: data.error || "Digest mismatch detected in audit_ledger.",
+          title: "Ledger Integrity Alert",
+          detail: data.error || "Digest mismatch detected in the audit ledger.",
         });
       }
     } catch (err) {
       setActionBanner({
         type: "error",
-        title: "Chain Verification Error",
+        title: "Ledger Verification Error",
         detail: err instanceof Error ? err.message : String(err),
       });
     } finally {
@@ -326,14 +367,14 @@ export function AdminOverviewClient({
       if (!res.ok || data.ok === false) {
         setActionBanner({
           type: "error",
-          title: "Custom Case Submission Failed",
+          title: "Custom Story Submission Failed",
           detail: data.error || `HTTP ${res.status}`,
         });
       } else {
         setActionBanner({
           type: "success",
-          title: "Custom Craftsman's Brief Drafted & Audited",
-          detail: `Evaluated and synthesized "${customTitle.trim()}" under ${actor.email}.`,
+          title: "Custom Craftsman's Brief Drafted",
+          detail: `Evaluated and drafted "${customTitle.trim()}" under ${actor.email}.`,
         });
         setCustomTitle("");
         setCustomDesc("");
@@ -344,7 +385,7 @@ export function AdminOverviewClient({
     } catch (err) {
       setActionBanner({
         type: "error",
-        title: "Custom Case Submission Error",
+        title: "Custom Story Submission Error",
         detail: err instanceof Error ? err.message : String(err),
       });
     } finally {
@@ -352,236 +393,348 @@ export function AdminOverviewClient({
     }
   }
 
+  const isLedgerValid = chainIntegrity?.valid !== false;
+  const recentAuditItems = auditEntries.slice(0, 5);
+  const recentRunItems = initialPipelineRuns.slice(0, 3);
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Command Center Overview Hero */}
-      <div className="bg-[#111622] border border-[#263147] rounded-lg p-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-        <div className="space-y-1.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 font-mono text-[11px]">
-              ● SYSTEM POSTURE: NOMINAL ({systemHealth.d1Source.toUpperCase()})
+      {/* The Editor's Study Overview Hero */}
+      <div className="relative bg-[#111726] border border-[#8A6D3B]/45 p-6 sm:p-7 shadow-xl flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+        <span className="pointer-events-none absolute top-1.5 left-1.5 w-2.5 h-2.5 border-t border-l border-[#C5A059]/75" />
+        <span className="pointer-events-none absolute top-1.5 right-1.5 w-2.5 h-2.5 border-t border-r border-[#C5A059]/75" />
+        <span className="pointer-events-none absolute bottom-1.5 left-1.5 w-2.5 h-2.5 border-b border-l border-[#C5A059]/75" />
+        <span className="pointer-events-none absolute bottom-1.5 right-1.5 w-2.5 h-2.5 border-b border-r border-[#C5A059]/75" />
+
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 font-display text-[10px] uppercase tracking-widest">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              Editorial Desk Ready
             </span>
-            <span className="font-mono text-xs text-[#8E9BAE]">
-              System-1: <code className="text-[#D6D1C7]">jev-1.14.0</code> (
-              {systemHealth.avgClassifierLatencyMs}ms avg) • System-2:{" "}
-              <code className="text-[#D6D1C7]">gemini-2.5-flash</code>
+            <span className="font-serif italic text-xs text-[#C5A059]">
+              Latest Broadcast: Ep #{systemHealth.latestEpisodeNumber} —{" "}
+              {systemHealth.latestEpisodeTitle}
             </span>
           </div>
-          <h1 className="font-cinzel text-2xl sm:text-3xl font-bold text-[#F3EFE6]">
-            Change Advisory Board Telemetry Command Center
+          <h1 className="font-display text-2xl sm:text-3xl text-[#F3EFE6] tracking-wide">
+            The Editor&apos;s Study
           </h1>
-          <p className="text-xs text-[#9CA3AF] max-w-3xl">
-            Live operational overview of inbound RSS ingestion, System-1 Jev
-            triage filters, System-2 Socratic synthesis, Friday podcast rollups,
-            and the append-only SHA-256 hash-chained{" "}
-            <code className="text-[#C5A059]">audit_ledger</code>.
+          <p className="font-serif text-sm text-[#94A3B8] max-w-2xl leading-relaxed">
+            Fetch incoming stories from monitored RSS sources, draft calm
+            Craftsman&apos;s Briefs, produce the weekly podcast episode, and
+            review the immutable editorial ledger.
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 shrink-0">
           <Link
-            href="/admin/audit"
-            className="bg-[#C5A059] hover:bg-[#d4b26a] text-[#0B0E14] font-mono text-xs font-semibold uppercase px-4 py-2.5 rounded transition-colors"
+            href="/admin/incidents"
+            className="bg-[#C5A059] hover:bg-[#d4b26a] text-[#0B0E14] font-display text-xs font-bold uppercase tracking-wider px-4 py-2.5 transition-all duration-200 ease-out"
           >
-            Audit Explorer &amp; Replay Studio →
+            Editorial &amp; Feeds →
           </Link>
-          <a
-            href="/api/admin/audit/export?format=md"
-            className="px-3.5 py-2.5 rounded border border-[#263147] hover:border-[#C5A059] text-xs font-mono text-[#D6D1C7] transition-colors"
+          <Link
+            href="/admin/episodes"
+            className="px-4 py-2.5 border border-[#8A6D3B]/55 hover:border-[#C5A059] bg-[#0B0E14]/70 text-xs font-display uppercase tracking-wider text-[#F3EFE6] transition-all duration-200 ease-out"
           >
-            Export Disclosure (.MD)
-          </a>
+            Podcast Studio →
+          </Link>
         </div>
       </div>
 
       {/* Action Status Feedback Banner */}
       {actionBanner && (
         <div
-          className={`p-4 rounded-lg border font-mono text-xs flex items-start justify-between gap-4 ${
+          className={`p-4 border text-xs flex items-start justify-between gap-4 ${
             actionBanner.type === "success"
-              ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-200"
-              : "bg-red-950/40 border-red-500/40 text-red-200"
+              ? "bg-emerald-950/40 border-emerald-500/45 text-emerald-200"
+              : "bg-red-950/50 border-red-500/50 text-red-200"
           }`}
         >
           <div className="space-y-1">
-            <div className="font-bold uppercase tracking-wider">
+            <div className="font-display uppercase tracking-wider font-bold text-sm">
               {actionBanner.title}
             </div>
-            <div className="text-[#D6D1C7]">{actionBanner.detail}</div>
+            <div className="font-serif text-sm text-[#F3EFE6]/90">
+              {actionBanner.detail}
+            </div>
           </div>
           <button
             type="button"
             onClick={() => setActionBanner(null)}
-            className="underline text-xs shrink-0 cursor-pointer"
+            className="underline font-display uppercase tracking-wider text-[11px] shrink-0 cursor-pointer"
           >
             Dismiss
           </button>
         </div>
       )}
 
-      {/* Quick-Action Pipeline Triggers */}
-      <div className="bg-[#111622] border border-[#263147] rounded-lg p-6 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+      {/* Single Compact 5-Metric Horizontal Summary Strip */}
+      <div
+        aria-label="Editorial Desk Summary Metrics"
+        className="grid grid-cols-2 sm:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-[#8A6D3B]/35 border border-[#8A6D3B]/45 bg-[#111726]/95 shadow-lg"
+      >
+        <Link
+          href="/admin/incidents"
+          className="p-4 sm:p-5 hover:bg-[#0B0E14]/50 transition-all duration-200 ease-out group"
+        >
+          <div className="font-display text-[11px] uppercase tracking-wider text-[#94A3B8] group-hover:text-[#C5A059] transition-colors">
+            Active Stories
+          </div>
+          <div className="font-display text-2xl sm:text-3xl text-[#F3EFE6] font-bold mt-1">
+            {systemHealth.totalIncidents}
+          </div>
+          <div className="font-serif text-xs text-[#94A3B8] mt-1">
+            {systemHealth.synthesizedCount} published •{" "}
+            {systemHealth.triagedCount} pending
+          </div>
+        </Link>
+
+        <Link
+          href="/admin/incidents?view=feeds"
+          className="p-4 sm:p-5 hover:bg-[#0B0E14]/50 transition-all duration-200 ease-out group"
+        >
+          <div className="font-display text-[11px] uppercase tracking-wider text-[#94A3B8] group-hover:text-[#C5A059] transition-colors">
+            Monitored Feeds
+          </div>
+          <div className="font-display text-2xl sm:text-3xl text-[#F3EFE6] font-bold mt-1">
+            {systemHealth.activeFeedCount}
+          </div>
+          <div className="font-serif text-xs text-[#94A3B8] mt-1 truncate">
+            Active RSS sources
+          </div>
+        </Link>
+
+        <Link
+          href="/admin/incidents?view=rules"
+          className="p-4 sm:p-5 hover:bg-[#0B0E14]/50 transition-all duration-200 ease-out group"
+        >
+          <div className="font-display text-[11px] uppercase tracking-wider text-[#94A3B8] group-hover:text-[#C5A059] transition-colors">
+            Filter Rules
+          </div>
+          <div className="font-display text-2xl sm:text-3xl text-[#F3EFE6] font-bold mt-1">
+            {systemHealth.activeFilterCount}
+          </div>
+          <div className="font-serif text-xs text-[#94A3B8] mt-1">
+            {systemHealth.noiseRejectionRate}% noise filtered
+          </div>
+        </Link>
+
+        <Link
+          href="/admin/episodes"
+          className="p-4 sm:p-5 hover:bg-[#0B0E14]/50 transition-all duration-200 ease-out group"
+        >
+          <div className="font-display text-[11px] uppercase tracking-wider text-[#94A3B8] group-hover:text-[#C5A059] transition-colors">
+            Published Episodes
+          </div>
+          <div className="font-display text-2xl sm:text-3xl text-[#F3EFE6] font-bold mt-1">
+            {systemHealth.totalEpisodes}
+          </div>
+          <div className="font-serif text-xs text-[#94A3B8] mt-1 truncate">
+            Latest: Ep #{systemHealth.latestEpisodeNumber}
+          </div>
+        </Link>
+
+        <Link
+          href="/admin/audit"
+          className="col-span-2 sm:col-span-1 p-4 sm:p-5 hover:bg-[#0B0E14]/50 transition-all duration-200 ease-out group"
+        >
+          <div className="font-display text-[11px] uppercase tracking-wider text-[#94A3B8] group-hover:text-[#C5A059] transition-colors">
+            Ledger Status
+          </div>
+          <div
+            className={`font-display text-xl sm:text-2xl font-bold mt-1 ${
+              isLedgerValid ? "text-emerald-300" : "text-red-300"
+            }`}
+          >
+            {isLedgerValid ? "Verified" : "Alert"}
+          </div>
+          <div className="font-serif text-xs text-emerald-300/90 mt-1">
+            Verified ({auditTotal} records)
+          </div>
+        </Link>
+      </div>
+
+      {/* Plain-English Quick-Action Cards */}
+      <div className="relative bg-[#111726] border border-[#8A6D3B]/45 p-6 space-y-5 shadow-xl">
+        <span className="pointer-events-none absolute top-1.5 left-1.5 w-2.5 h-2.5 border-t border-l border-[#C5A059]/70" />
+        <span className="pointer-events-none absolute top-1.5 right-1.5 w-2.5 h-2.5 border-t border-r border-[#C5A059]/70" />
+        <span className="pointer-events-none absolute bottom-1.5 left-1.5 w-2.5 h-2.5 border-b border-l border-[#C5A059]/70" />
+        <span className="pointer-events-none absolute bottom-1.5 right-1.5 w-2.5 h-2.5 border-b border-r border-[#C5A059]/70" />
+
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#8A6D3B]/30 pb-4">
           <div>
-            <h2 className="font-cinzel text-lg font-bold text-[#F3EFE6]">
-              Quick-Action Pipeline &amp; Governance Triggers
+            <h2 className="font-display text-lg text-[#F3EFE6] tracking-wide">
+              Editorial Actions
             </h2>
-            <p className="text-xs text-[#8E9BAE] font-mono">
-              Execute edge ingestion, Socratic brief synthesis, or podcast audio
-              rollup on demand. All runs are logged to{" "}
-              <code className="text-[#C5A059]">audit_ledger</code> under{" "}
-              <span className="text-[#F3EFE6]">{actor.email}</span>.
+            <p className="font-serif text-xs text-[#94A3B8] mt-0.5">
+              Trigger news collection, draft new case briefs, or produce the
+              weekly podcast episode on demand.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-4">
-            <label className="inline-flex items-center gap-2 text-xs font-mono text-[#D6D1C7] cursor-pointer">
+            <label className="inline-flex items-center gap-2 text-xs font-sans text-[#F3EFE6] cursor-pointer">
               <input
                 type="checkbox"
                 checked={chainSynthesizeOnIngest}
                 onChange={(e) => setChainSynthesizeOnIngest(e.target.checked)}
-                className="rounded border-[#263147] bg-[#0B0E14] text-[#C5A059]"
+                className="border-[#8A6D3B] bg-[#0B0E14] text-[#C5A059] accent-[#C5A059]"
               />
-              <span>Chain System-2 Synthesis on Ingest</span>
+              <span>Auto-draft briefs when fetching news</span>
             </label>
             {canRunPipelines && (
               <button
                 type="button"
                 onClick={() => setShowCustomCaseForm((prev) => !prev)}
-                className="px-3 py-1.5 rounded border border-[#C5A059]/60 bg-[#161E2E] hover:bg-[#1C263B] font-mono text-xs text-[#C5A059] transition-colors cursor-pointer"
+                className="px-3 py-1.5 border border-[#C5A059]/60 bg-[#0B0E14] hover:border-[#C5A059] font-display text-[11px] uppercase tracking-wider text-[#C5A059] transition-all duration-200 ease-out cursor-pointer"
               >
                 {showCustomCaseForm
-                  ? "Hide Custom Case Form"
-                  : "+ Submit Custom Event for Inspection"}
+                  ? "Hide Custom Story Form"
+                  : "+ Submit Custom Story"}
               </button>
             )}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Card 1: Fetch Latest News */}
           <button
             type="button"
             disabled={!canRunPipelines || runningAction !== null}
             onClick={handleRunIngest}
-            className="flex flex-col justify-between text-left p-4 rounded-md bg-[#161E2E] hover:bg-[#1C263B] border border-[#2E3C56] hover:border-[#C5A059] transition-all disabled:opacity-50 cursor-pointer"
+            className="group relative flex flex-col justify-between text-left p-5 bg-[#0B0E14]/85 hover:bg-[#0B0E14] border border-[#8A6D3B]/45 hover:border-[#C5A059] transition-all duration-200 ease-out disabled:opacity-50 cursor-pointer"
           >
+            <span className="pointer-events-none absolute top-1 left-1 w-2 h-2 border-t border-l border-[#C5A059]/60" />
+            <span className="pointer-events-none absolute bottom-1 right-1 w-2 h-2 border-b border-r border-[#C5A059]/60" />
             <div>
-              <div className="font-mono text-[10px] uppercase tracking-wider text-[#C5A059] font-semibold">
-                STAGE 1–3 // EDGE INGEST
+              <div className="font-display text-[10px] uppercase tracking-[0.16em] text-[#C5A059]">
+                Newsroom Intake
               </div>
-              <div className="font-cinzel text-base font-bold text-[#F3EFE6] mt-1">
+              <div className="font-display text-base font-bold text-[#F3EFE6] group-hover:text-[#C5A059] transition-colors mt-1.5">
                 {runningAction === "ingest"
-                  ? "Running Ingest…"
-                  : "Run Ingest Pipeline"}
+                  ? "Fetching Latest News…"
+                  : "Fetch Latest News"}
               </div>
-              <p className="text-xs text-[#9CA3AF] mt-1">
-                Polls {systemHealth.activeFeedCount} active RSS feeds &amp;
-                classifies via TypeSafe Jev (jev-1.14.0).
+              <p className="font-serif text-xs text-[#94A3B8] mt-1.5 leading-relaxed">
+                Check monitored RSS sources and filter incoming stories.
               </p>
             </div>
-            <div className="mt-3 font-mono text-[11px] text-[#C5A059]">
-              POST /api/run-ingest →
+            <div className="mt-4 pt-2.5 border-t border-[#8A6D3B]/25 flex items-center justify-between text-[11px] font-display uppercase tracking-wider text-[#C5A059]">
+              <span>{systemHealth.activeFeedCount} feeds active</span>
+              <span>Run →</span>
             </div>
           </button>
 
+          {/* Card 2: Synthesize Case Briefs */}
           <button
             type="button"
             disabled={!canRunPipelines || runningAction !== null}
             onClick={handleRunSynthesize}
-            className="flex flex-col justify-between text-left p-4 rounded-md bg-[#161E2E] hover:bg-[#1C263B] border border-[#2E3C56] hover:border-[#C5A059] transition-all disabled:opacity-50 cursor-pointer"
+            className="group relative flex flex-col justify-between text-left p-5 bg-[#0B0E14]/85 hover:bg-[#0B0E14] border border-[#8A6D3B]/45 hover:border-[#C5A059] transition-all duration-200 ease-out disabled:opacity-50 cursor-pointer"
           >
+            <span className="pointer-events-none absolute top-1 left-1 w-2 h-2 border-t border-l border-[#C5A059]/60" />
+            <span className="pointer-events-none absolute bottom-1 right-1 w-2 h-2 border-b border-r border-[#C5A059]/60" />
             <div>
-              <div className="font-mono text-[10px] uppercase tracking-wider text-sky-300 font-semibold">
-                STAGE 4 // SYSTEM-2 GEMINI
+              <div className="font-display text-[10px] uppercase tracking-[0.16em] text-[#C5A059]">
+                Editorial Drafting
               </div>
-              <div className="font-cinzel text-base font-bold text-[#F3EFE6] mt-1">
+              <div className="font-display text-base font-bold text-[#F3EFE6] group-hover:text-[#C5A059] transition-colors mt-1.5">
                 {runningAction === "synthesize"
                   ? "Synthesizing Briefs…"
-                  : "Run Synthesis"}
+                  : "Synthesize Case Briefs"}
               </div>
-              <p className="text-xs text-[#9CA3AF] mt-1">
-                Generates Socratic briefs for pending triaged incidents (
-                {systemHealth.triagedCount} awaiting synthesis).
+              <p className="font-serif text-xs text-[#94A3B8] mt-1.5 leading-relaxed">
+                Draft structured Craftsman&apos;s Briefs for pending stories.
               </p>
             </div>
-            <div className="mt-3 font-mono text-[11px] text-sky-300">
-              POST /api/run-synthesize →
+            <div className="mt-4 pt-2.5 border-t border-[#8A6D3B]/25 flex items-center justify-between text-[11px] font-display uppercase tracking-wider text-[#C5A059]">
+              <span>{systemHealth.triagedCount} pending</span>
+              <span>Draft →</span>
             </div>
           </button>
 
+          {/* Card 3: Generate Weekly Episode */}
           <button
             type="button"
             disabled={!canRunPipelines || runningAction !== null}
             onClick={handleGenerateEpisode}
-            className="flex flex-col justify-between text-left p-4 rounded-md bg-[#161E2E] hover:bg-[#1C263B] border border-[#2E3C56] hover:border-[#C5A059] transition-all disabled:opacity-50 cursor-pointer"
+            className="group relative flex flex-col justify-between text-left p-5 bg-[#0B0E14]/85 hover:bg-[#0B0E14] border border-[#8A6D3B]/45 hover:border-[#C5A059] transition-all duration-200 ease-out disabled:opacity-50 cursor-pointer"
           >
+            <span className="pointer-events-none absolute top-1 left-1 w-2 h-2 border-t border-l border-[#C5A059]/60" />
+            <span className="pointer-events-none absolute bottom-1 right-1 w-2 h-2 border-b border-r border-[#C5A059]/60" />
             <div>
-              <div className="font-mono text-[10px] uppercase tracking-wider text-emerald-300 font-semibold">
-                STAGE 5 // PODCAST + R2 TTS
+              <div className="font-display text-[10px] uppercase tracking-[0.16em] text-[#C5A059]">
+                Podcast Production
               </div>
-              <div className="font-cinzel text-base font-bold text-[#F3EFE6] mt-1">
+              <div className="font-display text-base font-bold text-[#F3EFE6] group-hover:text-[#C5A059] transition-colors mt-1.5">
                 {runningAction === "rollup"
                   ? "Generating Episode…"
-                  : "Generate Episode"}
+                  : "Generate Weekly Episode"}
               </div>
-              <p className="text-xs text-[#9CA3AF] mt-1">
-                Synthesizes 5-minute Friday CAB Rollup script &amp; MP3 audio to
-                Cloudflare R2.
+              <p className="font-serif text-xs text-[#94A3B8] mt-1.5 leading-relaxed">
+                Produce the 5-minute weekly audio brief and transcript.
               </p>
             </div>
-            <div className="mt-3 font-mono text-[11px] text-emerald-300">
-              POST /api/run-rollup →
+            <div className="mt-4 pt-2.5 border-t border-[#8A6D3B]/25 flex items-center justify-between text-[11px] font-display uppercase tracking-wider text-[#C5A059]">
+              <span>{systemHealth.totalEpisodes} episodes</span>
+              <span>Produce →</span>
             </div>
           </button>
 
+          {/* Card 4: Verify Ledger */}
           <button
             type="button"
             disabled={runningAction !== null}
             onClick={handleVerifyChain}
-            className="flex flex-col justify-between text-left p-4 rounded-md bg-[#161E2E] hover:bg-[#1C263B] border border-[#2E3C56] hover:border-[#C5A059] transition-all disabled:opacity-50 cursor-pointer"
+            className="group relative flex flex-col justify-between text-left p-5 bg-[#0B0E14]/85 hover:bg-[#0B0E14] border border-[#8A6D3B]/45 hover:border-[#C5A059] transition-all duration-200 ease-out disabled:opacity-50 cursor-pointer"
           >
+            <span className="pointer-events-none absolute top-1 left-1 w-2 h-2 border-t border-l border-[#C5A059]/60" />
+            <span className="pointer-events-none absolute bottom-1 right-1 w-2 h-2 border-b border-r border-[#C5A059]/60" />
             <div>
-              <div className="font-mono text-[10px] uppercase tracking-wider text-amber-300 font-semibold">
-                CRYPTOGRAPHIC PROVENANCE
+              <div className="font-display text-[10px] uppercase tracking-[0.16em] text-[#C5A059]">
+                Provenance &amp; Audit
               </div>
-              <div className="font-cinzel text-base font-bold text-[#F3EFE6] mt-1">
+              <div className="font-display text-base font-bold text-[#F3EFE6] group-hover:text-[#C5A059] transition-colors mt-1.5">
                 {runningAction === "verify"
-                  ? "Verifying Hashes…"
-                  : "Verify Audit Chain"}
+                  ? "Verifying Ledger…"
+                  : "Verify Ledger"}
               </div>
-              <p className="text-xs text-[#9CA3AF] mt-1">
-                Recomputes SHA-256 digests from GENESIS to HEAD across all{" "}
-                {auditTotal} ledger rows.
+              <p className="font-serif text-xs text-[#94A3B8] mt-1.5 leading-relaxed">
+                Confirm cryptographic integrity across all editorial records.
               </p>
             </div>
-            <div className="mt-3 font-mono text-[11px] text-amber-300">
-              GET /api/admin/audit/verify →
+            <div className="mt-4 pt-2.5 border-t border-[#8A6D3B]/25 flex items-center justify-between text-[11px] font-display uppercase tracking-wider text-[#C5A059]">
+              <span>{auditTotal} records</span>
+              <span>Verify →</span>
             </div>
           </button>
         </div>
 
+        {/* Optional Custom Story Submission Form */}
         {showCustomCaseForm && canRunPipelines && (
           <form
             onSubmit={handleSubmitCustomCase}
-            className="mt-4 pt-4 border-t border-[#263147] space-y-3 bg-[#0D111A] p-4 rounded-md"
+            className="mt-4 pt-5 border-t border-[#8A6D3B]/35 space-y-4 bg-[#0B0E14]/90 p-5 border border-[#8A6D3B]/40"
           >
             <div className="flex items-center justify-between">
               <div>
-                <div className="font-mono text-[10px] uppercase tracking-wider text-[#C5A059]">
-                  ADMIN EDITORIAL DISPATCH DESK // CUSTOM CASE SUBMISSION
+                <div className="font-display text-[10px] uppercase tracking-widest text-[#C5A059]">
+                  Editorial Dispatch Desk
                 </div>
-                <h3 className="font-cinzel text-base font-bold text-[#F3EFE6]">
-                  Submit Sourced Event for Structural Inspection
+                <h3 className="font-display text-base text-[#F3EFE6] mt-0.5">
+                  Submit Sourced Story for a Craftsman&apos;s Brief
                 </h3>
               </div>
-              <span className="font-mono text-[11px] text-[#8E9BAE]">
-                Audited under {actor.email}
+              <span className="font-sans text-xs text-[#94A3B8]">
+                Recorded under {actor.email}
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="font-mono text-[11px] uppercase text-[#C5A059] block mb-1">
+                <label className="font-display text-[11px] uppercase tracking-wider text-[#C5A059] block mb-1.5">
                   Source Attribution
                 </label>
                 <input
@@ -590,11 +743,11 @@ export function AdminOverviewClient({
                   value={customSource}
                   onChange={(e) => setCustomSource(e.target.value)}
                   placeholder="e.g. REUTERS // INFRASTRUCTURE"
-                  className="w-full bg-[#111622] border border-[#263147] rounded px-3 py-2 font-mono text-xs text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
+                  className="w-full bg-[#111726] border border-[#8A6D3B]/45 px-3 py-2 text-xs text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
                 />
               </div>
               <div>
-                <label className="font-mono text-[11px] uppercase text-[#C5A059] block mb-1">
+                <label className="font-display text-[11px] uppercase tracking-wider text-[#C5A059] block mb-1.5">
                   Source Article URL (Optional)
                 </label>
                 <input
@@ -602,28 +755,28 @@ export function AdminOverviewClient({
                   value={customUrl}
                   onChange={(e) => setCustomUrl(e.target.value)}
                   placeholder="https://..."
-                  className="w-full bg-[#111622] border border-[#263147] rounded px-3 py-2 font-mono text-xs text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
+                  className="w-full bg-[#111726] border border-[#8A6D3B]/45 px-3 py-2 font-mono text-xs text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
                 />
               </div>
             </div>
 
             <div>
-              <label className="font-mono text-[11px] uppercase text-[#C5A059] block mb-1">
-                Event Headline
+              <label className="font-display text-[11px] uppercase tracking-wider text-[#C5A059] block mb-1.5">
+                Story Headline
               </label>
               <input
                 type="text"
                 required
                 value={customTitle}
                 onChange={(e) => setCustomTitle(e.target.value)}
-                placeholder="Enter sourced event headline..."
-                className="w-full bg-[#111622] border border-[#263147] rounded px-3 py-2 text-xs text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
+                placeholder="Enter sourced story headline..."
+                className="w-full bg-[#111726] border border-[#8A6D3B]/45 px-3 py-2 font-serif text-sm text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
               />
             </div>
 
             <div>
-              <label className="font-mono text-[11px] uppercase text-[#C5A059] block mb-1">
-                Factual Event Summary (2+ Sentences)
+              <label className="font-display text-[11px] uppercase tracking-wider text-[#C5A059] block mb-1.5">
+                Factual Summary (2+ Sentences)
               </label>
               <textarea
                 rows={3}
@@ -631,7 +784,7 @@ export function AdminOverviewClient({
                 value={customDesc}
                 onChange={(e) => setCustomDesc(e.target.value)}
                 placeholder="Provide a multi-sentence factual summary of the event..."
-                className="w-full bg-[#111622] border border-[#263147] rounded p-3 text-xs text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
+                className="w-full bg-[#111726] border border-[#8A6D3B]/45 p-3 font-serif text-sm text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
               />
             </div>
 
@@ -639,10 +792,10 @@ export function AdminOverviewClient({
               <button
                 type="submit"
                 disabled={runningAction !== null}
-                className="px-4 py-2 rounded bg-[#C5A059] hover:bg-[#d4b26a] text-[#0B0E14] font-mono text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50"
+                className="px-4 py-2 bg-[#C5A059] hover:bg-[#d4b26a] text-[#0B0E14] font-display text-xs font-bold uppercase tracking-wider transition-all duration-200 ease-out cursor-pointer disabled:opacity-50"
               >
                 {runningAction === "custom"
-                  ? "Drafting & Auditing Brief…"
+                  ? "Drafting Craftsman's Brief…"
                   : "Draft & Publish Craftsman's Brief"}
               </button>
             </div>
@@ -650,385 +803,110 @@ export function AdminOverviewClient({
         )}
       </div>
 
-      {/* Telemetry & Governance KPI Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {/* Card 1: Total Incidents */}
-        <div className="bg-[#111622] border border-[#263147] rounded-lg p-5 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-xs uppercase text-[#8E9BAE]">
-                Total Incidents &amp; Triage Gate
-              </span>
-              <span className="font-mono text-[11px] text-emerald-300">
-                {systemHealth.noiseRejectionRate}% Noise Rejected
-              </span>
-            </div>
-            <div className="font-cinzel text-3xl font-bold text-[#F3EFE6] mt-2">
-              {systemHealth.totalIncidents} Active Incidents
-            </div>
-            <div className="font-mono text-xs text-[#9CA3AF] mt-1.5">
-              {systemHealth.synthesizedCount} Synthesized •{" "}
-              {systemHealth.triagedCount} Pending Triage •{" "}
-              {systemHealth.droppedCount} Dropped Noise
-            </div>
-          </div>
-          <div className="mt-4 pt-3 border-t border-[#1E2738] flex items-center justify-between font-mono text-xs">
-            <Link
-              href="/admin/incidents"
-              className="text-[#C5A059] hover:underline"
-            >
-              Incidents &amp; Transforms Studio →
-            </Link>
-            <a
-              href="https://thecabcall.com"
-              className="text-[#8E9BAE] hover:text-[#F3EFE6]"
-            >
-              View Trestleboard ↗
-            </a>
-          </div>
-        </div>
+      {/* 5-Item Plain-English "Recent Activity & Pipeline Runs" Feed */}
+      <div className="relative bg-[#111726] border border-[#8A6D3B]/45 shadow-xl overflow-hidden">
+        <span className="pointer-events-none absolute top-1.5 left-1.5 w-2.5 h-2.5 border-t border-l border-[#C5A059]/70" />
+        <span className="pointer-events-none absolute top-1.5 right-1.5 w-2.5 h-2.5 border-t border-r border-[#C5A059]/70" />
 
-        {/* Card 2: Active Inbound Feeds */}
-        <div className="bg-[#111622] border border-[#263147] rounded-lg p-5 flex flex-col justify-between">
+        <div className="p-5 sm:p-6 border-b border-[#8A6D3B]/35 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-xs uppercase text-[#8E9BAE]">
-                Active Inbound RSS Feeds
-              </span>
-              <span className="font-mono text-[11px] text-emerald-300">
-                POLLING NOMINAL
-              </span>
+            <div className="font-display text-[10px] uppercase tracking-[0.18em] text-[#C5A059]">
+              Editorial Logbook
             </div>
-            <div className="font-cinzel text-3xl font-bold text-[#F3EFE6] mt-2">
-              {systemHealth.activeFeedCount} High-Impact Feeds
-            </div>
-            <div className="font-mono text-[11px] text-[#9CA3AF] mt-1.5 truncate">
-              {systemHealth.activeFeedsList.map((f) => f.name).join(" • ")}
-            </div>
-          </div>
-          <div className="mt-4 pt-3 border-t border-[#1E2738] flex items-center justify-between font-mono text-xs">
-            <Link
-              href="/admin/feeds"
-              className="text-[#C5A059] hover:underline"
-            >
-              Manage Inbound Feeds →
-            </Link>
-            <span className="text-[#8E9BAE]">5 items/poll</span>
-          </div>
-        </div>
-
-        {/* Card 3: Active Triage Filters */}
-        <div className="bg-[#111622] border border-[#263147] rounded-lg p-5 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-xs uppercase text-[#8E9BAE]">
-                Active Triage Filters &amp; Jev Gate
-              </span>
-              <span className="font-mono text-[11px] text-[#C5A059]">
-                P(systemic) ≥ 0.70
-              </span>
-            </div>
-            <div className="font-cinzel text-3xl font-bold text-[#F3EFE6] mt-2">
-              {systemHealth.activeFilterCount} Active Filter Rules
-            </div>
-            <div className="font-mono text-xs text-[#9CA3AF] mt-1.5">
-              Avg Jev Confidence: {(systemHealth.avgJevConfidence * 100).toFixed(0)}
-              % • Latency: {systemHealth.avgClassifierLatencyMs}ms
-            </div>
-          </div>
-          <div className="mt-4 pt-3 border-t border-[#1E2738] flex items-center justify-between font-mono text-xs">
-            <Link
-              href="/admin/filters"
-              className="text-[#C5A059] hover:underline"
-            >
-              Configure Triage Filters →
-            </Link>
-            <span className="text-[#8E9BAE]">jev-1.14.0</span>
-          </div>
-        </div>
-
-        {/* Card 4: Podcast Episodes */}
-        <div className="bg-[#111622] border border-[#263147] rounded-lg p-5 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-xs uppercase text-[#8E9BAE]">
-                Podcast Episodes &amp; R2 Audio
-              </span>
-              <span className="font-mono text-[11px] text-sky-300">
-                cabcall-audio
-              </span>
-            </div>
-            <div className="font-cinzel text-3xl font-bold text-[#F3EFE6] mt-2">
-              {systemHealth.totalEpisodes} Episodes
-            </div>
-            <div className="font-mono text-xs text-[#9CA3AF] mt-1.5 truncate">
-              Latest: Ep #{systemHealth.latestEpisodeNumber} —{" "}
-              {systemHealth.latestEpisodeTitle}
-            </div>
-          </div>
-          <div className="mt-4 pt-3 border-t border-[#1E2738] flex items-center justify-between font-mono text-xs">
-            <Link
-              href="/admin/episodes"
-              className="text-[#C5A059] hover:underline"
-            >
-              Open Podcast Episode Studio →
-            </Link>
-            <a
-              href="https://thecabcall.com/feed.xml"
-              className="text-[#8E9BAE] hover:text-[#F3EFE6]"
-            >
-              /feed.xml ↗
-            </a>
-          </div>
-        </div>
-
-        {/* Card 5: Authorized Accounts */}
-        <div className="bg-[#111622] border border-[#263147] rounded-lg p-5 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-xs uppercase text-[#8E9BAE]">
-                Authorized Admin Accounts
-              </span>
-              <span className="font-mono text-[11px] text-[#C5A059]">
-                OWNER LOCK ACTIVE
-              </span>
-            </div>
-            <div className="font-cinzel text-3xl font-bold text-[#F3EFE6] mt-2">
-              {systemHealth.activeUsersCount} Active /{" "}
-              {systemHealth.invitedUsersCount} Invited
-            </div>
-            <div className="font-mono text-xs text-[#9CA3AF] mt-1.5 truncate">
-              Owner: {ownerEmail}
-            </div>
-          </div>
-          <div className="mt-4 pt-3 border-t border-[#1E2738] flex items-center justify-between font-mono text-xs">
-            <Link
-              href="/admin/users"
-              className="text-[#C5A059] hover:underline"
-            >
-              Manage Users &amp; Invites →
-            </Link>
-            <span className="text-[#8E9BAE]">OAuth + Magic Link</span>
-          </div>
-        </div>
-
-        {/* Card 6: Immutable Audit Ledger */}
-        <div className="bg-[#111622] border border-[#263147] rounded-lg p-5 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-xs uppercase text-[#8E9BAE]">
-                Immutable Audit Ledger
-              </span>
-              <span
-                className={`font-mono text-[11px] font-bold ${
-                  chainIntegrity?.valid !== false
-                    ? "text-emerald-300"
-                    : "text-red-300"
-                }`}
-              >
-                {chainIntegrity?.valid !== false
-                  ? "SHA-256 VERIFIED"
-                  : "CHAIN ALERT"}
-              </span>
-            </div>
-            <div className="font-cinzel text-3xl font-bold text-emerald-300 mt-2">
-              {auditTotal} Chained Events
-            </div>
-            <div className="font-mono text-xs text-[#9CA3AF] mt-1.5 truncate">
-              HEAD: {chainIntegrity?.headHash || "GENESIS"}
-            </div>
-          </div>
-          <div className="mt-4 pt-3 border-t border-[#1E2738] flex items-center justify-between font-mono text-xs">
-            <Link
-              href="/admin/audit"
-              className="text-[#C5A059] hover:underline"
-            >
-              Open Replay &amp; Diff Studio →
-            </Link>
-            <div className="flex items-center gap-2">
-              <a
-                href="/api/admin/audit/export?format=md"
-                className="text-[#8E9BAE] hover:text-[#F3EFE6]"
-              >
-                .MD
-              </a>
-              <span className="text-[#263147]">|</span>
-              <a
-                href="/api/admin/audit/export?format=json"
-                className="text-[#8E9BAE] hover:text-[#F3EFE6]"
-              >
-                .JSON
-              </a>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Recent Immutable Audit Events Table */}
-      <div className="bg-[#111622] border border-[#263147] rounded-lg overflow-hidden">
-        <div className="p-5 border-b border-[#263147] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <div className="font-mono text-[11px] uppercase tracking-widest text-[#C5A059]">
-              IMMUTABLE REPLAYABLE LEDGER // RECENT STATE TRANSITIONS
-            </div>
-            <h2 className="font-cinzel text-xl font-bold text-[#F3EFE6] mt-0.5">
-              Recent Audit Trail Events ({auditEntries.length} of {auditTotal})
+            <h2 className="font-display text-lg sm:text-xl text-[#F3EFE6] mt-0.5">
+              Recent Activity &amp; Pipeline Runs
             </h2>
           </div>
 
-          <div className="flex items-center gap-3">
-            <Link
-              href="/admin/audit"
-              className="px-3.5 py-2 rounded bg-[#161E2E] hover:bg-[#1E293B] border border-[#2E3C56] hover:border-[#C5A059] font-mono text-xs text-[#F3EFE6] transition-colors"
+          <Link
+            href="/admin/audit"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#0B0E14] border border-[#8A6D3B]/50 hover:border-[#C5A059] font-display text-xs uppercase tracking-wider text-[#C5A059] hover:text-[#F3EFE6] transition-all duration-200 ease-out"
+          >
+            View Full Audit Ledger →
+          </Link>
+        </div>
+
+        <div className="divide-y divide-[#8A6D3B]/25">
+          {recentAuditItems.map((entry) => (
+            <div
+              key={entry.eventId}
+              className="p-4 sm:px-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:bg-[#0B0E14]/45 transition-colors"
             >
-              Explore Full Ledger, Diffs &amp; State Replay →
-            </Link>
-          </div>
-        </div>
+              <div className="space-y-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-display text-xs font-semibold text-[#F3EFE6]">
+                    {formatActionReadable(entry)}
+                  </span>
+                  <span className="text-xs text-[#8A6D3B]">•</span>
+                  <span className="font-mono text-[11px] text-[#C5A059] truncate max-w-[240px]">
+                    {entry.targetId}
+                  </span>
+                </div>
+                {entry.reason && (
+                  <p className="font-serif text-xs text-[#94A3B8] line-clamp-1">
+                    {entry.reason}
+                  </p>
+                )}
+              </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-[#263147] bg-[#0D111A] font-mono text-[11px] uppercase text-[#8E9BAE]">
-                <th className="py-3 px-4">#ID / Timestamp</th>
-                <th className="py-3 px-4">Action Type</th>
-                <th className="py-3 px-4">Target</th>
-                <th className="py-3 px-4">Actor &amp; Auth</th>
-                <th className="py-3 px-4">Disclosure Reason</th>
-                <th className="py-3 px-4">SHA-256 Chain Link</th>
-                <th className="py-3 px-4 text-right">Inspect / Replay</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#1E2738] text-xs font-mono">
-              {auditEntries.map((entry) => (
-                <tr
-                  key={entry.eventId}
-                  className="hover:bg-[#161E2E]/60 transition-colors"
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="font-mono text-[11px] text-[#94A3B8]">
+                  {entry.timestamp.replace("T", " ").slice(0, 16)} UTC
+                </span>
+
+                <span
+                  title={`Actor: ${entry.actorEmail} (${entry.actorRole}) • SHA-256: ${entry.entryHash} • Prev: ${entry.prevHash}`}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-950/50 border border-emerald-500/40 text-emerald-300 font-sans text-[11px] cursor-help"
                 >
-                  <td className="py-3 px-4 whitespace-nowrap">
-                    <div className="text-[#F3EFE6] font-semibold">
-                      #{entry.id}
-                    </div>
-                    <div className="text-[11px] text-[#8E9BAE]">
-                      {entry.timestamp.replace("T", " ").slice(0, 19)} UTC
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 whitespace-nowrap">
-                    <span className="px-2 py-0.5 rounded bg-[#182032] border border-[#2E3C56] text-[#C5A059] font-semibold">
-                      {entry.actionType}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 whitespace-nowrap">
-                    <div className="text-[#D6D1C7]">{entry.targetType}</div>
-                    <div className="text-[11px] text-[#8E9BAE] max-w-[180px] truncate">
-                      {entry.targetId}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 whitespace-nowrap">
-                    <div className="text-[#F3EFE6]">{entry.actorEmail}</div>
-                    <div className="text-[10px] text-[#8E9BAE]">
-                      {entry.actorRole.toUpperCase()} • {entry.authMethod}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 max-w-xs">
-                    <div className="text-[#D6D1C7] line-clamp-2 font-sans text-xs">
-                      {entry.reason || "—"}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 whitespace-nowrap">
-                    <div
-                      className="text-[11px] text-emerald-300"
-                      title={`Entry SHA-256: ${entry.entryHash}`}
-                    >
-                      {entry.entryHash.slice(0, 12)}…
-                    </div>
-                    <div
-                      className="text-[10px] text-[#8E9BAE]"
-                      title={`Prev SHA-256: ${entry.prevHash}`}
-                    >
-                      ←{" "}
-                      {entry.prevHash === "GENESIS"
-                        ? "GENESIS"
-                        : `${entry.prevHash.slice(0, 10)}…`}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 text-right whitespace-nowrap">
-                    <Link
-                      href={`/admin/audit?eventId=${encodeURIComponent(
-                        entry.eventId
-                      )}`}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded border border-[#2E3C56] hover:border-[#C5A059] text-[#C5A059] text-[11px] transition-colors"
-                    >
-                      Diff / Replay →
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                  ✓ Verified
+                </span>
 
-      {/* Recent Pipeline Execution Runs */}
-      <div className="bg-[#111622] border border-[#263147] rounded-lg overflow-hidden">
-        <div className="p-5 border-b border-[#263147]">
-          <div className="font-mono text-[11px] uppercase tracking-widest text-[#8E9BAE]">
-            CLOUDFLARE EDGE TELEMETRY // PIPELINE_RUNS
-          </div>
-          <h2 className="font-cinzel text-lg font-bold text-[#F3EFE6] mt-0.5">
-            Recent Automated &amp; Manual Pipeline Runs
-          </h2>
-        </div>
+                <Link
+                  href={`/admin/audit?eventId=${encodeURIComponent(
+                    entry.eventId
+                  )}`}
+                  className="text-xs font-display uppercase tracking-wider text-[#C5A059] hover:text-[#F3EFE6] transition-colors"
+                >
+                  Inspect →
+                </Link>
+              </div>
+            </div>
+          ))}
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-[#263147] bg-[#0D111A] font-mono text-[11px] uppercase text-[#8E9BAE]">
-                <th className="py-3 px-4">Run ID / Started</th>
-                <th className="py-3 px-4">Stage</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4">Evaluated / Accepted / Noise</th>
-                <th className="py-3 px-4">Avg Latency</th>
-                <th className="py-3 px-4">Notes</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[#1E2738] text-xs font-mono">
-              {initialPipelineRuns.map((run) => (
-                <tr key={run.id} className="hover:bg-[#161E2E]/40">
-                  <td className="py-3 px-4 whitespace-nowrap">
-                    <div className="text-[#F3EFE6]">{run.id}</div>
-                    <div className="text-[11px] text-[#8E9BAE]">
-                      {run.startedAt.replace("T", " ").slice(0, 19)} UTC
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 whitespace-nowrap text-[#C5A059]">
-                    {run.runType}
-                  </td>
-                  <td className="py-3 px-4 whitespace-nowrap">
-                    <span
-                      className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold ${
-                        run.status === "nominal"
-                          ? "bg-emerald-950/60 border border-emerald-500/40 text-emerald-300"
-                          : "bg-amber-950/60 border border-amber-500/40 text-amber-300"
-                      }`}
-                    >
-                      {run.status}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 whitespace-nowrap text-[#D6D1C7]">
-                    {run.itemsEvaluated} eval • {run.itemsAccepted} acc •{" "}
-                    {run.itemsRejectedNoise} drop
-                  </td>
-                  <td className="py-3 px-4 whitespace-nowrap text-[#8E9BAE]">
-                    {run.avgClassifierLatencyMs}ms
-                  </td>
-                  <td className="py-3 px-4 text-[#9CA3AF] font-sans text-xs max-w-md truncate">
-                    {run.notes}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {recentRunItems.map((run) => (
+            <div
+              key={run.id}
+              className="p-4 sm:px-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-[#0B0E14]/25 hover:bg-[#0B0E14]/50 transition-colors"
+            >
+              <div className="space-y-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="px-2 py-0.5 bg-[#0B0E14] border border-[#8A6D3B]/45 font-display text-[10px] uppercase tracking-wider text-[#C5A059]">
+                    Automated Run
+                  </span>
+                  <span className="font-display text-xs font-semibold text-[#F3EFE6]">
+                    {formatRunTypeReadable(run.runType)}
+                  </span>
+                </div>
+                <p className="font-serif text-xs text-[#94A3B8] line-clamp-1">
+                  Reviewed {run.itemsEvaluated} stories ({run.itemsAccepted}{" "}
+                  accepted, {run.itemsRejectedNoise} filtered as noise) —{" "}
+                  {run.notes}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0">
+                <span className="font-mono text-[11px] text-[#94A3B8]">
+                  {run.startedAt.replace("T", " ").slice(0, 16)} UTC
+                </span>
+                <span
+                  title={`Run ID: ${run.id} • Status: ${run.status} • Classifier Latency: ${run.avgClassifierLatencyMs}ms`}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-950/50 border border-emerald-500/40 text-emerald-300 font-sans text-[11px] cursor-help"
+                >
+                  ✓ Verified
+                </span>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

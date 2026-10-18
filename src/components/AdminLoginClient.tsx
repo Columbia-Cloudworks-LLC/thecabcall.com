@@ -93,18 +93,36 @@ export function AdminLoginClient({
   }
 
   return (
-    <div className="min-h-[82vh] flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-xl bg-[#111622] border border-[#263147] rounded-lg shadow-2xl overflow-hidden">
+    <div className="min-h-[82vh] flex items-center justify-center px-4 py-12 bg-[#0B0E14]">
+      <div className="relative w-full max-w-xl bg-[#111726] border border-[#8A6D3B]/55 rounded-md shadow-2xl overflow-hidden">
+        {/* Corner Trestleboard Accents */}
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-[#C5A059]/70"
+        />
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-[#C5A059]/70"
+        />
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-[#C5A059]/70"
+        />
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-[#C5A059]/70"
+        />
+
         {/* Top Security Banner */}
-        <div className="bg-[#161D2B] border-b border-[#263147] px-6 py-4 flex items-start gap-3">
-          <span className="inline-flex items-center justify-center w-6 h-6 rounded bg-[#C5A059]/15 border border-[#C5A059]/40 text-[#C5A059] font-mono text-xs shrink-0 mt-0.5">
+        <div className="bg-[#0B0E14] border-b border-[#8A6D3B]/40 px-6 py-4 flex items-start gap-3">
+          <span className="inline-flex items-center justify-center w-6 h-6 rounded-sm bg-[#C5A059]/15 border border-[#C5A059]/45 text-[#C5A059] font-mono text-xs shrink-0 mt-0.5">
             🔒
           </span>
           <div>
             <div className="font-mono text-[11px] uppercase tracking-widest text-[#C5A059] font-semibold">
               Security Gate // Immutable Audit Enforcement
             </div>
-            <p className="text-xs text-[#D6D1C7] mt-1 leading-relaxed">
+            <p className="font-serif text-xs text-[#E5E0D8]/90 mt-1 leading-relaxed">
               Restricted Change Advisory Board Console — Access limited to the
               Owner and explicitly invited email addresses. All actions are
               recorded in the immutable audit ledger.
@@ -115,13 +133,13 @@ export function AdminLoginClient({
         <div className="p-6 sm:p-8 space-y-7">
           {/* Header */}
           <div>
-            <div className="font-mono text-xs uppercase tracking-widest text-[#8E9BAE]">
-              THE CAB CALL // ADMIN AUTHENTICATION
+            <div className="font-mono text-xs uppercase tracking-widest text-[#C5A059]">
+              THE CAB CALL // THE EDITOR&apos;S STUDY
             </div>
-            <h1 className="font-cinzel text-2xl sm:text-3xl font-bold text-[#F3EFE6] mt-1">
+            <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#F3EFE6] mt-1 tracking-wide">
               Change Advisory Board Console
             </h1>
-            <p className="text-sm text-[#9CA3AF] mt-2">
+            <p className="font-serif text-sm text-[#E5E0D8]/85 mt-2">
               Authenticate with the Owner Google account or an explicitly
               invited Change Advisory Board email address.
             </p>
@@ -131,14 +149,14 @@ export function AdminLoginClient({
           {(initialErrorCode || initialErrorMessage) && (
             <div
               role="alert"
-              className="bg-red-950/50 border border-red-500/50 rounded-md p-4 text-xs text-red-200 space-y-1"
+              className="bg-red-950/50 border border-red-500/50 rounded-sm p-4 text-xs text-red-200 space-y-1"
             >
               <div className="font-mono font-semibold uppercase tracking-wider text-red-300 flex items-center justify-between">
                 <span>
                   403 Unauthorized Account{" "}
                   {initialErrorCode ? `(${initialErrorCode})` : ""}
                 </span>
-                <span className="text-[10px] bg-red-900/60 px-2 py-0.5 rounded">
+                <span className="text-[10px] bg-red-900/60 px-2 py-0.5 rounded-sm">
                   LOGGED TO AUDIT LEDGER
                 </span>
               </div>
@@ -155,14 +173,14 @@ export function AdminLoginClient({
               <span className="font-mono text-xs uppercase tracking-wider text-[#C5A059]">
                 1. Primary Owner &amp; Google Account Sign-In
               </span>
-              <span className="font-mono text-[11px] text-[#8E9BAE]">
+              <span className="font-mono text-[11px] text-[#9CA3AF]">
                 OIDC / OAuth 2.0
               </span>
             </div>
 
             <a
               href={googleLoginHref}
-              className="w-full flex items-center justify-center gap-3 bg-[#C5A059] hover:bg-[#d4b26a] text-[#0B0E14] font-semibold py-3 px-5 rounded-md transition-colors shadow-md text-sm"
+              className="w-full flex items-center justify-center gap-3 bg-[#C5A059] hover:bg-[#d4b26a] text-[#0B0E14] font-mono text-xs font-bold uppercase tracking-wider py-3 px-5 rounded-sm transition-colors shadow-md"
             >
               <svg
                 className="w-5 h-5"
@@ -177,18 +195,18 @@ export function AdminLoginClient({
               </svg>
               <span>Continue with Google</span>
             </a>
-            <p className="text-[11px] text-[#8E9BAE] leading-relaxed">
+            <p className="font-serif text-xs text-[#9CA3AF] leading-relaxed">
               Locked initially to the Owner Google account and invited users
               with verified Google Workspace / Gmail accounts.
             </p>
           </div>
 
           <div className="relative flex py-1 items-center">
-            <div className="flex-grow border-t border-[#263147]" />
-            <span className="flex-shrink mx-4 font-mono text-[11px] uppercase tracking-widest text-[#6B7280]">
+            <div className="flex-grow border-t border-[#8A6D3B]/35" />
+            <span className="flex-shrink mx-4 font-mono text-[11px] uppercase tracking-widest text-[#9CA3AF]">
               OR SINGLE-USE MAGIC LINK
             </span>
-            <div className="flex-grow border-t border-[#263147]" />
+            <div className="flex-grow border-t border-[#8A6D3B]/35" />
           </div>
 
           {/* Secondary Login: Passwordless Single-Use Magic Link */}
@@ -200,7 +218,7 @@ export function AdminLoginClient({
               >
                 2. Invited without Google? Sign in with Magic Link
               </label>
-              <span className="font-mono text-[11px] text-[#8E9BAE]">
+              <span className="font-mono text-[11px] text-[#9CA3AF]">
                 SHA-256 Single-Use
               </span>
             </div>
@@ -213,18 +231,18 @@ export function AdminLoginClient({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="invited.user@organization.org"
-                className="flex-1 bg-[#0B0E14] border border-[#263147] focus:border-[#C5A059] rounded-md px-3.5 py-2.5 text-sm text-[#F3EFE6] placeholder-[#6B7280] outline-none font-mono"
+                className="flex-1 bg-[#0B0E14] border border-[#8A6D3B]/45 focus:border-[#C5A059] rounded-sm px-3.5 py-2.5 text-sm text-[#F3EFE6] placeholder-[#9CA3AF]/60 outline-none font-mono"
               />
               <button
                 type="submit"
                 disabled={loadingMagic}
-                className="bg-[#1C2536] hover:bg-[#263147] border border-[#C5A059]/50 text-[#F3EFE6] font-mono text-xs uppercase tracking-wider px-4 py-2.5 rounded-md transition-colors disabled:opacity-50 cursor-pointer shrink-0"
+                className="bg-[#0B0E14] hover:bg-[#111726] border border-[#C5A059]/60 text-[#C5A059] font-mono text-xs uppercase tracking-wider px-4 py-2.5 rounded-sm transition-colors disabled:opacity-50 cursor-pointer shrink-0 font-semibold"
               >
                 {loadingMagic ? "Dispatching..." : "Send Magic Link"}
               </button>
             </div>
 
-            <p className="text-[11px] text-[#8E9BAE] leading-relaxed">
+            <p className="font-serif text-xs text-[#9CA3AF] leading-relaxed">
               Dispatches a 15-minute, single-use cryptographic login link to
               invited non-Google email addresses. Raw tokens are never stored in
               D1.
@@ -232,7 +250,7 @@ export function AdminLoginClient({
 
             {magicResult && (
               <div
-                className={`p-3.5 rounded-md border text-xs leading-relaxed ${
+                className={`p-3.5 rounded-sm border text-xs leading-relaxed ${
                   magicResult.ok
                     ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-200"
                     : "bg-red-950/40 border-red-500/40 text-red-200"
@@ -249,7 +267,7 @@ export function AdminLoginClient({
           </form>
 
           {/* Footer Links */}
-          <div className="pt-4 border-t border-[#263147] flex flex-wrap items-center justify-between gap-2 text-xs text-[#8E9BAE] font-mono">
+          <div className="pt-4 border-t border-[#8A6D3B]/35 flex flex-wrap items-center justify-between gap-2 text-xs text-[#9CA3AF] font-mono">
             <a
               href="https://thecabcall.com"
               className="hover:text-[#C5A059] transition-colors"

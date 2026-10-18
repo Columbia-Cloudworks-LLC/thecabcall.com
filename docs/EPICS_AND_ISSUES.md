@@ -547,11 +547,12 @@
 # Epic #21: Admin Dashboard Redesign — "The Editor's Study" (Simplification & UI Polish — Issues #22 – #26)
 
 - **GitHub Epic:** [#21](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/21)
+- **Status:** `[x] Completed`
 - **Objective:** Transform `/admin` from an overcrowded 3 AM NOC database terminal into **"The Editor's Study"**—a calm, cohesive, plain-English editorial command desk matching the public Trestleboard aesthetic (`#0B0E14` Deep Obsidian, `#111726` Lodge Room, `#C5A059` / `#8A6D3B` Burnished Brass, `Cinzel` & `Newsreader` serif typography, architectural corner brackets) while preserving 100% of our cryptographic `audit_ledger` guarantees.
 
 ### Issue #22 (Sub-Issue 1): Navigation Consolidation & Header De-cluttering
 - **GitHub Issue:** [#22](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/22)
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Target Files:** `src/components/AdminShellNav.tsx`, `src/app/admin/layout.tsx`, `src/components/SiteHeader.tsx`, `src/components/AdminOverviewClient.tsx`
 - **Deliverables:**
   1. Consolidate the 8 scrolling tabs in `ADMIN_NAV_TABS` (`src/components/AdminShellNav.tsx`) into 4 clean, non-scrolling tabs: `Overview` (`/admin`), `Editorial & Feeds` (`/admin/incidents`), `Podcast Studio` (`/admin/episodes`), and `Settings & Audit` (`/admin/audit`).
@@ -560,7 +561,7 @@
 
 ### Issue #23 (Sub-Issue 2): Overview Tab Simplification & Plain-English Action Cards
 - **GitHub Issue:** [#23](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/23)
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Target Files:** `src/components/AdminOverviewClient.tsx`, `src/app/admin/page.tsx`
 - **Deliverables:**
   1. Redesign the 4 Quick-Action cards into tactile, plain-English editorial triggers (`"Fetch Latest News"`, `"Synthesize Case Briefs"`, `"Generate Weekly Episode"`, `"Verify Ledger"`), removing `POST /api/...` labels and `STAGE 1–5` jargon, with clean loading states and inline feedback.
@@ -569,7 +570,7 @@
 
 ### Issue #24 (Sub-Issue 3): Podcast Studio Overhaul (Compact List & Slide-Out Inspector Drawer)
 - **GitHub Issue:** [#24](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/24)
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Target Files:** `src/components/AdminEpisodesClient.tsx`, `src/app/admin/episodes/page.tsx`
 - **Deliverables:**
   1. Replace bloated vertical episode cards with a sleek, scannable episode list/grid showing Episode #, Title, Series Badge (`Weekly Brief` vs `Legacy Archive`), Publish Date, Duration, and a 2-line truncated description (`line-clamp-2`).
@@ -578,7 +579,7 @@
 
 ### Issue #25 (Sub-Issue 4): Unified "Editorial & Feeds" Workspace
 - **GitHub Issue:** [#25](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/25)
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Target Files:** `src/app/admin/incidents/page.tsx`, `src/components/AdminIncidentsClient.tsx`, `src/components/AdminFeedsClient.tsx`, `src/components/AdminFiltersClient.tsx`, `src/app/admin/feeds/page.tsx`, `src/app/admin/filters/page.tsx`, `src/app/admin/transforms/page.tsx`
 - **Deliverables:**
   1. Create a unified editorial workspace where stories ("Incidents") are the primary view, styled with the readability of the public site.
@@ -587,7 +588,7 @@
 
 ### Issue #26 (Sub-Issue 5): Aesthetic Polish & Micro-Interactions ("Delight" Pass)
 - **GitHub Issue:** [#26](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/26)
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Target Files:** `src/app/globals.css`, `src/components/AdminShellNav.tsx`, `src/components/AdminOverviewClient.tsx`, `src/components/AdminEpisodesClient.tsx`, `src/components/AdminIncidentsClient.tsx`, `src/components/AdminFeedsClient.tsx`, `src/components/AdminFiltersClient.tsx`, `src/components/AdminUsersClient.tsx`, `src/components/AdminAuditClient.tsx`, `src/components/AdminLoginClient.tsx`
 - **Deliverables:**
   1. Align `/admin` CSS tokens with the public Trestleboard palette (`#0B0E14` obsidian surfaces, `#111726` lodge room cards, `#C5A059` / `#8A6D3B` burnished brass highlights, `#F3EFE6` parchment text, subtle corner brackets on primary containers).

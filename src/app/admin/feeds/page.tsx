@@ -1,13 +1,14 @@
 import { redirect } from "next/navigation";
-import { AdminFeedsClient } from "@/components/AdminFeedsClient";
+import { AdminIncidentsClient } from "@/components/AdminIncidentsClient";
 import { getAuditLedgerEntries } from "@/lib/audit";
 import { getCurrentAdminSession } from "@/lib/auth";
-import { getIngestFeedsBridge } from "@/lib/feeds-filters";
+import { getIngestFiltersAndThresholdsBridge } from "@/lib/feeds-filters";
+import { getAdminIncidentsAndTransformsBridge } from "@/lib/incidents";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Inbound RSS & Atom Feeds Studio — The CAB Call Admin",
+  title: "RSS Sources — Editorial & Feeds | The CAB Call",
 };
 
 export default async function AdminFeedsPage() {
@@ -16,17 +17,28 @@ export default async function AdminFeedsPage() {
     redirect("/admin/login?next=/admin/feeds");
   }
 
-  const [feeds, auditResult] = await Promise.all([
-    getIngestFeedsBridge(),
+  const [
+    { incidents, transforms, counts },
+    { filters, thresholds, feeds },
+    auditResult,
+  ] = await Promise.all([
+    getAdminIncidentsAndTransformsBridge({ limit: 100 }),
+    getIngestFiltersAndThresholdsBridge(),
     getAuditLedgerEntries({ targetType: "ingest_feed", limit: 25 }),
   ]);
 
   return (
-    <AdminFeedsClient
+    <AdminIncidentsClient
       actor={actor}
+      initialIncidents={incidents}
+      initialTransforms={transforms}
+      initialCounts={counts}
       initialFeeds={feeds}
+      initialFilters={filters}
+      initialThresholds={thresholds}
       initialAuditEntries={auditResult.entries}
       chainIntegrity={auditResult.chainIntegrity}
+      defaultView="feeds"
     />
   );
 }
