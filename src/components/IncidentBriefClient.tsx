@@ -9,9 +9,12 @@ import {
   Compass,
   AlertTriangle,
   CheckCircle2,
+  Info,
+  BookOpen,
 } from "lucide-react";
 import {
   formatCraftLedgerEntry,
+  formatFriendlySourceName,
   isRenderablePublicIncident,
   mapDtoToCraftLexicon,
   PublicIncidentDto,
@@ -56,6 +59,7 @@ export function IncidentBriefClient({
   const secondaryToolSpec = getWorkingToolSpec(incident.secondaryTool);
   const failureSpec = getSreFailureModeSpec(incident.sreFailureMode);
   const ledgerEntryLabel = formatCraftLedgerEntry(incident.incidentCode);
+  const friendlySourceName = formatFriendlySourceName(incident.sourceFeed);
 
   // Section I: Strictly 1 concise paragraph of unvarnished factual summary
   const singleFactualParagraph = sanitizeStringConcatenation(
@@ -133,7 +137,7 @@ export function IncidentBriefClient({
               </span>
             </div>
 
-            {/* Diagnostic Badges with [?] Inspection Triggers */}
+            {/* Diagnostic Badges with Clear Tool Guide Triggers */}
             <div className="space-y-2.5">
               <div>
                 <span className="font-mono text-[10px] uppercase tracking-wider text-[#94A3B8] block mb-1">
@@ -153,9 +157,10 @@ export function IncidentBriefClient({
                     onClick={() =>
                       openRubricInspector({ tool: incident.primaryTool })
                     }
-                    className="px-1.5 py-0.5 bg-[#C5A059]/15 text-[#F3EFE6] hover:bg-[#C5A059] hover:text-[#0B0E14] transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#C5A059]/15 text-[#F3EFE6] hover:bg-[#C5A059] hover:text-[#0B0E14] transition-colors cursor-pointer"
                   >
-                    Inspect [?]
+                    <Info className="w-3 h-3" />
+                    <span>Tool Guide</span>
                   </button>
                 </div>
                 <p className="font-serif text-xs text-[#94A3B8] mt-1.5 leading-relaxed">
@@ -181,9 +186,10 @@ export function IncidentBriefClient({
                     onClick={() =>
                       openRubricInspector({ tool: incident.secondaryTool })
                     }
-                    className="px-1.5 py-0.5 bg-[#8A6D3B]/20 text-[#C5A059] hover:bg-[#C5A059] hover:text-[#0B0E14] transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#8A6D3B]/20 text-[#C5A059] hover:bg-[#C5A059] hover:text-[#0B0E14] transition-colors cursor-pointer"
                   >
-                    [?]
+                    <Info className="w-3 h-3" />
+                    <span>Tool Guide</span>
                   </button>
                 </div>
               </div>
@@ -192,7 +198,7 @@ export function IncidentBriefClient({
                 <span className="font-mono text-[10px] uppercase tracking-wider text-[#94A3B8] block mb-1">
                   Structural Failure Mode:
                 </span>
-                <div className="flex items-center justify-between bg-[#0B0E14] border border-[#F59E0B]/60 px-3 py-2 font-mono text-xs text-[#F59E0B]">
+                <div className="flex items-center justify-between gap-2 bg-[#0B0E14] border border-[#F59E0B]/60 px-3 py-2 font-mono text-xs text-[#F59E0B]">
                   <Link
                     href={`/knowledge-graph?failure=${encodeURIComponent(
                       incident.sreFailureMode
@@ -208,9 +214,10 @@ export function IncidentBriefClient({
                         failureMode: incident.sreFailureMode,
                       })
                     }
-                    className="px-1.5 py-0.5 bg-[#F59E0B]/15 text-[#F3EFE6] hover:bg-[#F59E0B] hover:text-[#0B0E14] transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 bg-[#F59E0B]/15 text-[#F3EFE6] hover:bg-[#F59E0B] hover:text-[#0B0E14] transition-colors cursor-pointer shrink-0"
                   >
-                    [?]
+                    <Info className="w-3 h-3" />
+                    <span>Tool Guide</span>
                   </button>
                 </div>
                 <p className="font-serif text-xs text-[#94A3B8] mt-1.5 leading-relaxed">
@@ -242,7 +249,7 @@ export function IncidentBriefClient({
                   rel="noopener noreferrer"
                   className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 bg-[#0B0E14] border border-[#C5A059]/60 text-[#C5A059] hover:bg-[#C5A059] hover:text-[#0B0E14] transition-colors"
                 >
-                  <span>Inspect Primary Source Dispatch</span>
+                  <span>Read Original {friendlySourceName} Article</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
                 <Link
@@ -251,7 +258,9 @@ export function IncidentBriefClient({
                   )}&failure=${encodeURIComponent(incident.sreFailureMode)}`}
                   className="w-full inline-flex items-center justify-center px-3 py-2 border border-[#8A6D3B]/50 text-[#F3EFE6] hover:border-[#C5A059] hover:text-[#C5A059] transition-colors"
                 >
-                  Cross-Filter Diagnostic Signature →
+                  {incident.primaryTool
+                    ? `More '${incident.primaryTool}' Cases →`
+                    : "See Similar Cases →"}
                 </Link>
               </div>
             </div>
@@ -366,9 +375,10 @@ export function IncidentBriefClient({
                     failureMode: incident.sreFailureMode,
                   })
                 }
-                className="font-mono text-xs text-[#C5A059] hover:underline cursor-pointer"
+                className="inline-flex items-center gap-1.5 font-mono text-xs text-[#C5A059] hover:underline cursor-pointer"
               >
-                Open Rubric Codex [?]
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>View Tool Guide</span>
               </button>
             </div>
 

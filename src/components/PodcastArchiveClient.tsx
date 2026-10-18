@@ -13,6 +13,7 @@ import {
   ExternalLink,
   Sparkles,
   Radio,
+  Info,
 } from "lucide-react";
 import {
   formatCraftLedgerEntry,
@@ -277,9 +278,11 @@ export function PodcastArchiveClient({
                       onClick={() =>
                         openRubricInspector({ tool: ep.dominantTool })
                       }
-                      className="text-[#C5A059] hover:underline cursor-pointer"
+                      title={`View Tool Guide for ${ep.dominantTool}`}
+                      className="inline-flex items-center gap-1.5 text-[#C5A059] hover:underline cursor-pointer"
                     >
-                      Dominant Tool: {ep.dominantTool} [?]
+                      <span>Dominant Tool: {ep.dominantTool}</span>
+                      <Info className="w-3.5 h-3.5 opacity-85" />
                     </button>
                   </div>
 

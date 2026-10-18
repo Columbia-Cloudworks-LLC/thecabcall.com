@@ -9,6 +9,7 @@ import {
   Table as TableIcon,
   RotateCcw,
   ArrowUpRight,
+  Info,
 } from "lucide-react";
 import {
   DOMAIN_SECTORS,
@@ -347,9 +348,11 @@ export function KnowledgeGraphClient({
                       onClick={() =>
                         openRubricInspector({ tool: inc.primaryTool })
                       }
-                      className="px-2 py-1 bg-[#0B0E14] border border-[#C5A059]/70 text-[#C5A059] hover:bg-[#C5A059]/15 cursor-pointer"
+                      title={`View Tool Guide for ${inc.primaryTool}`}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#0B0E14] border border-[#C5A059]/70 text-[#C5A059] hover:bg-[#C5A059]/15 cursor-pointer"
                     >
-                      {inc.primaryTool} [?]
+                      <span>{inc.primaryTool}</span>
+                      <Info className="w-3 h-3 opacity-80" />
                     </button>
                   </td>
                   <td className="p-3.5 whitespace-nowrap text-[#94A3B8]">

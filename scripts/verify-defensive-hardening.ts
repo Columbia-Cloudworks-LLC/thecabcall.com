@@ -48,6 +48,7 @@ import {
 import {
   assertZeroTelemetryBleed,
   formatCraftLedgerEntry,
+  formatFriendlySourceName,
   mapDtoToCraftLexicon,
   projectPublicIncidentDto,
 } from "../src/lib/dto.ts";
@@ -1505,8 +1506,91 @@ async function runVerificationSuite() {
   console.log(
     `  ✓ Issue #16 computeNgramOverlap & deduplicateSignalAgainstFacts verified across all ${allIncidentsToVerify.length} seed, snapshot, and live/local incidents.`
   );
+
+  // -------------------------------------------------------------------------
+  // 9. OBJECTIVE 9 (ISSUE #17): KRUG USABILITY — NO MYSTERY-MEAT [?] & PLAIN ACTION BUTTONS
+  // -------------------------------------------------------------------------
   console.log(
-    "\n=== ALL 8 DEFENSIVE HARDENING & CRAFT PROSE OBJECTIVES PASSED (100%) ==="
+    "\n[9/9] Verifying Objective 9 (Issue #17): Krug Usability — Zero Mystery-Meat [?] Badges & Plain-English Action Buttons..."
+  );
+
+  // Unit check 1: formatFriendlySourceName mappings & defensive fallback
+  const friendlySourceCases: Array<[string | null | undefined, string]> = [
+    ["NYT > Top Stories", "NYT"],
+    ["NYT HomePage", "NYT"],
+    ["New York Times", "NYT"],
+    ["NPR Top News", "NPR"],
+    ["NPR News", "NPR"],
+    ["WSJ", "WSJ"],
+    ["WSJ US Business", "WSJ"],
+    ["PBS NewsHour", "PBS"],
+    ["PBS NewsHour Nation", "PBS"],
+    ["Ars Technica", "Ars Technica"],
+    ["ARS TECHNICA", "Ars Technica"],
+    ["REUTERS", "Reuters"],
+    ["AP NEWS", "AP"],
+    ["Hacker News", "Hacker News"],
+    ["", "Source"],
+    ["   ", "Source"],
+    [null, "Source"],
+    [undefined, "Source"],
+    ["Source", "Source"],
+    ["RSS Feed", "Source"],
+    ["LIVE TELEMETRY INPUT", "Source"],
+  ];
+
+  for (const [rawFeed, expectedName] of friendlySourceCases) {
+    assert.equal(
+      formatFriendlySourceName(rawFeed),
+      expectedName,
+      `formatFriendlySourceName(${JSON.stringify(rawFeed)}) must return "${expectedName}"`
+    );
+  }
+
+  // Component check 2: Zero literal [?] strings across IncidentBriefClient, KnowledgeGraphClient, and PodcastArchiveClient
+  const krugTargetFiles = [
+    "src/components/IncidentBriefClient.tsx",
+    "src/components/KnowledgeGraphClient.tsx",
+    "src/components/PodcastArchiveClient.tsx",
+  ];
+
+  for (const relFile of krugTargetFiles) {
+    const fileContent = fs.readFileSync(
+      path.join(process.cwd(), relFile),
+      "utf8"
+    );
+    assert.equal(
+      fileContent.includes("[?]"),
+      false,
+      `${relFile} must NOT contain any mystery-meat "[?]" string`
+    );
+    assert.equal(
+      /Cross-Filter (?:Diagnostic )?Signature|Inspect Primary (?:Source Dispatch|RSS Source)/i.test(
+        fileContent
+      ),
+      false,
+      `${relFile} must NOT contain legacy jargon button labels`
+    );
+  }
+
+  const incidentBriefKrugSource = fs.readFileSync(
+    path.join(process.cwd(), "src/components/IncidentBriefClient.tsx"),
+    "utf8"
+  );
+  assert.ok(
+    incidentBriefKrugSource.includes("Tool Guide") &&
+      incidentBriefKrugSource.includes("View Tool Guide") &&
+      incidentBriefKrugSource.includes("Read Original {friendlySourceName} Article") &&
+      incidentBriefKrugSource.includes("More '${incident.primaryTool}' Cases →") &&
+      incidentBriefKrugSource.includes("See Similar Cases →"),
+    "IncidentBriefClient.tsx must use clear Tool Guide affordances, 'Read Original {SourceName} Article', and 'More \\'{Tool}\\' Cases →' (with 'See Similar Cases →' fallback)"
+  );
+
+  console.log(
+    "  ✓ Issue #17 zero mystery-meat [?] badges, formatFriendlySourceName, and plain-English Krug action buttons verified."
+  );
+  console.log(
+    "\n=== ALL 9 DEFENSIVE HARDENING, CRAFT PROSE & KRUG USABILITY OBJECTIVES PASSED (100%) ==="
   );
 }
 

@@ -410,6 +410,111 @@ export function formatCraftLedgerEntry(
   return `LEDGER ENTRY No. ${stripped || "CAB-0000"}`;
 }
 
+const GENERIC_SOURCE_PLACEHOLDERS = new Set([
+  "source",
+  "rss",
+  "rss feed",
+  "feed",
+  "wire",
+  "news",
+  "dispatch",
+  "unknown",
+  "n/a",
+  "none",
+  "default",
+  "live telemetry input",
+  "custom admin dispatch",
+  "dry-run sample",
+  "the cab call",
+]);
+
+/**
+ * Formats a feed identifier (e.g. "NYT > Top Stories", "NPR Top News", "PBS NewsHour Nation",
+ * "WSJ US Business", "ARS TECHNICA", "REUTERS") into a concise, reader-friendly publication name
+ * for action button labels ("Read Original {SourceName} Article"), safely defaulting to "Source"
+ * when empty or generic.
+ */
+export function formatFriendlySourceName(
+  sourceFeed: string | null | undefined
+): string {
+  if (!sourceFeed || typeof sourceFeed !== "string") {
+    return "Source";
+  }
+
+  const trimmed = sourceFeed.trim();
+  if (!trimmed || GENERIC_SOURCE_PLACEHOLDERS.has(trimmed.toLowerCase())) {
+    return "Source";
+  }
+
+  if (/\b(?:nyt|new\s+york\s+times)\b/i.test(trimmed)) {
+    return "NYT";
+  }
+  if (/\bnpr\b/i.test(trimmed)) {
+    return "NPR";
+  }
+  if (/\b(?:wsj|wall\s+street\s+journal)\b/i.test(trimmed)) {
+    return "WSJ";
+  }
+  if (/\bpbs\b/i.test(trimmed)) {
+    return "PBS";
+  }
+  if (/\bars\s+technica\b/i.test(trimmed)) {
+    return "Ars Technica";
+  }
+  if (/\breuters\b/i.test(trimmed)) {
+    return "Reuters";
+  }
+  if (/\b(?:ap\s+news|associated\s+press)\b|^ap$/i.test(trimmed)) {
+    return "AP";
+  }
+  if (/\bhacker\s+news\b/i.test(trimmed)) {
+    return "Hacker News";
+  }
+  if (/\bfederal\s+register\b/i.test(trimmed)) {
+    return "Federal Register";
+  }
+  if (/\bbloomberg\b/i.test(trimmed)) {
+    return "Bloomberg";
+  }
+  if (/\bbbc\b/i.test(trimmed)) {
+    return "BBC";
+  }
+  if (/\bwashington\s+post\b/i.test(trimmed)) {
+    return "Washington Post";
+  }
+  if (/\bpropublica\b/i.test(trimmed)) {
+    return "ProPublica";
+  }
+
+  const primarySegment = trimmed
+    .split(/\s*(?:>|\||—|–|\s-\s)\s*/)[0]
+    .replace(/\([^)]*\)/g, " ")
+    .replace(
+      /\b(?:top\s+stories|top\s+news|homepage|home\s+page|rss\s+feed|rss|feed|nation|us\s+business|world\s+news)\b/gi,
+      " "
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (
+    !primarySegment ||
+    GENERIC_SOURCE_PLACEHOLDERS.has(primarySegment.toLowerCase())
+  ) {
+    return "Source";
+  }
+
+  if (
+    primarySegment === primarySegment.toUpperCase() &&
+    primarySegment.length > 4
+  ) {
+    return primarySegment
+      .toLowerCase()
+      .replace(/\b[a-z]/g, (ch) => ch.toUpperCase());
+  }
+
+  return primarySegment;
+}
+
 export function getWorkingToolSpec(id: string | null | undefined): WorkingToolSpec {
   try {
     const mapped = mapWorkingToolToCraftLexicon(id);

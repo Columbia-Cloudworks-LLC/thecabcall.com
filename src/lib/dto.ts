@@ -9,6 +9,7 @@ import {
   DEFAULT_CRAFT_WORKING_TOOL,
   DomainSectorId,
   formatCraftLedgerEntry,
+  formatFriendlySourceName,
   mapFailureModeToCraftLexicon,
   mapWorkingToolToCraftLexicon,
   SreFailureModeId,
@@ -257,7 +258,7 @@ export function mapDtoToCraftLexicon<
 
   return record as T;
 }
-export { formatCraftLedgerEntry };
+export { formatCraftLedgerEntry, formatFriendlySourceName };
 
 /**
  * Defensive rendering gate for an Incident Brief (`IncidentArticle` or `PublicIncidentDto`).
