@@ -309,7 +309,9 @@ export const INITIAL_EPISODES: PodcastEpisode[] = [
     series: "weekly_rollup",
     title: "CAB Weekly Brief #42: Paper Attestations, Untested Failovers, and Where to Place the Square",
     summary:
-      "Friday 5-minute systems retrospective anchored by The Square and Configuration Drift across municipal water SCADA audits, interbank TLS failover halts, and regional airspace dispatch hearings.",
+      "Weekly systems retrospective anchored by The Square and Configuration Drift across municipal water SCADA audits, interbank TLS failover halts, and regional airspace dispatch hearings.",
+    extendedNotes:
+      "Weekly systems retrospective anchored by The Square and Configuration Drift across municipal water SCADA audits, interbank TLS failover halts, and regional airspace dispatch hearings.\n\nKey Takeaways:\n• Why synthetic health checks that bypass the mutual-TLS proxy manufacture false confidence during certificate rotation.\n• How unfunded pre-production staging environments turn routine configuration syncs into regional dispatch halts.\n• Applying The Square, The Plumb, and Common Gavel to remediation reviews without scapegoating the last operator at the keyboard.",
     publishedAt: "2026-10-16T12:00:00Z",
     durationSeconds: 304,
     durationFormatted: "05:04",
@@ -318,6 +320,22 @@ export const INITIAL_EPISODES: PodcastEpisode[] = [
     dominantTool: "The Square",
     dominantToolPercentage: 44,
     dominantFailureMode: "Configuration Drift",
+    sourcePages: [
+      {
+        title: "The Trestleboard — Live Incident Ledger & Weekly Dispatches",
+        href: "/",
+        code: "TRESTLEBOARD",
+        tool: "The Square",
+        sectionLabel: "Live Dispatch Ledger",
+      },
+      {
+        title: "The Mason and The Mainframe — Part II: The Working Tools Mapped to Reliability",
+        href: "/treatise",
+        code: "TREATISE-II",
+        tool: "The Square",
+        sectionLabel: "Canonical Monograph",
+      },
+    ],
     incidentMarkers: [
       {
         incidentId: "inc-1042",
@@ -368,7 +386,9 @@ Here is how to set your posture on the trestleboard for the coming week. First, 
     series: "weekly_rollup",
     title: "CAB Weekly Brief #41: Alert Fatigue in Clinical Workflows and Spreading the Trowel Across Port APIs",
     summary:
-      "Friday 5-minute systems retrospective covering October 3–9, 2026. Examining cognitive error budgets under The 24-Inch Gauge and how unilateral API schema cutovers fracture institutional trust.",
+      "Weekly systems retrospective covering October 3–9, 2026. Examining cognitive error budgets under The 24-Inch Gauge and how unilateral API schema cutovers fracture institutional trust.",
+    extendedNotes:
+      "Weekly systems retrospective covering October 3–9, 2026. Examining cognitive error budgets under The 24-Inch Gauge and how unilateral API schema cutovers fracture institutional trust.\n\nKey Takeaways:\n• Why adding 114 modal interrupts per clinical shift exhausts cognitive error budgets and trains operators to auto-dismiss alerts.\n• How unversioned JSON schema validators turn minor optional fields into physical port throughput halts.\n• Applying The 24-Inch Gauge and The Trowel to alerting queues and external partner interface contracts.",
     publishedAt: "2026-10-09T12:00:00Z",
     durationSeconds: 292,
     durationFormatted: "04:52",
@@ -377,6 +397,22 @@ Here is how to set your posture on the trestleboard for the coming week. First, 
     dominantTool: "24-Inch Gauge",
     dominantToolPercentage: 39,
     dominantFailureMode: "Alert Fatigue & Signal Loss",
+    sourcePages: [
+      {
+        title: "The Trestleboard — Live Incident Ledger & Weekly Dispatches",
+        href: "/",
+        code: "TRESTLEBOARD",
+        tool: "24-Inch Gauge",
+        sectionLabel: "Live Dispatch Ledger",
+      },
+      {
+        title: "The Mason and The Mainframe — Part II: The Working Tools Mapped to Reliability",
+        href: "/treatise",
+        code: "TREATISE-II",
+        tool: "24-Inch Gauge",
+        sectionLabel: "Canonical Monograph",
+      },
+    ],
     incidentMarkers: [
       {
         incidentId: "inc-1039",
@@ -416,16 +452,35 @@ Going into next week, apply The 24-Inch Gauge to every interruptive rule in your
     slug: "legacy-cab-012-blameless-postmortems-and-the-rough-ashlar",
     episodeNumber: 12,
     series: "legacy_archive",
-    title: "Legacy Archive #12: Blameless Post-Mortems, The Rough Ashlar, and Why Firing the Operator Guarantees a Repeat Outage",
+    title: "The CAB Call #12: Blameless Post-Mortems, The Rough Ashlar, and Why Firing the Operator Guarantees a Repeat Outage",
     summary:
-      "Original full-length Change Advisory Board deep-dive episode from the pre-automation archive. Exploring the historical origins of blameless aviation and SRE post-mortems alongside the operative use of The Common Gavel.",
+      "Conversational deep-dive exploring the historical origins of blameless aviation and SRE post-mortems alongside the operative use of The Common Gavel.",
+    extendedNotes:
+      "Conversational deep-dive exploring the historical origins of blameless aviation and SRE post-mortems alongside the operative use of The Common Gavel.\n\nKey Takeaways:\n• Why human error is a symptom of compromised guardrails rather than the root cause of complex system outages.\n• How the Common Gavel chips away defensive posturing so true institutional geometry can be inspected.",
     publishedAt: "2025-04-18T14:00:00Z",
     durationSeconds: 1640,
     durationFormatted: "27:20",
     fileSizeBytes: 26240000,
     audioUrl: "/audio/cab-episode-012-rough-ashlar.mp3",
+    artworkUrl: "/media/legacy-cab-012.png",
     dominantTool: "Common Gavel",
     dominantFailureMode: "Blame Culture vs. Root-Cause Isolation",
+    sourcePages: [
+      {
+        title: "The Mason and The Mainframe — Canonical Monograph & Working Tools Reference",
+        href: "/treatise",
+        code: "MONOGRAPH-01",
+        tool: "Common Gavel",
+        sectionLabel: "Canonical Monograph",
+      },
+      {
+        title: "Dual-Loop Telemetry & Blameless Governance Architecture",
+        href: "/architecture",
+        code: "ARCH-SPEC",
+        tool: "Common Gavel",
+        sectionLabel: "System Architecture",
+      },
+    ],
     incidentMarkers: [
       {
         incidentId: "inc-1040",
@@ -449,16 +504,35 @@ In the lodge, we speak of the Rough Ashlar and the Common Gavel. We do not strik
     slug: "legacy-cab-011-error-budgets-and-the-twenty-four-inch-gauge",
     episodeNumber: 11,
     series: "legacy_archive",
-    title: "Legacy Archive #11: Error Budgets, Toil Caps, and the Twenty-Four-Inch Gauge in Civic Life",
+    title: "The CAB Call #11: Error Budgets, Toil Caps, and the Twenty-Four-Inch Gauge in Civic Life",
     summary:
-      "Original Change Advisory Board archive episode examining how SRE error budgets quantify the tension between innovation velocity and stability, and how citizens can apply the 24-Inch Gauge to modern media consumption.",
+      "Foundational essay examining how SRE error budgets quantify the tension between innovation velocity and stability, and how citizens can apply the 24-Inch Gauge to modern media consumption.",
+    extendedNotes:
+      "Foundational essay examining how SRE error budgets quantify the tension between innovation velocity and stability, and how citizens can apply the 24-Inch Gauge to modern media consumption.\n\nKey Takeaways:\n• Formalizing the 50% toil cap to protect engineering bandwidth from repetitive firefighting.\n• Applying the 24-Inch Gauge to throttle high-severity media interrupts in civic life.",
     publishedAt: "2025-03-28T14:00:00Z",
     durationSeconds: 1515,
     durationFormatted: "25:15",
     fileSizeBytes: 24240000,
     audioUrl: "/audio/cab-episode-011-error-budgets.mp3",
+    artworkUrl: "/media/legacy-cab-011.png",
     dominantTool: "24-Inch Gauge",
     dominantFailureMode: "Alert Fatigue & Signal Loss",
+    sourcePages: [
+      {
+        title: "The Mason and The Mainframe — Canonical Monograph & Working Tools Reference",
+        href: "/treatise",
+        code: "MONOGRAPH-01",
+        tool: "24-Inch Gauge",
+        sectionLabel: "Canonical Monograph",
+      },
+      {
+        title: "Dual-Loop Telemetry & Blameless Governance Architecture",
+        href: "/architecture",
+        code: "ARCH-SPEC",
+        tool: "24-Inch Gauge",
+        sectionLabel: "System Architecture",
+      },
+    ],
     incidentMarkers: [
       {
         incidentId: "inc-1039",
@@ -480,16 +554,35 @@ Now apply the 24-Inch Gauge to how we consume civic news. The modern outrage mac
     slug: "legacy-cab-010-slas-slos-and-trying-the-plumb",
     episodeNumber: 10,
     series: "legacy_archive",
-    title: "Legacy Archive #10: SLAs, SLOs, SLIs, and Trying the Wall by The Plumb",
+    title: "The CAB Call #10: SLAs, SLOs, SLIs, and Trying the Wall by The Plumb",
     summary:
-      "Original Change Advisory Board archive episode dissecting the difference between external promises (SLAs), internal objectives (SLOs), and actual measurements (SLIs)—and why The Plumb never bends to quarterly politics.",
+      "Foundational essay dissecting the difference between external promises (SLAs), internal objectives (SLOs), and actual measurements (SLIs)—and why The Plumb never bends to quarterly politics.",
+    extendedNotes:
+      "Foundational essay dissecting the difference between external promises (SLAs), internal objectives (SLOs), and actual measurements (SLIs)—and why The Plumb never bends to quarterly politics.\n\nKey Takeaways:\n• Distinguishing external Service Level Agreements from unvarnished Service Level Indicators.\n• Why The Plumb exposes structural lean regardless of organizational narratives.",
     publishedAt: "2025-03-07T14:00:00Z",
     durationSeconds: 1710,
     durationFormatted: "28:30",
     fileSizeBytes: 27360000,
     audioUrl: "/audio/cab-episode-010-trying-the-plumb.mp3",
+    artworkUrl: "/media/legacy-cab-010.png",
     dominantTool: "The Plumb",
     dominantFailureMode: "Single Point of Failure (SPOF) / Untested Failover",
+    sourcePages: [
+      {
+        title: "The Mason and The Mainframe — Canonical Monograph & Working Tools Reference",
+        href: "/treatise",
+        code: "MONOGRAPH-01",
+        tool: "The Plumb",
+        sectionLabel: "Canonical Monograph",
+      },
+      {
+        title: "Dual-Loop Telemetry & Blameless Governance Architecture",
+        href: "/architecture",
+        code: "ARCH-SPEC",
+        tool: "The Plumb",
+        sectionLabel: "System Architecture",
+      },
+    ],
     incidentMarkers: [
       {
         incidentId: "inc-1041",

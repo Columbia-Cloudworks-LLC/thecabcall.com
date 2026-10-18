@@ -99,6 +99,22 @@ export interface EpisodeTranscriptSections {
   forwardPosture: string; // 3:30 - 5:00 (~220 words)
 }
 
+export interface EpisodeExternalSource {
+  title: string;
+  url?: string;
+  author?: string;
+  publicationDate?: string;
+  sourceType?: string;
+}
+
+export interface EpisodeSourcePage {
+  title: string;
+  href: string;
+  code?: string;
+  tool?: WorkingToolId;
+  sectionLabel?: string;
+}
+
 export interface PodcastEpisode {
   id: string;
   slug: string;
@@ -106,6 +122,7 @@ export interface PodcastEpisode {
   series: "weekly_rollup" | "legacy_archive";
   title: string;
   summary: string;
+  extendedNotes?: string;
   transcript: string;
   transcriptSections?: EpisodeTranscriptSections;
   audioUrl: string;
@@ -120,6 +137,8 @@ export interface PodcastEpisode {
   dominantToolPercentage?: number;
   dominantFailureMode: SreFailureModeId;
   incidentMarkers: EpisodeIncidentMarker[];
+  externalSources?: EpisodeExternalSource[];
+  sourcePages?: EpisodeSourcePage[];
 }
 
 export interface PipelineRunRecord {

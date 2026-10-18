@@ -738,3 +738,60 @@ export function ToolRadarChart({
     </svg>
   );
 }
+
+/**
+ * Canonical Episode Artwork Emblem tile for weekly rollup episodes and image load fallback (Issue #37).
+ * Renders a square lodge-room obsidian tile with burnished brass double-rule border, corner ticks,
+ * centered Working Tool copperplate engraving, and subtle `EP. #XX` brass monospace badge.
+ */
+export function EpisodeArtworkEmblem({
+  episodeNumber,
+  tool,
+  series = "weekly_rollup",
+  className = "w-full h-full",
+}: {
+  episodeNumber: number;
+  tool?: WorkingToolId;
+  series?: "weekly_rollup" | "legacy_archive";
+  className?: string;
+}) {
+  const paddedEp = String(episodeNumber).padStart(2, "0");
+
+  return (
+    <div
+      className={`relative flex flex-col items-center justify-between bg-[#0B0E14] p-2 select-none overflow-hidden ${className}`}
+      aria-label={`Episode #${episodeNumber} Copperplate Emblem`}
+    >
+      {/* Inner double-rule brass frame */}
+      <div className="pointer-events-none absolute inset-1.5 border border-[#8A6D3B]/45" />
+      {/* Corner brass ticks */}
+      <span className="pointer-events-none absolute top-1 left-1 w-2 h-2 border-t border-l border-[#C5A059]" />
+      <span className="pointer-events-none absolute top-1 right-1 w-2 h-2 border-t border-r border-[#C5A059]" />
+      <span className="pointer-events-none absolute bottom-1 left-1 w-2 h-2 border-b border-l border-[#C5A059]" />
+      <span className="pointer-events-none absolute bottom-1 right-1 w-2 h-2 border-b border-r border-[#C5A059]" />
+
+      {/* Top micro header */}
+      <span className="relative z-10 font-mono text-[8px] uppercase tracking-[0.18em] text-[#8A6D3B] pt-0.5">
+        {series === "weekly_rollup" ? "CAB LEDGER" : "THE CAB CALL"}
+      </span>
+
+      {/* Centered Copperplate Engraving */}
+      <div className="relative z-10 flex items-center justify-center my-auto w-16 h-12 sm:w-20 sm:h-14">
+        {tool ? (
+          <WorkingToolEngraving
+            tool={tool}
+            className="w-full h-full opacity-95"
+          />
+        ) : (
+          <SquareAndCompassesCrest className="w-11 h-11 opacity-95" />
+        )}
+      </div>
+
+      {/* Bottom EP. #XX brass monospace badge */}
+      <span className="relative z-10 font-mono text-[9px] font-semibold uppercase tracking-widest text-[#C5A059] bg-[#131822]/90 border border-[#8A6D3B]/50 px-1.5 py-0.5 leading-none">
+        EP. #{paddedEp}
+      </span>
+    </div>
+  );
+}
+

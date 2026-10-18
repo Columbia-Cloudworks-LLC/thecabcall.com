@@ -49,6 +49,7 @@ function buildAdminHeaders(actor?: EpisodeAdminActor): Record<string, string> {
 export function invalidateEpisodePublicCaches(): void {
   try {
     revalidatePath("/archive");
+    revalidatePath("/podcast");
     revalidatePath("/feed.xml");
     revalidatePath("/");
     revalidatePath("/admin/episodes");
@@ -249,7 +250,7 @@ export async function generateAdminEpisodeBridge(
 }
 
 /**
- * Updates an existing episode (title, summary, 3-part transcript, episode_number, published_at,
+ * Updates an existing episode (title, summary, extended_notes, sources_json, 3-part transcript, episode_number, published_at,
  * and optional R2 audio re-synthesis), logs `episode.update` in `audit_ledger`, and invalidates caches.
  */
 export async function updateAdminEpisodeBridge(
@@ -257,6 +258,9 @@ export async function updateAdminEpisodeBridge(
   input: {
     title?: string;
     summary?: string;
+    extendedNotes?: string;
+    externalSources?: import("./types").EpisodeExternalSource[];
+    sourcePages?: import("./types").EpisodeSourcePage[];
     transcript?: string;
     transcriptSections?: {
       weeklyTelemetry?: string;

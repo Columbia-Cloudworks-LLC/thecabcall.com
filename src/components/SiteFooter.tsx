@@ -110,7 +110,7 @@ export function SiteFooter() {
                 </a>
               </li>
               <li className="pt-2 font-serif text-[#94A3B8]/85 leading-relaxed">
-                Crafted in Deep Obsidian &amp; Burnished Brass with authentic 18th-century copperplate vector engravings of the Working Tools (strictly zero AI-generated art).
+                Crafted in Deep Obsidian &amp; Burnished Brass with 18th-century copperplate vector engravings of the Working Tools. Audio synthesis, conversational voices, and episode artwork across The CAB Call Podcast are generated with AI assistance (Google NotebookLM &amp; Google Gemini) from human-curated Trestleboard dispatches and research dossiers.
               </li>
             </ul>
           </div>

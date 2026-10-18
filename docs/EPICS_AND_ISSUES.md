@@ -632,32 +632,33 @@
 # Epic #33: Podcast Archive Unification & Episode Description Data Cleanup (Issues #34 – #38)
 
 - **GitHub Epic:** [#33](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/33)
-- **Status:** `[ ] Pending`
-- **Objective:** Unify the Podcast Archive (`/archive` and `/podcast`) around our core two-host NotebookLM conversational deep-dive workflow fed by live `thecabcall.com` pages and ledger briefs, eliminate the deprecating `"Legacy"` vs. `"5-Minute Brief"` split, sanitize raw Markdown/tables/URLs out of historical Episode #1–#21 descriptions into structured source records, deduplicate AI generation disclaimers, standardize left-aligned square artwork thumbnails (with engraved SVG fallback emblems), and adapt the expandable drawer into a cohesive **"Show Notes & Source Pages"** + Transcript viewer.
+- **Status:** `[x] Completed`
+- **Objective:** Unify the Podcast Archive (`/archive` and `/podcast`) around our core two-host NotebookLM conversational deep-dive workflow fed by live `thecabcall.com` pages and ledger briefs, eliminate the deprecating `"Legacy"` vs. `"5-Minute Brief"` split, sanitize raw Markdown/tables/URLs out of historical Episode #1–#21 descriptions into structured source records, deduplicate AI generation disclaimers, standardize left-aligned square artwork thumbnails (with engraved SVG fallback emblems), and adapt the expandable drawer into a cohesive **"Episode Guide & Transcript"** viewer.
 
 ### Issue #34 (Sub-Issue 1): Simplify Podcast Page Masthead & Replace "Legacy / 5m Brief" Filter Tabs
 - **GitHub Issue:** [#34](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/34)
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Target Files:** `src/components/PodcastArchiveClient.tsx`, `src/app/archive/page.tsx`, `src/lib/navigation.ts`, `next.config.ts`, `src/app/feed.xml/route.ts`
 
 ### Issue #35 (Sub-Issue 2): Sanitize Episode #1–#21 Descriptions (Strip Raw Markdown, Tables, and Inline URLs)
 - **GitHub Issue:** [#35](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/35)
-- **Status:** `[ ] Pending`
-- **Target Files:** `scripts/import-legacy-episodes.ts`, `src/lib/d1-bridge.ts`, `src/lib/dto.ts`, `src/lib/types.ts`, `src/lib/seed-data.ts`, `src/components/PodcastArchiveClient.tsx`, `migrations/`
+- **Status:** `[x] Completed`
+- **Target Files:** `scripts/import-legacy-episodes.ts`, `src/lib/episode-metadata.ts`, `src/lib/d1-bridge.ts`, `src/lib/dto.ts`, `src/lib/types.ts`, `src/lib/seed-data.ts`, `src/components/PodcastArchiveClient.tsx`, `migrations/0008_podcast_archive_unification_and_cleanup.sql`
 
 ### Issue #36 (Sub-Issue 3): Deduplicate AI Generation Disclaimers Across Episode Cards
 - **GitHub Issue:** [#36](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/36)
-- **Status:** `[ ] Pending`
-- **Target Files:** `src/components/PodcastArchiveClient.tsx`, `scripts/import-legacy-episodes.ts`, `src/lib/d1-bridge.ts`, `src/components/SiteFooter.tsx`, `src/app/feed.xml/route.ts`
+- **Status:** `[x] Completed`
+- **Target Files:** `src/components/PodcastArchiveClient.tsx`, `scripts/import-legacy-episodes.ts`, `src/lib/episode-metadata.ts`, `src/lib/d1-bridge.ts`, `src/components/SiteFooter.tsx`, `src/app/feed.xml/route.ts`
 
 ### Issue #37 (Sub-Issue 4): Unify Episode Card Layout & Artwork Thumbnails
 - **GitHub Issue:** [#37](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/37)
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Target Files:** `src/components/PodcastArchiveClient.tsx`, `src/components/MasonicEngravings.tsx`
 
 ### Issue #38 (Sub-Issue 5): Adapt the Expandable "Read Script" Drawer for NotebookLM Episodes
 - **GitHub Issue:** [#38](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/38)
-- **Status:** `[ ] Pending`
-- **Target Files:** `src/components/PodcastArchiveClient.tsx`, `src/lib/types.ts`, `src/lib/dto.ts`, `src/lib/d1-bridge.ts`, `src/components/AdminEpisodesClient.tsx`
+- **Status:** `[x] Completed`
+- **Target Files:** `src/components/PodcastArchiveClient.tsx`, `src/lib/episode-metadata.ts`, `src/lib/types.ts`, `src/lib/dto.ts`, `src/lib/d1-bridge.ts`, `src/components/AdminEpisodesClient.tsx`
+
 
 

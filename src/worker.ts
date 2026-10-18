@@ -86,11 +86,19 @@ import {
   PublicIncidentDto,
 } from "./lib/dto";
 import {
+  buildCleanExtendedNotes,
+  buildDefaultSourcePagesForEpisode,
+  extractExternalSourcesFromText,
+  sanitizeEpisodeSummaryDefensive,
+  stripAiDisclaimers,
+} from "./lib/episode-metadata";
+import {
   buildOrSanitizeArticleDiagnostics,
   normalizeStoredQuestionsPayload,
   validateAndNormalizeIncidentSummary,
 } from "./lib/sanitize";
 import { DomainSectorId, SreFailureModeId, WorkingToolId } from "./lib/taxonomy";
+import { EpisodeExternalSource, EpisodeSourcePage } from "./lib/types";
 
 export interface WorkerEnv {
   DB: D1DatabaseLike;
@@ -347,16 +355,62 @@ function mapWorkerRowToPublicEpisodeDto(
     row.title.toLowerCase().includes("legacy archive") ||
     row.title.toLowerCase().startsWith("the cab call #") ||
     episodeNumber <= 30;
-  const rawTranscript = row.transcript || row.summary || "";
+  const series: "weekly_rollup" | "legacy_archive" = isLegacy
+    ? "legacy_archive"
+    : "weekly_rollup";
+  const rawTranscript = stripAiDisclaimers(row.transcript || row.summary || "");
   const parsedSections = parseEpisodeTranscriptSections(rawTranscript);
+
+  const cleanSummary = sanitizeEpisodeSummaryDefensive(row.summary);
+  const extendedNotes =
+    row.extended_notes && row.extended_notes.trim()
+      ? stripAiDisclaimers(row.extended_notes).trim()
+      : buildCleanExtendedNotes(row.summary) || cleanSummary;
+
+  let externalSources: EpisodeExternalSource[] = [];
+  if (row.sources_json && row.sources_json.trim()) {
+    try {
+      const parsed = JSON.parse(row.sources_json);
+      if (Array.isArray(parsed)) {
+        externalSources = parsed;
+      }
+    } catch {
+      externalSources = extractExternalSourcesFromText(row.summary, row.title);
+    }
+  } else {
+    externalSources = extractExternalSourcesFromText(row.summary, row.title);
+  }
+
+  let sourcePages: EpisodeSourcePage[] = [];
+  if (row.source_pages_json && row.source_pages_json.trim()) {
+    try {
+      const parsed = JSON.parse(row.source_pages_json);
+      if (Array.isArray(parsed)) {
+        sourcePages = parsed;
+      }
+    } catch {
+      sourcePages = buildDefaultSourcePagesForEpisode(
+        episodeNumber,
+        dominantTool,
+        series
+      );
+    }
+  } else {
+    sourcePages = buildDefaultSourcePagesForEpisode(
+      episodeNumber,
+      dominantTool,
+      series
+    );
+  }
 
   return projectPublicEpisodeDto({
     id: `d1-ep-${row.id}`,
     slug: row.slug,
     episodeNumber,
-    series: isLegacy ? "legacy_archive" : "weekly_rollup",
+    series,
     title: row.title,
-    summary: row.summary,
+    summary: cleanSummary,
+    extendedNotes,
     transcript: rawTranscript,
     transcriptSections:
       parsedSections.weeklyTelemetry && parsedSections.separatingSignalFromPanic
@@ -365,8 +419,7 @@ function mapWorkerRowToPublicEpisodeDto(
     audioUrl: row.audio_url,
     artworkUrl: row.artwork_url || undefined,
     artworkWidescreenUrl: row.artwork_widescreen_url || undefined,
-    aiDisclaimer:
-      row.ai_disclaimer || (isLegacy ? DEFAULT_GEMINI_AI_DISCLAIMER : undefined),
+    aiDisclaimer: row.ai_disclaimer || undefined,
     durationSeconds,
     durationFormatted: `${mins}:${secs}`,
     fileSizeBytes: Number(row.file_size_bytes || 0),
@@ -384,6 +437,8 @@ function mapWorkerRowToPublicEpisodeDto(
           timecodeLabel: idx === 0 ? "00:35" : idx === 1 ? "01:55" : "03:30",
           toolApplied: inc.primaryTool,
         })),
+    externalSources,
+    sourcePages,
   });
 }
 
@@ -2819,6 +2874,9 @@ const worker = {
             slug?: string;
             title?: string;
             summary?: string;
+            extendedNotes?: string;
+            externalSources?: EpisodeExternalSource[];
+            sourcePages?: EpisodeSourcePage[];
             transcript?: string;
             transcriptSections?: {
               weeklyTelemetry?: string;
@@ -2863,6 +2921,9 @@ const worker = {
             input: {
               title: body.title,
               summary: body.summary,
+              extendedNotes: body.extendedNotes,
+              externalSources: body.externalSources,
+              sourcePages: body.sourcePages,
               transcript: body.transcript,
               transcriptSections: body.transcriptSections,
               episodeNumber: body.episodeNumber,

@@ -116,6 +116,8 @@ export function AdminEpisodesClient({
     useState<AdminEpisodeRecord | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editSummary, setEditSummary] = useState("");
+  const [editExtendedNotes, setEditExtendedNotes] = useState("");
+  const [editExternalSourcesJson, setEditExternalSourcesJson] = useState("[]");
   const [editEpisodeNumber, setEditEpisodeNumber] = useState<number>(43);
   const [editPublishedAt, setEditPublishedAt] = useState("");
   const [editMode, setEditMode] = useState<"sections" | "raw">("sections");
@@ -312,6 +314,10 @@ export function AdminEpisodesClient({
     setEditingEpisode(ep);
     setEditTitle(ep.title);
     setEditSummary(ep.summary);
+    setEditExtendedNotes(ep.extendedNotes || "");
+    setEditExternalSourcesJson(
+      JSON.stringify(ep.externalSources || [], null, 2)
+    );
     setEditEpisodeNumber(ep.episodeNumber);
     setEditPublishedAt(ep.publishedAt);
     const hasThreeParts = Boolean(
@@ -338,9 +344,23 @@ export function AdminEpisodesClient({
     const ttsSpec = TTS_VOICE_OPTIONS[editTtsIdx] || TTS_VOICE_OPTIONS[0];
 
     try {
+      let parsedExternalSources = editingEpisode.externalSources || [];
+      if (editExternalSourcesJson.trim()) {
+        try {
+          const parsed = JSON.parse(editExternalSourcesJson);
+          if (Array.isArray(parsed)) {
+            parsedExternalSources = parsed;
+          }
+        } catch {
+          // keep previous if invalid JSON
+        }
+      }
+
       const payload: Record<string, unknown> = {
         title: editTitle.trim(),
         summary: editSummary.trim(),
+        extendedNotes: editExtendedNotes.trim() || null,
+        externalSources: parsedExternalSources,
         episodeNumber: editEpisodeNumber,
         publishedAt: editPublishedAt.trim(),
         regenerateAudio: editRegenerateAudio,
@@ -647,7 +667,7 @@ export function AdminEpisodesClient({
 
           <div className="bg-[#0B0E14] border border-[#1E2738] rounded p-3.5">
             <div className="font-mono text-[11px] uppercase text-[#8E9BAE]">
-              Friday 5-Min Rollups
+              Weekly Ledger Roundups
             </div>
             <div className="text-2xl font-bold font-mono text-[#C5A059] mt-1">
               {weeklyRollupCount}
@@ -659,7 +679,7 @@ export function AdminEpisodesClient({
 
           <div className="bg-[#0B0E14] border border-[#1E2738] rounded p-3.5">
             <div className="font-mono text-[11px] uppercase text-[#8E9BAE]">
-              Legacy Archive Episodes
+              Foundational Essays
             </div>
             <div className="text-2xl font-bold font-mono text-sky-400 mt-1">
               {legacyArchiveCount}
@@ -942,7 +962,7 @@ export function AdminEpisodesClient({
                   type="text"
                   value={genReason}
                   onChange={(e) => setGenReason(e.target.value)}
-                  placeholder="e.g., Generated Friday 5-Minute CAB Weekly Brief rollup for publication"
+                  placeholder="e.g., Generated Friday Weekly Ledger Roundup for publication"
                   className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
                 />
               </div>
@@ -984,7 +1004,7 @@ export function AdminEpisodesClient({
                 : "bg-[#0B0E14] text-[#9CA3AF] border-[#263147] hover:text-[#F3EFE6]"
             }`}
           >
-            Weekly 5-Min Rollups ({weeklyRollupCount})
+            Weekly Ledger Roundups ({weeklyRollupCount})
           </button>
           <button
             type="button"
@@ -995,7 +1015,7 @@ export function AdminEpisodesClient({
                 : "bg-[#0B0E14] text-[#9CA3AF] border-[#263147] hover:text-[#F3EFE6]"
             }`}
           >
-            Legacy Archive ({legacyArchiveCount})
+            Foundational Essays ({legacyArchiveCount})
           </button>
         </div>
 
@@ -1052,8 +1072,8 @@ export function AdminEpisodesClient({
                         }`}
                       >
                         {ep.series === "weekly_rollup"
-                          ? "5-Min Weekly Brief"
-                          : "Legacy Deep-Dive"}
+                          ? "Weekly Ledger"
+                          : "Foundational Essay"}
                       </span>
                       <span className="text-[#8E9BAE]">
                         D1 ID: <code className="text-[#D6D1C7]">{ep.id}</code>
@@ -1299,7 +1319,7 @@ export function AdminEpisodesClient({
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="md:col-span-2">
                   <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
-                    Show Notes Summary
+                    Show Notes Summary (2–3 Sentence Hook)
                   </label>
                   <textarea
                     rows={2}
@@ -1323,6 +1343,36 @@ export function AdminEpisodesClient({
                   <div className="text-[10px] font-mono text-[#8E9BAE] mt-1">
                     R2 Key: <code className="text-[#C5A059]">{editingEpisode.r2Key}</code>
                   </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
+                    Extended Show Notes &amp; Episode Guide{" "}
+                    <span className="text-[#8E9BAE]">(optional)</span>
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={editExtendedNotes}
+                    onChange={(e) => setEditExtendedNotes(e.target.value)}
+                    placeholder="Detailed prose paragraphs or bullet points shown inside the Episode Guide & Transcript drawer..."
+                    className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-mono text-xs text-[#D6D1C7] mb-1">
+                    External Sources &amp; Further Reading (JSON){" "}
+                    <span className="text-[#8E9BAE]">(optional)</span>
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={editExternalSourcesJson}
+                    onChange={(e) => setEditExternalSourcesJson(e.target.value)}
+                    placeholder='[{"label":"Source Title","url":"https://...","domain":"example.com"}]'
+                    className="w-full bg-[#0B0E14] border border-[#263147] rounded px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                  />
                 </div>
               </div>
 

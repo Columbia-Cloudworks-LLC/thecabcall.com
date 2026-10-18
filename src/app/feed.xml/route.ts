@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import {
+  CANONICAL_PODCAST_AI_COLOPHON,
+  sanitizeEpisodeSummaryDefensive,
+  stripAiDisclaimers,
+} from "@/lib/episode-metadata";
 import { ensureD1Snapshot, getAllEpisodes } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -32,27 +37,25 @@ export async function GET() {
           ? ep.artworkUrl
           : `${siteUrl}${ep.artworkUrl.startsWith("/") ? "" : "/"}${ep.artworkUrl}`
         : null;
-      const disclaimerSuffix = ep.aiDisclaimer ? `\n\n${ep.aiDisclaimer}` : "";
-      const descriptionWithDisclaimer = ep.summary.includes("Google Gemini")
-        ? ep.summary
-        : `${ep.summary}${disclaimerSuffix}`;
+      const cleanSummary = sanitizeEpisodeSummaryDefensive(ep.summary);
+      const cleanExtended = ep.extendedNotes
+        ? stripAiDisclaimers(ep.extendedNotes)
+        : cleanSummary;
+      const cleanTranscript = stripAiDisclaimers(ep.transcript);
       const artworkXml = artworkHref
         ? `\n      <itunes:image href="${escapeXml(artworkHref)}" />`
-        : "";
-      const disclaimerHtml = ep.aiDisclaimer
-        ? `<p><em>${escapeXml(ep.aiDisclaimer)}</em></p>`
         : "";
       return `    <item>
       <title>${escapeXml(ep.title)}</title>
       <link>${episodeUrl}</link>
       <guid isPermaLink="false">${escapeXml(ep.id)}</guid>
       <pubDate>${pubDate}</pubDate>
-      <description>${escapeXml(descriptionWithDisclaimer)}</description>
-      <content:encoded><![CDATA[<p>${ep.summary}</p>${disclaimerHtml}<pre>${ep.transcript}</pre>]]></content:encoded>
+      <description>${escapeXml(cleanSummary)}</description>
+      <content:encoded><![CDATA[<p>${cleanExtended}</p><pre>${cleanTranscript}</pre>]]></content:encoded>
       <enclosure url="${escapeXml(enclosureUrl)}" length="${ep.fileSizeBytes}" type="${enclosureMime}" />${artworkXml}
       <itunes:episode>${ep.episodeNumber}</itunes:episode>
       <itunes:duration>${ep.durationSeconds}</itunes:duration>
-      <itunes:summary>${escapeXml(descriptionWithDisclaimer)}</itunes:summary>
+      <itunes:summary>${escapeXml(cleanSummary)}</itunes:summary>
       <itunes:explicit>false</itunes:explicit>
     </item>`;
     })
@@ -70,7 +73,7 @@ export async function GET() {
     <language>en-us</language>
     <copyright>© ${new Date().getFullYear()} Change Advisory Board (thecabcall.com)</copyright>
     <itunes:author>Change Advisory Board</itunes:author>
-    <description>Post-Incident Reviews for current events analyzed through the lens of Site Reliability Engineering and the Working Tools of Freemasonry. Includes 5-minute Friday CAB Weekly Brief telemetry rollups and the Legacy Deep-Dive Archive.</description>
+    <description>Conversational deep-dives analyzing live Trestleboard ledger dispatches alongside foundational essays on Site Reliability Engineering and the Working Tools of Freemasonry. ${escapeXml(CANONICAL_PODCAST_AI_COLOPHON)}</description>
     <itunes:type>episodic</itunes:type>
     <itunes:owner>
       <itunes:name>Change Advisory Board</itunes:name>

@@ -17,7 +17,13 @@ import {
   WorkingToolId,
 } from "./taxonomy";
 import {
+  sanitizeEpisodeSummaryDefensive,
+  stripAiDisclaimers,
+} from "./episode-metadata";
+import {
+  EpisodeExternalSource,
   EpisodeIncidentMarker,
+  EpisodeSourcePage,
   EpisodeTranscriptSections,
   IncidentArticle,
   PodcastEpisode,
@@ -81,6 +87,7 @@ export interface PublicEpisodeDto {
   series: "weekly_rollup" | "legacy_archive";
   title: string;
   summary: string;
+  extendedNotes?: string;
   transcript: string;
   transcriptSections?: EpisodeTranscriptSections;
   audioUrl: string;
@@ -94,6 +101,8 @@ export interface PublicEpisodeDto {
   dominantTool: WorkingToolId;
   dominantFailureMode: SreFailureModeId;
   incidentMarkers: EpisodeIncidentMarker[];
+  externalSources?: EpisodeExternalSource[];
+  sourcePages?: EpisodeSourcePage[];
 }
 
 export interface PublicSnapshotDto {
@@ -516,11 +525,13 @@ export function projectPublicEpisodeDto(
     episodeNumber: Number(mapped.episodeNumber || 42),
     series: mapped.series === "legacy_archive" ? "legacy_archive" : "weekly_rollup",
     title: sanitizeEditorialText(mapped.title),
-    summary: sanitizeEditorialText(mapped.summary),
-    transcript: stripRawFailureShortCodes(
-      (mapped.transcript || "")
-        .replace(/\bjev-1\.14\.0\b/gi, "")
-        .replace(/\s*\(\d+(?:\.\d+)?%\)/g, "")
+    summary: sanitizeEditorialText(sanitizeEpisodeSummaryDefensive(mapped.summary)),
+    transcript: stripAiDisclaimers(
+      stripRawFailureShortCodes(
+        (mapped.transcript || "")
+          .replace(/\bjev-1\.14\.0\b/gi, "")
+          .replace(/\s*\(\d+(?:\.\d+)?%\)/g, "")
+      )
     ).trim(),
     audioUrl: mapped.audioUrl.trim(),
     durationSeconds: Number(mapped.durationSeconds),
@@ -541,6 +552,16 @@ export function projectPublicEpisodeDto(
         }))
       : [],
   };
+
+  if (mapped.extendedNotes && mapped.extendedNotes.trim()) {
+    dto.extendedNotes = stripAiDisclaimers(mapped.extendedNotes).trim();
+  }
+  if (Array.isArray(mapped.externalSources) && mapped.externalSources.length > 0) {
+    dto.externalSources = mapped.externalSources;
+  }
+  if (Array.isArray(mapped.sourcePages) && mapped.sourcePages.length > 0) {
+    dto.sourcePages = mapped.sourcePages;
+  }
 
   if (mapped.artworkUrl && mapped.artworkUrl.trim()) {
     dto.artworkUrl = mapped.artworkUrl.trim();

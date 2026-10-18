@@ -8,6 +8,10 @@ const nextConfig: NextConfig = {
         source: "/feed/podcast.xml",
         destination: "/feed.xml",
       },
+      {
+        source: "/podcast",
+        destination: "/archive",
+      },
     ];
   },
 };

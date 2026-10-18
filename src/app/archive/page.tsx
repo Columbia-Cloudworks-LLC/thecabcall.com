@@ -6,7 +6,9 @@ import { PodcastArchiveClient } from "@/components/PodcastArchiveClient";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "The CAB Call Archive — 5-Minute Friday Rollups & Legacy Podcast Hub",
+  title: "The CAB Call Podcast — Conversational Deep-Dives & Archive",
+  description:
+    "Conversational deep-dives analyzing live Trestleboard ledger dispatches alongside foundational essays on Site Reliability Engineering and the Working Tools of Freemasonry.",
 };
 
 export default async function ArchivePage() {

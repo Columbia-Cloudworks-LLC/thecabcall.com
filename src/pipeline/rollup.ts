@@ -15,7 +15,15 @@ import {
   validateSynthesizedBriefOutput,
   WORKING_TOOL_DISPLAY_NAMES,
 } from "./synthesize";
+import {
+  buildCleanExtendedNotes,
+  buildDefaultSourcePagesForEpisode,
+  extractExternalSourcesFromText,
+  sanitizeEpisodeSummaryDefensive,
+  stripAiDisclaimers,
+} from "../lib/episode-metadata";
 import { validateAndNormalizeIncidentSummary } from "../lib/sanitize";
+import { EpisodeExternalSource, EpisodeSourcePage } from "../lib/types";
 
 export interface R2ObjectMetaLike {
   key: string;
@@ -239,6 +247,7 @@ export interface AdminEpisodeRecord {
   series: "weekly_rollup" | "legacy_archive";
   title: string;
   summary: string;
+  extendedNotes?: string;
   transcript: string;
   transcriptSections: {
     weeklyTelemetry: string;
@@ -249,6 +258,8 @@ export interface AdminEpisodeRecord {
   artworkUrl?: string;
   artworkWidescreenUrl?: string;
   aiDisclaimer?: string;
+  externalSources?: EpisodeExternalSource[];
+  sourcePages?: EpisodeSourcePage[];
   r2Key: string;
   durationSeconds: number;
   durationFormatted: string;
@@ -263,6 +274,9 @@ export interface D1EpisodeTableRow {
   slug: string;
   title: string;
   summary: string;
+  extended_notes?: string | null;
+  sources_json?: string | null;
+  source_pages_json?: string | null;
   transcript: string | null;
   audio_url: string;
   artwork_url?: string | null;
@@ -280,6 +294,9 @@ export const EPISODES_SELECT_COLUMNS = `
   slug,
   title,
   summary,
+  extended_notes,
+  sources_json,
+  source_pages_json,
   transcript,
   audio_url,
   artwork_url,
@@ -366,7 +383,7 @@ const BASELINE_ARCHIVE_EPISODES: Array<{
     title:
       "CAB Weekly Brief #42: Configuration Drift, Unpinned Certs, and Separated Signal",
     summary:
-      "Friday 5-minute systems retrospective covering October 10–16, 2026. The Square and Configuration Drift lead the Trestleboard across municipal water SCADA audits, regional banking TLS halts, and federal aviation routing outages.",
+      "Friday systems retrospective covering October 10–16, 2026. The Square and Configuration Drift lead the Trestleboard across municipal water SCADA audits, regional banking TLS halts, and federal aviation routing outages.",
     published_at: "2026-10-16T12:00:00Z",
     duration_seconds: 304,
     file_size_bytes: 4864000,
@@ -386,7 +403,7 @@ Here is how to set your posture on the trestleboard for the coming week. First, 
     title:
       "CAB Weekly Brief #41: Alert Fatigue in Clinical Workflows and Spreading the Trowel Across Port APIs",
     summary:
-      "Friday 5-minute systems retrospective covering October 3–9, 2026. Examining cognitive error budgets under the 24-Inch Gauge and how unilateral API schema cutovers fracture institutional trust.",
+      "Friday systems retrospective covering October 3–9, 2026. Examining cognitive error budgets under the 24-Inch Gauge and how unilateral API schema cutovers fracture institutional trust.",
     published_at: "2026-10-09T12:00:00Z",
     duration_seconds: 292,
     file_size_bytes: 4672000,
@@ -400,56 +417,6 @@ When the clinical informatics study (#CAB-2026-1039) showed physicians overridin
 [03:30 — THE FORWARD POSTURE / TOOLS ON THE TRESTLEBOARD]
 Going into next week, apply the 24-Inch Gauge to every interruptive rule in your governance and alerting queues: if an alert does not require immediate human action, delete or demote it so true Tier-1 warnings regain their weight. And where your systems meet external partners, use The Trowel—version your schemas, run dual-read windows, and never let a strict parser halt physical throughput when a dead-letter queue can preserve flow.`,
   },
-  {
-    episode_number: 12,
-    slug: "legacy-cab-012-blameless-postmortems-and-the-rough-ashlar",
-    title:
-      "Legacy Archive #12: Blameless Post-Mortems, The Rough Ashlar, and Why Firing the Operator Guarantees a Repeat Outage",
-    summary:
-      "Original full-length Change Advisory Board deep-dive episode from the pre-automation archive. Exploring the historical origins of blameless aviation and SRE post-mortems alongside the operative use of The Common Gavel.",
-    published_at: "2025-04-18T14:00:00Z",
-    duration_seconds: 1640,
-    file_size_bytes: 26240000,
-    audio_url: "/audio/cab-episode-012-rough-ashlar.mp3",
-    transcript: `[ARCHIVE TRANSCRIPT — EPISODE 12]
-Welcome to the Change Advisory Board. In today's deep dive, we examine why human institutions default to scapegoating during high-visibility outages, and how both Site Reliability Engineering and the Masonic tradition offer a more durable path.
-
-When an outage hits the front page, the first impulse of an unexamined hierarchy is to find the last human hand that touched the control plane and sever it. It feels decisive. It gives the board or the committee a clean headline before the weekend. Yet in distributed systems engineering, we learned decades ago that human error is never the root cause—it is the symptom of a system whose guardrails, affordances, and error budgets were already compromised.
-
-In the lodge, we speak of the Rough Ashlar and the Common Gavel. We do not strike the stone to destroy it; we chip away the superfluous projections—fear, vanity, defensive posturing—so the true geometry underneath can be measured and squared...`,
-  },
-  {
-    episode_number: 11,
-    slug: "legacy-cab-011-error-budgets-and-the-twenty-four-inch-gauge",
-    title:
-      "Legacy Archive #11: Error Budgets, Toil Caps, and the Twenty-Four-Inch Gauge in Civic Life",
-    summary:
-      "Original Change Advisory Board archive episode examining how SRE error budgets quantify the tension between innovation velocity and stability, and how citizens can apply the 24-Inch Gauge to modern media consumption.",
-    published_at: "2025-03-28T14:00:00Z",
-    duration_seconds: 1515,
-    file_size_bytes: 24240000,
-    audio_url: "/audio/cab-episode-011-error-budgets.mp3",
-    transcript: `[ARCHIVE TRANSCRIPT — EPISODE 11]
-Every system has a finite capacity for change before its reliability degrades, and every human mind has a finite capacity for interrupts before its judgment degrades. In Site Reliability Engineering, we formalize this through the Error Budget and the 50% toil cap: if an on-call team spends more than half its hours extinguishing repetitive fires, feature deployments freeze until engineering bandwidth is reinvested in automation and root-cause remediation.
-
-Now apply the 24-Inch Gauge to how we consume civic news. The modern outrage machine is an unthrottled pager that pages at P0 severity every twelve minutes...`,
-  },
-  {
-    episode_number: 10,
-    slug: "legacy-cab-010-slas-slos-and-trying-the-plumb",
-    title:
-      "Legacy Archive #10: SLAs, SLOs, SLIs, and Trying the Wall by The Plumb",
-    summary:
-      "Original Change Advisory Board archive episode dissecting the difference between external promises (SLAs), internal objectives (SLOs), and actual measurements (SLIs)—and why The Plumb never bends to quarterly politics.",
-    published_at: "2025-03-07T14:00:00Z",
-    duration_seconds: 1710,
-    file_size_bytes: 27360000,
-    audio_url: "/audio/cab-episode-010-trying-the-plumb.mp3",
-    transcript: `[ARCHIVE TRANSCRIPT — EPISODE 10]
-A plumb line works because gravity cannot be lobbied. You can repaint a leaning wall, you can issue a press release declaring the masonry vertical, or you can redefine 'upright' in a committee memo—but the lead weight on the cord still points to the center of the earth.
-
-In systems engineering, Service Level Indicators (SLIs) are our plumb line. The danger begins when organizations confuse the indicator with the public relations narrative...`,
-  },
 ];
 
 export async function ensureEpisodesStatusColumn(db: D1DatabaseLike): Promise<void> {
@@ -458,6 +425,9 @@ export async function ensureEpisodesStatusColumn(db: D1DatabaseLike): Promise<vo
     "ALTER TABLE episodes ADD COLUMN artwork_url TEXT",
     "ALTER TABLE episodes ADD COLUMN artwork_widescreen_url TEXT",
     "ALTER TABLE episodes ADD COLUMN ai_disclaimer TEXT",
+    "ALTER TABLE episodes ADD COLUMN extended_notes TEXT",
+    "ALTER TABLE episodes ADD COLUMN sources_json TEXT",
+    "ALTER TABLE episodes ADD COLUMN source_pages_json TEXT",
   ];
   for (const stmt of alterStatements) {
     try {
@@ -774,29 +744,75 @@ export function mapD1RowToAdminEpisode(
   const secs = Math.floor(durationSeconds % 60)
     .toString()
     .padStart(2, "0");
-  const transcript = row.transcript || row.summary || "";
+  const transcript = stripAiDisclaimers(row.transcript || row.summary || "");
   const isLegacy =
     row.slug.startsWith("legacy-") ||
     row.slug.startsWith("the-cab-call-") ||
     row.title.toLowerCase().includes("legacy archive") ||
     row.title.toLowerCase().startsWith("the cab call #") ||
     episodeNumber <= 30;
+  const series: "weekly_rollup" | "legacy_archive" = isLegacy
+    ? "legacy_archive"
+    : "weekly_rollup";
+
+  const cleanSummary = sanitizeEpisodeSummaryDefensive(row.summary);
+  const extendedNotes =
+    row.extended_notes && row.extended_notes.trim()
+      ? stripAiDisclaimers(row.extended_notes).trim()
+      : buildCleanExtendedNotes(row.summary) || cleanSummary;
+
+  let externalSources: EpisodeExternalSource[] = [];
+  if (row.sources_json && row.sources_json.trim()) {
+    try {
+      const parsed = JSON.parse(row.sources_json);
+      if (Array.isArray(parsed)) {
+        externalSources = parsed;
+      }
+    } catch {
+      externalSources = extractExternalSourcesFromText(row.summary, row.title);
+    }
+  } else {
+    externalSources = extractExternalSourcesFromText(row.summary, row.title);
+  }
+
+  let sourcePages: EpisodeSourcePage[] = [];
+  if (row.source_pages_json && row.source_pages_json.trim()) {
+    try {
+      const parsed = JSON.parse(row.source_pages_json);
+      if (Array.isArray(parsed)) {
+        sourcePages = parsed;
+      }
+    } catch {
+      sourcePages = buildDefaultSourcePagesForEpisode(
+        episodeNumber,
+        "The Square",
+        series
+      );
+    }
+  } else {
+    sourcePages = buildDefaultSourcePagesForEpisode(
+      episodeNumber,
+      "The Square",
+      series
+    );
+  }
 
   return {
     id: Number(row.id),
     episodeNumber,
     slug: row.slug,
-    series: isLegacy ? "legacy_archive" : "weekly_rollup",
+    series,
     title: row.title,
-    summary: row.summary,
+    summary: cleanSummary,
+    extendedNotes,
     transcript,
     transcriptSections: parseEpisodeTranscriptSections(transcript),
     audioUrl: row.audio_url,
     artworkUrl: row.artwork_url || undefined,
     artworkWidescreenUrl: row.artwork_widescreen_url || undefined,
-    aiDisclaimer:
-      row.ai_disclaimer ||
-      (isLegacy ? DEFAULT_GEMINI_AI_DISCLAIMER : undefined),
+    aiDisclaimer: row.ai_disclaimer || undefined,
+    externalSources,
+    sourcePages,
     r2Key: extractR2KeyFromAudioUrl(row.audio_url, row.slug),
     durationSeconds,
     durationFormatted: `${mins}:${secs}`,
@@ -1830,6 +1846,9 @@ export async function updateAdminEpisode(options: {
   input: {
     title?: string;
     summary?: string;
+    extendedNotes?: string;
+    externalSources?: EpisodeExternalSource[];
+    sourcePages?: EpisodeSourcePage[];
     transcript?: string;
     transcriptSections?: {
       weeklyTelemetry?: string;
@@ -1869,6 +1888,18 @@ export async function updateAdminEpisode(options: {
     input.summary !== undefined && input.summary.trim()
       ? input.summary.trim()
       : beforeRow.summary;
+  const updatedExtendedNotes =
+    input.extendedNotes !== undefined
+      ? input.extendedNotes.trim() || null
+      : beforeRow.extended_notes ?? null;
+  const updatedSourcesJson =
+    input.externalSources !== undefined
+      ? JSON.stringify(input.externalSources)
+      : beforeRow.sources_json ?? null;
+  const updatedSourcePagesJson =
+    input.sourcePages !== undefined
+      ? JSON.stringify(input.sourcePages)
+      : beforeRow.source_pages_json ?? null;
   const updatedEpisodeNumber =
     input.episodeNumber !== undefined &&
     Number.isFinite(Number(input.episodeNumber)) &&
@@ -1954,6 +1985,9 @@ export async function updateAdminEpisode(options: {
        SET episode_number = ?,
            title = ?,
            summary = ?,
+           extended_notes = ?,
+           sources_json = ?,
+           source_pages_json = ?,
            transcript = ?,
            duration_seconds = ?,
            file_size_bytes = ?,
@@ -1965,6 +1999,9 @@ export async function updateAdminEpisode(options: {
       updatedEpisodeNumber,
       updatedTitle,
       updatedSummary,
+      updatedExtendedNotes,
+      updatedSourcesJson,
+      updatedSourcePagesJson,
       updatedTranscript,
       updatedDurationSeconds,
       updatedFileSizeBytes,

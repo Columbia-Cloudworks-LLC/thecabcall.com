@@ -93,12 +93,12 @@ export const NAVIGATION_SCHEMA: NavItemConfig[] = [
       {
         label: "Latest Episodes",
         href: "/archive#latest",
-        description: "5-minute Friday Weekly Briefs and Legacy Deep-Dive Archive",
+        description: "Weekly Ledger Roundups and Foundational Craft & SRE Essays",
       },
       {
-        label: "Transcripts Archive",
+        label: "Episode Guides & Transcripts",
         href: "/archive#transcripts",
-        description: "Complete time-stamped three-part verified transcripts",
+        description: "Extended overviews, source dossiers, and full verified transcripts",
       },
       {
         label: "Subscribe & RSS Feeds",
@@ -260,6 +260,14 @@ export function isNavItemActive(
       normalizedPath === "/" ||
       normalizedPath === "/incidents" ||
       normalizedPath.startsWith("/incidents/")
+    );
+  }
+  if (itemHref === "/archive") {
+    return (
+      normalizedPath === "/archive" ||
+      normalizedPath.startsWith("/archive/") ||
+      normalizedPath === "/podcast" ||
+      normalizedPath.startsWith("/podcast/")
     );
   }
   if (itemHref === "/status") {

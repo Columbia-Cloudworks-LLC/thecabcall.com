@@ -2,434 +2,713 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { PublicEpisodeDto } from "@/lib/dto";
+import {
+  CANONICAL_PODCAST_AI_COLOPHON,
+  sanitizeEpisodeSummaryDefensive,
+  stripAiDisclaimers,
+} from "@/lib/episode-metadata";
+import { getWorkingToolSpec } from "@/lib/taxonomy";
+import { useTelemetry } from "./TelemetryContext";
+import {
+  EpisodeArtworkEmblem,
+  SquareAndCompassesCrest,
+  WorkingToolEngraving,
+} from "./MasonicEngravings";
 import {
   Play,
   Pause,
+  Radio,
   Rss,
-  Copy,
-  Check,
+  FileText,
+  Clock,
   ChevronDown,
   ChevronUp,
   ExternalLink,
-  Sparkles,
-  Radio,
-  Info,
+  BookOpen,
+  Compass,
+  Layers,
 } from "lucide-react";
-import {
-  formatCraftLedgerEntry,
-  isRenderablePublicEpisode,
-  mapDtoToCraftLexicon,
-  PublicEpisodeDto,
-} from "@/lib/dto";
-import { PodcastEpisode } from "@/lib/types";
-import { useTelemetry } from "./TelemetryContext";
-import { BrassSectionDivider } from "./MasonicEngravings";
+
+interface PodcastArchiveClientProps {
+  initialEpisodes: PublicEpisodeDto[];
+}
 
 export function PodcastArchiveClient({
   initialEpisodes,
-}: {
-  initialEpisodes: Array<PublicEpisodeDto | PodcastEpisode>;
-}) {
-  const {
-    activeEpisode,
-    isPlaying,
-    playEpisode,
-    togglePlayPause,
-    openRubricInspector,
-  } = useTelemetry();
+}: PodcastArchiveClientProps) {
+  const episodes = initialEpisodes;
+  const { activeEpisode: currentEpisode, isPlaying, playEpisode, togglePlayPause } =
+    useTelemetry();
 
-  const [episodes, setEpisodes] = useState<Array<PublicEpisodeDto | PodcastEpisode>>(
-    initialEpisodes
-      .map((ep) => mapDtoToCraftLexicon(ep))
-      .filter((ep) => isRenderablePublicEpisode(ep))
-  );
   const [seriesFilter, setSeriesFilter] = useState<
     "all" | "weekly_rollup" | "legacy_archive"
   >("all");
-  const [expandedTranscripts, setExpandedTranscripts] = useState<
+  const [expandedTranscriptId, setExpandedTranscriptId] = useState<
+    string | null
+  >(episodes[0]?.id || null);
+  const [rssCopied, setRssCopied] = useState(false);
+  const [failedArtworkIds, setFailedArtworkIds] = useState<
     Record<string, boolean>
-  >({ [initialEpisodes[0]?.id || ""]: true });
-  const [copiedFeed, setCopiedFeed] = useState(false);
+  >({});
+  const [failedWidescreenIds, setFailedWidescreenIds] = useState<
+    Record<string, boolean>
+  >({});
 
-  const feedUrl = "https://thecabcall.com/feed.xml";
-
-  const handleCopyFeed = () => {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(feedUrl);
-      setCopiedFeed(true);
-      setTimeout(() => setCopiedFeed(false), 2500);
-    }
-  };
-
-  const validEpisodes = episodes.filter((ep) => isRenderablePublicEpisode(ep));
-  const filteredEpisodes = validEpisodes.filter((ep) =>
+  const filteredEpisodes = episodes.filter((ep) =>
     seriesFilter === "all" ? true : ep.series === seriesFilter
   );
 
+  const weeklyCount = episodes.filter(
+    (e) => e.series === "weekly_rollup"
+  ).length;
+  const foundationalCount = episodes.filter(
+    (e) => e.series === "legacy_archive"
+  ).length;
+
+  const copyRssUrl = () => {
+    const url =
+      typeof window !== "undefined"
+        ? `${window.location.origin}/feed.xml`
+        : "https://thecabcall.com/feed.xml";
+    navigator.clipboard?.writeText(url);
+    setRssCopied(true);
+    setTimeout(() => setRssCopied(false), 2500);
+  };
+
+  const renderExtendedNotesContent = (notesText: string) => {
+    const clean = stripAiDisclaimers(notesText).trim();
+    if (!clean) return null;
+
+    const blocks = clean.split(/\n{2,}/);
+    return (
+      <div className="space-y-3">
+        {blocks.map((block, idx) => {
+          const lines = block
+            .split("\n")
+            .map((l) => l.trim())
+            .filter(Boolean);
+          if (lines.length === 0) return null;
+
+          const hasBullets = lines.some((l) => l.startsWith("• "));
+          if (hasBullets) {
+            const headingLine =
+              !lines[0].startsWith("• ") ? lines[0] : null;
+            const bulletLines = lines.filter((l) => l.startsWith("• "));
+            return (
+              <div key={idx} className="space-y-2 pt-1">
+                {headingLine && (
+                  <h6 className="font-mono text-[11px] uppercase tracking-widest text-[#C5A059]">
+                    {headingLine}
+                  </h6>
+                )}
+                <ul className="space-y-1.5 pl-1">
+                  {bulletLines.map((b, bIdx) => (
+                    <li
+                      key={bIdx}
+                      className="flex items-start gap-2.5 font-serif text-sm text-[#F3EFE6]/90 leading-relaxed"
+                    >
+                      <span className="font-mono text-[#C5A059] mt-0.5 shrink-0">
+                        •
+                      </span>
+                      <span>{b.slice(2).trim()}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          }
+
+          if (
+            lines.length === 1 &&
+            /^Key Takeaways:?$/i.test(lines[0])
+          ) {
+            return (
+              <h6
+                key={idx}
+                className="font-mono text-[11px] uppercase tracking-widest text-[#C5A059] pt-1"
+              >
+                {lines[0]}
+              </h6>
+            );
+          }
+
+          return (
+            <p
+              key={idx}
+              className="font-serif text-sm text-[#F3EFE6]/90 leading-relaxed"
+            >
+              {lines.join(" ")}
+            </p>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-      {/* Header & Direct RSS Subscription Block */}
-      <div className="tracing-board-frame p-6 sm:p-8 mb-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 pb-16 space-y-10">
+      {/* Masthead Header */}
+      <section className="rounded-none border border-[#8A6D3B]/60 bg-[#131822]/90 p-6 sm:p-8 relative overflow-hidden">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-          <div className="lg:col-span-7 space-y-3">
-            <span className="font-mono text-xs uppercase tracking-[0.2em] text-[#C5A059]">
-              THE CAB CALL ARCHIVE // PODCAST HUB &amp; TRANSCRIPTS
-            </span>
-            <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl text-[#F3EFE6]">
-              Change Advisory Board Audio &amp; Rollup Ledger
+          <div className="lg:col-span-8 space-y-3">
+            <div className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-[#C5A059]">
+              <Radio className="w-3.5 h-3.5" />
+              <span>
+                THE CAB CALL PODCAST // CONVERSATIONAL DEEP-DIVES &amp; ARCHIVE
+              </span>
+            </div>
+            <h1 className="font-display text-2xl sm:text-4xl text-[#F3EFE6] tracking-wide">
+              The CAB Call Podcast
             </h1>
-            <p className="font-serif text-sm sm:text-base text-[#94A3B8] leading-relaxed">
-              Housing both the automated 5-minute Friday{" "}
-              <strong className="text-[#F3EFE6]">CAB Weekly Brief</strong>{" "}
-              retrospectives (~750 words, strictly governed by the Zero Definitions and Epistemic Humility rules) and the original full-length{" "}
-              <strong className="text-[#F3EFE6]">Legacy Deep-Dive Archive</strong>.
+            <p className="font-serif text-base text-[#F3EFE6]/85 leading-relaxed max-w-3xl">
+              Conversational deep-dives analyzing live Trestleboard ledger
+              dispatches alongside foundational essays on Site Reliability
+              Engineering and the Working Tools of Freemasonry.
             </p>
           </div>
 
-          {/* Direct RSS Subscription Block */}
-          <div className="lg:col-span-5 p-5 bg-[#0B0E14] border border-[#C5A059]/60 space-y-4">
+          {/* RSS Feed Box */}
+          <div className="lg:col-span-4 rounded-none border border-[#8A6D3B]/60 bg-[#0B0E14]/90 p-5 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-wider text-[#C5A059]">
-                <Rss className="w-4 h-4" />
-                <span>Direct RSS 2.0 Podcast Feed</span>
+              <span className="font-mono text-xs uppercase tracking-widest text-[#C5A059] flex items-center gap-1.5">
+                <Rss className="w-3.5 h-3.5" />
+                Podcast RSS 2.0 Feed
               </span>
-              <span className="font-mono text-[10px] text-[#C5A059]">
-                SYNDICATED XML
+              <span className="font-mono text-[10px] text-[#2E6F40] border border-[#2E6F40]/50 px-1.5 py-0.5">
+                ACTIVE
               </span>
             </div>
-
-            <div className="flex items-center bg-[#111726] border border-[#8A6D3B]/50 p-1.5">
-              <code className="font-mono text-xs text-[#F3EFE6] px-2 flex-1 truncate">
-                {feedUrl}
-              </code>
+            <p className="font-serif text-xs text-[#94A3B8] leading-relaxed">
+              Subscribe in Apple Podcasts, Overcast, Pocket Casts, or any RSS
+              audio client using our canonical XML feed.
+            </p>
+            <div className="flex items-center gap-2 pt-1">
               <button
-                type="button"
-                onClick={handleCopyFeed}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#C5A059] text-[#0B0E14] font-mono text-xs font-semibold hover:bg-[#d6b36a] transition-colors cursor-pointer shrink-0"
+                onClick={copyRssUrl}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-mono uppercase tracking-wider bg-[#C5A059] text-[#0B0E14] font-semibold hover:bg-[#d4b26a] transition-colors cursor-pointer"
               >
-                {copiedFeed ? (
-                  <>
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Copied</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>Copy URL</span>
-                  </>
-                )}
+                <Rss className="w-3.5 h-3.5" />
+                {rssCopied ? "Copied /feed.xml!" : "Copy RSS Feed URL"}
               </button>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2 font-mono text-[11px] text-center">
               <a
                 href="/feed.xml"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="py-2 bg-[#111726] border border-[#8A6D3B]/45 text-[#F3EFE6] hover:border-[#C5A059] hover:text-[#C5A059] transition-colors"
+                className="inline-flex items-center gap-1 px-3 py-2 text-xs font-mono uppercase tracking-wider border border-[#8A6D3B] text-[#F3EFE6] hover:border-[#C5A059] hover:text-[#C5A059] transition-colors"
               >
-                Raw RSS XML
-              </a>
-              <a
-                href="https://podcasts.apple.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="py-2 bg-[#111726] border border-[#8A6D3B]/45 text-[#F3EFE6] hover:border-[#C5A059] hover:text-[#C5A059] transition-colors"
-              >
-                Apple Podcasts
-              </a>
-              <a
-                href="https://open.spotify.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="py-2 bg-[#111726] border border-[#8A6D3B]/45 text-[#F3EFE6] hover:border-[#C5A059] hover:text-[#C5A059] transition-colors"
-              >
-                Spotify Feed
+                XML <ExternalLink className="w-3 h-3" />
               </a>
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Series Toggle Bar */}
-      <div
-        id="latest"
-        className="flex flex-wrap items-center justify-between gap-4 mb-6 scroll-mt-20"
-      >
-        <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
+      {/* Filter Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#8A6D3B]/40 pb-4">
+        <div className="flex flex-wrap items-center gap-2">
           <button
-            type="button"
             onClick={() => setSeriesFilter("all")}
-            className={`px-4 py-2 border cursor-pointer ${
+            className={`px-3.5 py-1.5 text-xs font-mono uppercase tracking-wider border transition-colors cursor-pointer ${
               seriesFilter === "all"
-                ? "bg-[#C5A059] text-[#0B0E14] border-[#C5A059] font-bold"
-                : "bg-[#111726] text-[#94A3B8] border-[#8A6D3B]/45 hover:text-[#F3EFE6]"
+                ? "border-[#C5A059] bg-[#C5A059]/20 text-[#F3EFE6]"
+                : "border-[#8A6D3B]/40 text-[#94A3B8] hover:text-[#F3EFE6]"
             }`}
           >
             All Episodes ({episodes.length})
           </button>
           <button
-            type="button"
             onClick={() => setSeriesFilter("weekly_rollup")}
-            className={`px-4 py-2 border cursor-pointer ${
+            className={`px-3.5 py-1.5 text-xs font-mono uppercase tracking-wider border transition-colors cursor-pointer ${
               seriesFilter === "weekly_rollup"
-                ? "bg-[#C5A059] text-[#0B0E14] border-[#C5A059] font-bold"
-                : "bg-[#111726] text-[#94A3B8] border-[#8A6D3B]/45 hover:text-[#F3EFE6]"
+                ? "border-[#C5A059] bg-[#C5A059]/20 text-[#F3EFE6]"
+                : "border-[#8A6D3B]/40 text-[#94A3B8] hover:text-[#F3EFE6]"
             }`}
           >
-            Weekly Trestleboard Briefs (5-Min) (
-            {episodes.filter((e) => e.series === "weekly_rollup").length})
+            Weekly Ledger Roundups ({weeklyCount})
           </button>
           <button
-            type="button"
             onClick={() => setSeriesFilter("legacy_archive")}
-            className={`px-4 py-2 border cursor-pointer ${
+            className={`px-3.5 py-1.5 text-xs font-mono uppercase tracking-wider border transition-colors cursor-pointer ${
               seriesFilter === "legacy_archive"
-                ? "bg-[#C5A059] text-[#0B0E14] border-[#C5A059] font-bold"
-                : "bg-[#111726] text-[#94A3B8] border-[#8A6D3B]/45 hover:text-[#F3EFE6]"
+                ? "border-[#C5A059] bg-[#C5A059]/20 text-[#F3EFE6]"
+                : "border-[#8A6D3B]/40 text-[#94A3B8] hover:text-[#F3EFE6]"
             }`}
           >
-            Legacy Deep-Dive Archive (
-            {episodes.filter((e) => e.series === "legacy_archive").length})
+            Foundational Essays ({foundationalCount})
           </button>
         </div>
 
         <span className="font-mono text-xs text-[#94A3B8]">
-          Click Play on any episode to dock to the persistent bottom player
+          Showing {filteredEpisodes.length} of {episodes.length} episodes
         </span>
       </div>
 
-      <div id="transcripts" className="scroll-mt-20">
-        <BrassSectionDivider label="EPISODE DIRECTORY & VERIFIED TRANSCRIPTS" />
-      </div>
-
-      {/* Episode Directory */}
-      <div className="space-y-6">
+      {/* Episode List */}
+      <div id="latest" className="space-y-6">
         {filteredEpisodes.map((ep) => {
-          const isCurrent = activeEpisode.id === ep.id;
-          const isExpanded = !!expandedTranscripts[ep.id];
+          const isCurrent = currentEpisode?.id === ep.id;
+          const isActivePlaying = isCurrent && isPlaying;
+          const isTranscriptOpen = expandedTranscriptId === ep.id;
+          const toolSpec = getWorkingToolSpec(ep.dominantTool);
+          const cleanCardHook = sanitizeEpisodeSummaryDefensive(ep.summary);
+          const cleanExtendedNotes = ep.extendedNotes
+            ? stripAiDisclaimers(ep.extendedNotes)
+            : cleanCardHook;
+          const cleanTranscript = stripAiDisclaimers(ep.transcript);
+          const hasValidArtwork =
+            Boolean(ep.artworkUrl) && !failedArtworkIds[ep.id];
+          const hasValidWidescreen =
+            Boolean(ep.artworkWidescreenUrl) && !failedWidescreenIds[ep.id];
 
-          const aiDisclaimerText =
-            ep.aiDisclaimer ||
-            (ep.series === "legacy_archive"
-              ? "Disclaimer: The media and artwork for this episode were generated by AI using Google Gemini."
-              : null);
+          const directSourceLinks = (ep.externalSources || []).filter(
+            (s) => Boolean(s.url)
+          );
+          const bibliographicRows = (ep.externalSources || []).filter(
+            (s) => !s.url
+          );
 
           return (
             <article
               key={ep.id}
               id={ep.slug}
-              className="tracing-board-frame p-6 sm:p-7 space-y-5"
+              className={`rounded-none border transition-colors ${
+                isCurrent
+                  ? "border-[#C5A059] bg-[#131822]"
+                  : "border-[#8A6D3B]/50 bg-[#131822]/85 hover:border-[#8A6D3B]"
+              } p-6 sm:p-7 space-y-5`}
             >
-              <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
-                {ep.artworkUrl && (
-                  <div className="shrink-0">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={ep.artworkUrl}
-                      alt={`Artwork for ${ep.title}`}
-                      loading="lazy"
-                      className="w-28 h-28 sm:w-32 sm:h-32 object-cover border border-[#C5A059]/60 bg-[#0B0E14]"
-                    />
-                  </div>
-                )}
-
-                <div className="space-y-2.5 flex-1">
-                  <div className="flex flex-wrap items-center gap-2.5 font-mono text-xs">
-                    <span
-                      className={`px-2.5 py-0.5 font-semibold uppercase ${
-                        ep.series === "weekly_rollup"
-                          ? "bg-[#C5A059] text-[#0B0E14]"
-                          : "bg-[#0B0E14] text-[#C5A059] border border-[#C5A059]/60"
-                      }`}
-                    >
-                      {ep.series === "weekly_rollup"
-                        ? `5-MIN WEEKLY BRIEF #${ep.episodeNumber}`
-                        : `LEGACY ARCHIVE #${ep.episodeNumber}`}
-                    </span>
-                    <span className="text-[#94A3B8]">
-                      {ep.publishedAt.slice(0, 10)}
-                    </span>
-                    <span className="text-[#8A6D3B]">•</span>
-                    <span className="text-[#F3EFE6]">
-                      Duration: {ep.durationFormatted}
-                    </span>
-                    <span className="text-[#8A6D3B]">•</span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        openRubricInspector({ tool: ep.dominantTool })
-                      }
-                      title={`View Tool Guide for ${ep.dominantTool}`}
-                      className="inline-flex items-center gap-1.5 text-[#C5A059] hover:underline cursor-pointer"
-                    >
-                      <span>Dominant Tool: {ep.dominantTool}</span>
-                      <Info className="w-3.5 h-3.5 opacity-85" />
-                    </button>
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                <div className="flex flex-col sm:flex-row items-start gap-5 flex-1">
+                  {/* Unified Square Episode Artwork / Copperplate Emblem Tile (Issue #37) */}
+                  <div className="w-28 h-28 sm:w-32 sm:h-32 shrink-0 rounded-none border border-[#8A6D3B]/60 bg-[#0B0E14] overflow-hidden shadow-md relative">
+                    {hasValidArtwork ? (
+                      <img
+                        src={ep.artworkUrl}
+                        alt={`${ep.title} episode artwork`}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                        onError={() =>
+                          setFailedArtworkIds((prev) => ({
+                            ...prev,
+                            [ep.id]: true,
+                          }))
+                        }
+                      />
+                    ) : (
+                      <EpisodeArtworkEmblem
+                        episodeNumber={ep.episodeNumber}
+                        tool={ep.dominantTool}
+                        series={ep.series}
+                      />
+                    )}
                   </div>
 
-                  <h2 className="font-display text-xl sm:text-2xl text-[#F3EFE6]">
-                    {ep.title}
-                  </h2>
-
-                  <p className="font-serif text-sm sm:text-base text-[#F3EFE6]/85 leading-relaxed whitespace-pre-line">
-                    {ep.summary}
-                  </p>
-
-                  {aiDisclaimerText && (
-                    <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-[#0B0E14] border border-[#C5A059]/45 font-mono text-xs text-[#C5A059]">
-                      <Sparkles className="w-3.5 h-3.5 shrink-0 text-[#C5A059]" />
-                      <span>{aiDisclaimerText}</span>
+                  <div className="space-y-2.5 flex-1">
+                    <div className="flex flex-wrap items-center gap-2.5 text-xs font-mono">
+                      <span
+                        className={`px-2 py-0.5 uppercase tracking-wider font-semibold ${
+                          ep.series === "weekly_rollup"
+                            ? "bg-[#C5A059]/20 text-[#C5A059] border border-[#C5A059]/60"
+                            : "bg-[#8A6D3B]/20 text-[#F3EFE6] border border-[#8A6D3B]/60"
+                        }`}
+                      >
+                        {ep.series === "weekly_rollup"
+                          ? `WEEKLY LEDGER #${ep.episodeNumber}`
+                          : `FOUNDATIONAL ESSAY #${ep.episodeNumber}`}
+                      </span>
+                      <span className="text-[#94A3B8]">
+                        {new Date(ep.publishedAt).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </span>
+                      <span className="text-[#8A6D3B]">•</span>
+                      <span className="inline-flex items-center gap-1 text-[#C5A059]">
+                        <Clock className="w-3.5 h-3.5" />
+                        {ep.durationFormatted}
+                      </span>
+                      <span className="text-[#8A6D3B]">•</span>
+                      <span className="text-[#F3EFE6]">
+                        Tool: {toolSpec.id}
+                      </span>
+                      <span className="text-[#8A6D3B]">•</span>
+                      <span className="text-[#D97706]">
+                        {ep.dominantFailureMode}
+                      </span>
                     </div>
-                  )}
+
+                    <h2 className="font-display text-xl sm:text-2xl text-[#F3EFE6] leading-snug">
+                      {ep.title}
+                    </h2>
+
+                    <p className="font-serif text-sm text-[#F3EFE6]/85 leading-relaxed">
+                      {cleanCardHook}
+                    </p>
+                  </div>
                 </div>
 
-                {/* Inline Audio Player Controls */}
-                <div className="flex items-center gap-3 shrink-0 lg:self-center">
+                {/* Play & Episode Guide Controls */}
+                <div className="flex sm:flex-row lg:flex-col items-stretch sm:items-center gap-2.5 shrink-0">
                   <button
-                    type="button"
-                    onClick={() => {
-                      if (isCurrent) {
-                        togglePlayPause();
-                      } else {
-                        playEpisode(ep, 0);
-                      }
-                    }}
-                    className="inline-flex items-center gap-2.5 px-5 py-3 bg-[#C5A059] text-[#0B0E14] font-mono text-xs font-bold uppercase tracking-wider hover:bg-[#d6b36a] transition-colors cursor-pointer"
+                    onClick={() =>
+                      isCurrent ? togglePlayPause() : playEpisode(ep)
+                    }
+                    className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-[#C5A059] hover:bg-[#d4b26a] text-[#0B0E14] font-mono text-xs uppercase tracking-widest font-semibold transition-colors cursor-pointer"
                   >
-                    {isCurrent && isPlaying ? (
+                    {isActivePlaying ? (
                       <>
-                        <Pause className="w-4 h-4" />
-                        <span>Pause Episode</span>
+                        <Pause className="w-4 h-4 fill-current" />
+                        Pause Audio
                       </>
                     ) : (
                       <>
                         <Play className="w-4 h-4 fill-current" />
-                        <span>Play Episode ({ep.durationFormatted})</span>
+                        Listen ({ep.durationFormatted})
                       </>
                     )}
                   </button>
 
                   <button
-                    type="button"
                     onClick={() =>
-                      setExpandedTranscripts((prev) => ({
-                        ...prev,
-                        [ep.id]: !prev[ep.id],
-                      }))
+                      setExpandedTranscriptId(isTranscriptOpen ? null : ep.id)
                     }
-                    className="inline-flex items-center gap-1.5 px-3.5 py-3 bg-[#0B0E14] border border-[#8A6D3B]/60 font-mono text-xs text-[#F3EFE6] hover:border-[#C5A059] cursor-pointer"
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 border border-[#8A6D3B]/60 hover:border-[#C5A059] text-xs font-mono uppercase tracking-wider text-[#F3EFE6] hover:text-[#C5A059] transition-colors cursor-pointer"
                   >
-                    <span>{isExpanded ? "Hide Script" : "Read Script"}</span>
-                    {isExpanded ? (
-                      <ChevronUp className="w-4 h-4 text-[#C5A059]" />
+                    <FileText className="w-3.5 h-3.5" />
+                    {isTranscriptOpen
+                      ? "Hide Episode Guide"
+                      : "Episode Guide & Transcript"}
+                    {isTranscriptOpen ? (
+                      <ChevronUp className="w-3.5 h-3.5" />
                     ) : (
-                      <ChevronDown className="w-4 h-4 text-[#C5A059]" />
+                      <ChevronDown className="w-3.5 h-3.5" />
                     )}
                   </button>
                 </div>
               </div>
 
-              {/* Underlying Incident Briefs Referenced in Episode */}
+              {/* Incident Timestamp Markers (Jump-to-timecode on card) */}
               {ep.incidentMarkers.length > 0 && (
-                <div className="pt-3 border-t border-[#8A6D3B]/35 flex flex-wrap items-center gap-2 font-mono text-xs">
-                  <span className="text-[#94A3B8] uppercase">
-                    Referenced Cases on the Trestleboard:
+                <div className="pt-3 border-t border-[#8A6D3B]/25 flex flex-wrap items-center gap-2">
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-[#94A3B8] mr-1">
+                    Referenced Incidents:
                   </span>
                   {ep.incidentMarkers.map((marker) => (
-                    <div
+                    <button
                       key={`${ep.id}-${marker.incidentId}`}
-                      className="inline-flex items-center bg-[#0B0E14] border border-[#8A6D3B]/50"
+                      onClick={() =>
+                        playEpisode(ep, marker.timestampSeconds)
+                      }
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-none border border-[#8A6D3B]/40 bg-[#0B0E14]/80 hover:border-[#C5A059] text-xs font-mono text-[#F3EFE6] transition-colors cursor-pointer"
                     >
-                      <button
-                        type="button"
-                        onClick={() =>
-                          playEpisode(ep, marker.timestampSeconds)
-                        }
-                        className="px-2 py-1 text-[#C5A059] hover:bg-[#C5A059]/15 border-r border-[#8A6D3B]/40 cursor-pointer"
-                        title={`Play from ${marker.timecodeLabel}`}
-                      >
-                        ▶ {marker.timecodeLabel}
-                      </button>
-                      <Link
-                        href={`/incidents/${marker.incidentSlug}`}
-                        className="px-2.5 py-1 text-[#F3EFE6] hover:text-[#C5A059] inline-flex items-center gap-1"
-                      >
-                        <span className="text-[#94A3B8]">
-                          {formatCraftLedgerEntry(marker.incidentCode)}:
-                        </span>
-                        <span className="truncate max-w-[210px]">
-                          {marker.incidentTitle}
-                        </span>
-                        <ExternalLink className="w-3 h-3 opacity-75" />
-                      </Link>
-                    </div>
+                      <span className="text-[#C5A059]">
+                        [{marker.timecodeLabel}]
+                      </span>
+                      <span>{marker.incidentCode}</span>
+                      <span className="text-[#94A3B8] hidden sm:inline">
+                        — {marker.incidentTitle}
+                      </span>
+                    </button>
                   ))}
                 </div>
               )}
 
-              {/* Collapsible Full Transcript */}
-              {isExpanded && (
-                <div className="pt-4 border-t border-[#C5A059]/35 space-y-4">
-                  {ep.artworkWidescreenUrl && (
-                    <div className="overflow-hidden border border-[#8A6D3B]/45 bg-[#0B0E14]">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={ep.artworkWidescreenUrl}
-                        alt={`Widescreen banner for ${ep.title}`}
-                        loading="lazy"
-                        className="w-full max-h-72 object-cover"
-                      />
-                    </div>
-                  )}
-
-                  <div className="flex items-center justify-between font-mono text-xs text-[#C5A059]">
-                    <span className="inline-flex items-center gap-1.5">
-                      <Radio className="w-3.5 h-3.5" />
-                      <span>
-                        VERIFIED EPISODE TRANSCRIPT //{" "}
-                        {ep.series === "weekly_rollup"
-                          ? "3-PART FRIDAY CAB RUNBOOK (~750 WORDS)"
-                          : "LEGACY ARCHIVE RECORD"}
+              {/* Expandable Episode Guide & Transcript Drawer (Issue #38) */}
+              {isTranscriptOpen && (
+                <div
+                  id="transcripts"
+                  className="pt-5 border-t border-[#8A6D3B]/40 space-y-6"
+                >
+                  {/* Section 1: Extended Episode Overview & Key Takeaways */}
+                  <div className="rounded-none border border-[#8A6D3B]/40 bg-[#0B0E14]/90 p-5 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#8A6D3B]/30 pb-2.5">
+                      <span className="font-mono text-xs uppercase tracking-widest text-[#C5A059] inline-flex items-center gap-2">
+                        <BookOpen className="w-3.5 h-3.5" />
+                        Episode Overview &amp; Key Takeaways
                       </span>
-                    </span>
-                    <span className="text-[#94A3B8]">
-                      {ep.series === "weekly_rollup"
-                        ? "ZERO DEFINITIONS RULE ENFORCED"
-                        : "GENERATED BY AI USING GOOGLE GEMINI"}
-                    </span>
+                      <span className="font-mono text-[11px] text-[#94A3B8]">
+                        {ep.series === "weekly_rollup"
+                          ? `Weekly Ledger Roundup #${ep.episodeNumber}`
+                          : `Foundational Essay #${ep.episodeNumber}`}
+                      </span>
+                    </div>
+
+                    {hasValidWidescreen && (
+                      <div className="rounded-none border border-[#8A6D3B]/40 bg-[#0B0E14] overflow-hidden max-h-56">
+                        <img
+                          src={ep.artworkWidescreenUrl}
+                          alt={`${ep.title} widescreen banner`}
+                          className="w-full h-full object-cover max-h-56"
+                          loading="lazy"
+                          onError={() =>
+                            setFailedWidescreenIds((prev) => ({
+                              ...prev,
+                              [ep.id]: true,
+                            }))
+                          }
+                        />
+                      </div>
+                    )}
+
+                    {renderExtendedNotesContent(cleanExtendedNotes)}
                   </div>
 
+                  {/* Section 2 & 3 Grid: Source Pages on thecabcall.com + External Primary Sources */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Section 2: Source Pages on thecabcall.com */}
+                    <div className="rounded-none border border-[#8A6D3B]/40 bg-[#0B0E14]/90 p-5 space-y-3">
+                      <div className="flex items-center justify-between border-b border-[#8A6D3B]/30 pb-2">
+                        <h4 className="font-mono text-xs uppercase tracking-widest text-[#C5A059] inline-flex items-center gap-1.5">
+                          <Compass className="w-3.5 h-3.5" />
+                          Source Pages on thecabcall.com
+                        </h4>
+                        <span className="font-mono text-[10px] text-[#94A3B8] uppercase">
+                          Internal Ledger Links
+                        </span>
+                      </div>
+
+                      <div className="space-y-2">
+                        {ep.incidentMarkers.map((marker) => (
+                          <div
+                            key={`drawer-inc-${ep.id}-${marker.incidentId}`}
+                            className="flex items-center justify-between gap-3 p-2.5 border border-[#8A6D3B]/30 bg-[#131822]/70 hover:border-[#C5A059]/60 transition-colors"
+                          >
+                            <div className="min-w-0 space-y-0.5">
+                              <div className="flex items-center gap-2 font-mono text-[11px]">
+                                <span className="text-[#C5A059] font-semibold">
+                                  {marker.incidentCode}
+                                </span>
+                                <span className="text-[#8A6D3B]">•</span>
+                                <span className="text-[#94A3B8]">
+                                  {marker.toolApplied}
+                                </span>
+                              </div>
+                              <Link
+                                href={`/incidents/${marker.incidentSlug}`}
+                                className="block font-serif text-sm text-[#F3EFE6] hover:text-[#C5A059] transition-colors truncate"
+                              >
+                                {marker.incidentTitle}
+                              </Link>
+                            </div>
+                            <button
+                              onClick={() =>
+                                playEpisode(ep, marker.timestampSeconds)
+                              }
+                              className="shrink-0 px-2 py-1 font-mono text-[10px] uppercase tracking-wider border border-[#C5A059]/50 text-[#C5A059] hover:bg-[#C5A059]/15 transition-colors cursor-pointer"
+                            >
+                              Jump {marker.timecodeLabel}
+                            </button>
+                          </div>
+                        ))}
+
+                        {(ep.sourcePages || []).map((page, pIdx) => (
+                          <Link
+                            key={`source-page-${ep.id}-${pIdx}`}
+                            href={page.href}
+                            className="flex items-center justify-between gap-3 p-2.5 border border-[#8A6D3B]/30 bg-[#131822]/70 hover:border-[#C5A059] transition-colors group"
+                          >
+                            <div className="min-w-0 space-y-0.5">
+                              <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider">
+                                {page.code && (
+                                  <span className="text-[#C5A059] font-semibold">
+                                    {page.code}
+                                  </span>
+                                )}
+                                {page.sectionLabel && (
+                                  <span className="text-[#94A3B8]">
+                                    {page.sectionLabel}
+                                  </span>
+                                )}
+                                {page.tool && (
+                                  <>
+                                    <span className="text-[#8A6D3B]">•</span>
+                                    <span className="text-[#F3EFE6]/80">
+                                      {page.tool}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                              <div className="font-serif text-sm text-[#F3EFE6] group-hover:text-[#C5A059] transition-colors">
+                                {page.title}
+                              </div>
+                            </div>
+                            <span className="font-mono text-[10px] uppercase tracking-widest text-[#C5A059] shrink-0">
+                              Read →
+                            </span>
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Section 3: External Primary Sources & Research Dossiers */}
+                    <div className="rounded-none border border-[#8A6D3B]/40 bg-[#0B0E14]/90 p-5 space-y-3">
+                      <div className="flex items-center justify-between border-b border-[#8A6D3B]/30 pb-2">
+                        <h4 className="font-mono text-xs uppercase tracking-widest text-[#C5A059] inline-flex items-center gap-1.5">
+                          <Layers className="w-3.5 h-3.5" />
+                          External Primary Sources &amp; Dossiers
+                        </h4>
+                        <span className="font-mono text-[10px] text-[#94A3B8] uppercase">
+                          {(ep.externalSources || []).length > 0
+                            ? `${(ep.externalSources || []).length} Referenced`
+                            : "Curated Ledger"}
+                        </span>
+                      </div>
+
+                      {directSourceLinks.length > 0 ? (
+                        <div className="space-y-2">
+                          {directSourceLinks.map((src, sIdx) => (
+                            <a
+                              key={`ext-src-${ep.id}-${sIdx}`}
+                              href={src.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center justify-between gap-3 p-2.5 border border-[#8A6D3B]/30 bg-[#131822]/70 hover:border-[#C5A059] transition-colors group"
+                            >
+                              <div className="min-w-0 space-y-0.5">
+                                <div className="font-mono text-[10px] uppercase tracking-wider text-[#C5A059]">
+                                  {src.sourceType || "Primary Research Dossier"}
+                                </div>
+                                <div className="font-serif text-sm text-[#F3EFE6] group-hover:text-[#C5A059] transition-colors">
+                                  {src.title}
+                                </div>
+                              </div>
+                              <ExternalLink className="w-3.5 h-3.5 text-[#C5A059] shrink-0" />
+                            </a>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="font-serif text-xs text-[#94A3B8] leading-relaxed">
+                          Synthesized directly from verified dispatches on the
+                          Trestleboard incident ledger and the canonical Working
+                          Tools rubric.
+                        </p>
+                      )}
+
+                      {bibliographicRows.length > 0 && (
+                        <div className="pt-2 space-y-2">
+                          <div className="font-mono text-[10px] uppercase tracking-widest text-[#94A3B8]">
+                            Source Classification Bibliography ({bibliographicRows.length} Works)
+                          </div>
+                          <div className="max-h-60 overflow-y-auto border border-[#8A6D3B]/30 bg-[#131822]/50">
+                            <table className="w-full text-left border-collapse">
+                              <thead className="sticky top-0 bg-[#131822] border-b border-[#8A6D3B]/40 font-mono text-[10px] uppercase tracking-wider text-[#C5A059]">
+                                <tr>
+                                  <th className="py-1.5 px-2.5">Source Title</th>
+                                  <th className="py-1.5 px-2">Date</th>
+                                  <th className="py-1.5 px-2.5">Author / Authority</th>
+                                  <th className="py-1.5 px-2">Classification</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-[#8A6D3B]/20 font-serif text-xs text-[#F3EFE6]/85">
+                                {bibliographicRows.map((row, rIdx) => (
+                                  <tr key={`bib-${ep.id}-${rIdx}`} className="hover:bg-[#0B0E14]/50">
+                                    <td className="py-1.5 px-2.5 font-medium text-[#F3EFE6]">
+                                      {row.title}
+                                    </td>
+                                    <td className="py-1.5 px-2 font-mono text-[11px] text-[#94A3B8] whitespace-nowrap">
+                                      {row.publicationDate || "—"}
+                                    </td>
+                                    <td className="py-1.5 px-2.5 text-[#94A3B8]">
+                                      {row.author || "—"}
+                                    </td>
+                                    <td className="py-1.5 px-2 font-mono text-[10px] text-[#C5A059]">
+                                      {row.sourceType || "Reference"}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Section 4: Full Episode Transcript */}
                   {ep.transcriptSections ? (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="p-4 bg-[#0B0E14] border border-[#8A6D3B]/45 space-y-2">
-                        <div className="font-mono text-xs text-[#C5A059] uppercase">
-                          1. The Week&apos;s Trestleboard (0:00 – 1:15)
-                        </div>
-                        <p className="font-serif text-sm text-[#F3EFE6]/90 leading-relaxed">
-                          {ep.transcriptSections.weeklyTelemetry}
-                        </p>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-xs uppercase tracking-widest text-[#C5A059]">
+                          Full Episode Transcript
+                        </span>
+                        <span className="font-mono text-[11px] text-[#94A3B8]">
+                          Three-Part Structured Dispatch Script
+                        </span>
                       </div>
-                      <div className="p-4 bg-[#0B0E14] border border-[#8A6D3B]/45 space-y-2">
-                        <div className="font-mono text-xs text-[#F59E0B] uppercase">
-                          2. Separating Signal from Panic (1:15 – 3:30)
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="rounded-none border border-[#8A6D3B]/40 bg-[#0B0E14]/90 p-4 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-mono text-xs uppercase tracking-wider text-[#C5A059]">
+                              1. The Week&apos;s Trestleboard (0:00 – 1:15)
+                            </h4>
+                            <button
+                              onClick={() => playEpisode(ep, 0)}
+                              className="font-mono text-[10px] text-[#94A3B8] hover:text-[#C5A059] cursor-pointer"
+                            >
+                              Play 0:00 →
+                            </button>
+                          </div>
+                          <p className="font-serif text-xs text-[#F3EFE6]/85 leading-relaxed">
+                            {stripAiDisclaimers(
+                              ep.transcriptSections.weeklyTelemetry
+                            )}
+                          </p>
                         </div>
-                        <p className="font-serif text-sm text-[#F3EFE6]/90 leading-relaxed">
-                          {ep.transcriptSections.separatingSignalFromPanic}
-                        </p>
-                      </div>
-                      <div className="p-4 bg-[#0B0E14] border border-[#C5A059]/60 space-y-2">
-                        <div className="font-mono text-xs text-[#10B981] uppercase">
-                          3. The Forward Posture (3:30 – 5:00)
+
+                        <div className="rounded-none border border-[#8A6D3B]/40 bg-[#0B0E14]/90 p-4 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-mono text-xs uppercase tracking-wider text-[#C5A059]">
+                              2. Separating Signal from Panic (1:15 – 3:30)
+                            </h4>
+                            <button
+                              onClick={() => playEpisode(ep, 75)}
+                              className="font-mono text-[10px] text-[#94A3B8] hover:text-[#C5A059] cursor-pointer"
+                            >
+                              Play 1:15 →
+                            </button>
+                          </div>
+                          <p className="font-serif text-xs text-[#F3EFE6]/85 leading-relaxed">
+                            {stripAiDisclaimers(
+                              ep.transcriptSections.separatingSignalFromPanic
+                            )}
+                          </p>
                         </div>
-                        <p className="font-serif text-sm text-[#F3EFE6]/90 leading-relaxed">
-                          {ep.transcriptSections.forwardPosture}
-                        </p>
+
+                        <div className="rounded-none border border-[#8A6D3B]/40 bg-[#0B0E14]/90 p-4 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-mono text-xs uppercase tracking-wider text-[#C5A059]">
+                              3. Forward Posture (3:30 – 5:00)
+                            </h4>
+                            <button
+                              onClick={() => playEpisode(ep, 210)}
+                              className="font-mono text-[10px] text-[#94A3B8] hover:text-[#C5A059] cursor-pointer"
+                            >
+                              Play 3:30 →
+                            </button>
+                          </div>
+                          <p className="font-serif text-xs text-[#F3EFE6]/85 leading-relaxed">
+                            {stripAiDisclaimers(
+                              ep.transcriptSections.forwardPosture
+                            )}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   ) : (
-                    <div className="p-5 bg-[#0B0E14] border border-[#8A6D3B]/45 font-serif text-sm sm:text-base text-[#F3EFE6]/90 whitespace-pre-line leading-relaxed max-h-[540px] overflow-y-auto">
-                      {ep.transcript}
+                    <div className="rounded-none border border-[#8A6D3B]/40 bg-[#0B0E14]/90 p-5 space-y-3">
+                      <div className="flex items-center justify-between border-b border-[#8A6D3B]/30 pb-2">
+                        <span className="font-mono text-xs uppercase tracking-widest text-[#C5A059]">
+                          Full Episode Transcript
+                        </span>
+                        <span className="font-mono text-[11px] text-[#94A3B8]">
+                          Episode #{ep.episodeNumber} • {ep.durationFormatted}
+                        </span>
+                      </div>
+                      <p className="font-serif text-sm text-[#F3EFE6]/85 leading-relaxed whitespace-pre-line">
+                        {cleanTranscript}
+                      </p>
                     </div>
                   )}
                 </div>
@@ -438,6 +717,25 @@ export function PodcastArchiveClient({
           );
         })}
       </div>
+
+      {/* Single Page-Level Production Colophon (Issue #36) */}
+      <footer className="rounded-none border border-[#8A6D3B]/40 bg-[#0B0E14]/80 p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <SquareAndCompassesCrest className="w-7 h-7 shrink-0 opacity-85" />
+          <p className="font-serif text-xs text-[#94A3B8] leading-relaxed">
+            {CANONICAL_PODCAST_AI_COLOPHON}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <WorkingToolEngraving
+            tool="The Square"
+            className="w-10 h-7 opacity-75"
+          />
+          <span className="font-mono text-[10px] uppercase tracking-widest text-[#C5A059]">
+            Verified Archive
+          </span>
+        </div>
+      </footer>
     </div>
   );
 }

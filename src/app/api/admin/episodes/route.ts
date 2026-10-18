@@ -131,6 +131,9 @@ export async function PUT(req: NextRequest) {
       slug?: string;
       title?: string;
       summary?: string;
+      extendedNotes?: string;
+      externalSources?: import("@/lib/types").EpisodeExternalSource[];
+      sourcePages?: import("@/lib/types").EpisodeSourcePage[];
       transcript?: string;
       transcriptSections?: {
         weeklyTelemetry?: string;
@@ -167,6 +170,9 @@ export async function PUT(req: NextRequest) {
       {
         title: body.title,
         summary: body.summary,
+        extendedNotes: body.extendedNotes,
+        externalSources: body.externalSources,
+        sourcePages: body.sourcePages,
         transcript: body.transcript,
         transcriptSections: body.transcriptSections,
         episodeNumber: body.episodeNumber,
