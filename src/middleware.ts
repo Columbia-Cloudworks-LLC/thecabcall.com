@@ -57,11 +57,16 @@ export function middleware(req: NextRequest) {
       pathname.startsWith("/knowledge-graph/") ||
       pathname === "/archive" ||
       pathname.startsWith("/archive/") ||
+      pathname === "/podcast" ||
+      pathname.startsWith("/podcast/") ||
       pathname === "/rubric" ||
       pathname.startsWith("/rubric/") ||
+      pathname.startsWith("/tools/") ||
+      pathname.startsWith("/failures/") ||
       pathname === "/status" ||
       pathname.startsWith("/status/") ||
-      pathname.startsWith("/incidents/")
+      pathname.startsWith("/incidents/") ||
+      pathname.startsWith("/dispatches/")
     ) {
       return NextResponse.redirect(
         new URL(`${pathname}${search || ""}`, "https://thecabcall.com")

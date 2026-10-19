@@ -97,7 +97,18 @@ import {
   normalizeStoredQuestionsPayload,
   validateAndNormalizeIncidentSummary,
 } from "./lib/sanitize";
-import { DomainSectorId, SreFailureModeId, WorkingToolId } from "./lib/taxonomy";
+import {
+  DOMAIN_SECTOR_SPECS,
+  DomainSectorId,
+  formatFriendlySourceName,
+  getDomainSectorBySlug,
+  getFailureModeBySlug,
+  getWorkingToolBySlug,
+  SRE_FAILURE_MODES,
+  SreFailureModeId,
+  WORKING_TOOLS,
+  WorkingToolId,
+} from "./lib/taxonomy";
 import { EpisodeExternalSource, EpisodeSourcePage } from "./lib/types";
 
 export interface WorkerEnv {
@@ -589,6 +600,8 @@ const worker = {
         endpoints: {
           snapshot:
             "GET /api/snapshot (public editorial Trestleboard DTO snapshot)",
+          archive:
+            "GET /api/archive?page=1&pageSize=25&tool=&failure=&sector=&q=&source= (server-side D1 paginated Master Case Ledger & 6x6 matrix aggregation)",
           audioStream: "GET /audio/:filename (supports Range requests)",
         },
       });
@@ -651,6 +664,300 @@ const worker = {
           200,
           {
             "Cache-Control": "no-store, max-age=0",
+          }
+        );
+      } catch (err) {
+        return jsonResponse(
+          {
+            ok: false,
+            error: err instanceof Error ? err.message : String(err),
+          },
+          500
+        );
+      }
+    }
+
+    // Public Route: GET /api/archive (Server-side D1 pagination, filtering, and 6x6 matrix aggregation)
+    if (request.method === "GET" && url.pathname === "/api/archive") {
+      try {
+        try {
+          await ensureEditorialPipelineSchema(env.DB);
+        } catch {
+          // ignore schema check failure
+        }
+
+        const pageParam = parseInt(url.searchParams.get("page") || "1", 10);
+        const pageSizeParam = parseInt(url.searchParams.get("pageSize") || "25", 10);
+        const pageSize = Math.min(100, Math.max(1, Number.isNaN(pageSizeParam) ? 25 : pageSizeParam));
+        const requestedPage = Math.max(1, Number.isNaN(pageParam) ? 1 : pageParam);
+
+        const toolParam = url.searchParams.get("tool")?.trim() || null;
+        const failureParam = url.searchParams.get("failure")?.trim() || null;
+        const sectorParam = url.searchParams.get("sector")?.trim() || null;
+        const sourceParam = url.searchParams.get("source")?.trim() || null;
+        const queryParam = url.searchParams.get("q")?.trim() || "";
+        const roleParam = (url.searchParams.get("role") || "all") as "all" | "primary" | "secondary";
+
+        const resolvedTool = getWorkingToolBySlug(toolParam);
+        const resolvedFailure = getFailureModeBySlug(failureParam);
+        const resolvedSector = getDomainSectorBySlug(sectorParam);
+
+        const whereClauses: string[] = ["status = 'synthesized'", "is_hidden = 0"];
+        const bindings: unknown[] = [];
+
+        if (resolvedTool) {
+          if (roleParam === "primary") {
+            whereClauses.push("primary_tool = ?");
+            bindings.push(resolvedTool.d1Key);
+          } else if (roleParam === "secondary") {
+            whereClauses.push("secondary_tool = ?");
+            bindings.push(resolvedTool.d1Key);
+          } else {
+            whereClauses.push("(primary_tool = ? OR secondary_tool = ?)");
+            bindings.push(resolvedTool.d1Key, resolvedTool.d1Key);
+          }
+        }
+        if (resolvedFailure) {
+          whereClauses.push("sre_failure_mode = ?");
+          bindings.push(resolvedFailure.d1Key);
+        }
+        if (sourceParam && sourceParam.toLowerCase() !== "all") {
+          whereClauses.push("LOWER(source_feed) = LOWER(?)");
+          bindings.push(sourceParam);
+        }
+        if (queryParam) {
+          const likePattern = `%${queryParam.toLowerCase()}%`;
+          whereClauses.push(
+            "(LOWER(title) LIKE ? OR LOWER(source_feed) LIKE ? OR LOWER(COALESCE(socratic_brief, '')) LIKE ? OR LOWER(COALESCE(raw_excerpt, '')) LIKE ?)"
+          );
+          bindings.push(likePattern, likePattern, likePattern, likePattern);
+        }
+
+        const whereSql = whereClauses.join(" AND ");
+
+        // 1. Full-corpus 6x6 Matrix Aggregation Query
+        const matrixRes = await env.DB.prepare(
+          `SELECT primary_tool, sre_failure_mode, COUNT(id) AS cell_count
+           FROM telemetry_articles
+           WHERE status = 'synthesized' AND is_hidden = 0
+           GROUP BY primary_tool, sre_failure_mode`
+        ).all<{ primary_tool: JevWorkingToolKey; sre_failure_mode: JevSreFailureModeKey; cell_count: number }>();
+
+        const matrixCounts: Record<WorkingToolId, Record<SreFailureModeId, number>> = {
+          "24-Inch Gauge": {
+            "Configuration Drift": 0,
+            "Cascading Failure": 0,
+            "Single Point of Failure (SPOF) / Untested Failover": 0,
+            "Alert Fatigue & Signal Loss": 0,
+            "Blame Culture vs. Root-Cause Isolation": 0,
+            "Technical & Institutional Debt": 0,
+            "Structural Friction": 0,
+          },
+          "Common Gavel": {
+            "Configuration Drift": 0,
+            "Cascading Failure": 0,
+            "Single Point of Failure (SPOF) / Untested Failover": 0,
+            "Alert Fatigue & Signal Loss": 0,
+            "Blame Culture vs. Root-Cause Isolation": 0,
+            "Technical & Institutional Debt": 0,
+            "Structural Friction": 0,
+          },
+          "The Plumb": {
+            "Configuration Drift": 0,
+            "Cascading Failure": 0,
+            "Single Point of Failure (SPOF) / Untested Failover": 0,
+            "Alert Fatigue & Signal Loss": 0,
+            "Blame Culture vs. Root-Cause Isolation": 0,
+            "Technical & Institutional Debt": 0,
+            "Structural Friction": 0,
+          },
+          "The Square": {
+            "Configuration Drift": 0,
+            "Cascading Failure": 0,
+            "Single Point of Failure (SPOF) / Untested Failover": 0,
+            "Alert Fatigue & Signal Loss": 0,
+            "Blame Culture vs. Root-Cause Isolation": 0,
+            "Technical & Institutional Debt": 0,
+            "Structural Friction": 0,
+          },
+          "The Level": {
+            "Configuration Drift": 0,
+            "Cascading Failure": 0,
+            "Single Point of Failure (SPOF) / Untested Failover": 0,
+            "Alert Fatigue & Signal Loss": 0,
+            "Blame Culture vs. Root-Cause Isolation": 0,
+            "Technical & Institutional Debt": 0,
+            "Structural Friction": 0,
+          },
+          "The Trowel": {
+            "Configuration Drift": 0,
+            "Cascading Failure": 0,
+            "Single Point of Failure (SPOF) / Untested Failover": 0,
+            "Alert Fatigue & Signal Loss": 0,
+            "Blame Culture vs. Root-Cause Isolation": 0,
+            "Technical & Institutional Debt": 0,
+            "Structural Friction": 0,
+          },
+        };
+        const toolRowTotals: Record<WorkingToolId, number> = {
+          "24-Inch Gauge": 0,
+          "Common Gavel": 0,
+          "The Plumb": 0,
+          "The Square": 0,
+          "The Level": 0,
+          "The Trowel": 0,
+        };
+        const failureColTotals: Record<SreFailureModeId, number> = {
+          "Configuration Drift": 0,
+          "Cascading Failure": 0,
+          "Single Point of Failure (SPOF) / Untested Failover": 0,
+          "Alert Fatigue & Signal Loss": 0,
+          "Blame Culture vs. Root-Cause Isolation": 0,
+          "Technical & Institutional Debt": 0,
+          "Structural Friction": 0,
+        };
+        let maxCellCount = 1;
+        let corpusTotalCount = 0;
+
+        for (const row of matrixRes.results || []) {
+          const toolId = WORKER_TOOL_DISPLAY[row.primary_tool];
+          const failureId = WORKER_FAILURE_DISPLAY[row.sre_failure_mode];
+          const count = Number(row.cell_count || 0);
+          if (toolId && failureId) {
+            matrixCounts[toolId][failureId] = count;
+            toolRowTotals[toolId] = (toolRowTotals[toolId] || 0) + count;
+            failureColTotals[failureId] = (failureColTotals[failureId] || 0) + count;
+            corpusTotalCount += count;
+            if (count > maxCellCount) maxCellCount = count;
+          }
+        }
+
+        // 2. Monitored Publication Source Aggregation Query
+        const sourceAggRes = await env.DB.prepare(
+          `SELECT source_feed, COUNT(id) AS feed_count, MAX(published_at) AS latest_published_at
+           FROM telemetry_articles
+           WHERE status = 'synthesized' AND is_hidden = 0
+           GROUP BY source_feed
+           ORDER BY feed_count DESC, source_feed ASC`
+        ).all<{ source_feed: string; feed_count: number; latest_published_at: string | null }>();
+
+        const sourceCounts = (sourceAggRes.results || []).map((r) => ({
+          sourceFeed: r.source_feed,
+          friendlyName: formatFriendlySourceName(r.source_feed),
+          count: Number(r.feed_count || 0),
+          latestPublishedAt: r.latest_published_at || null,
+        }));
+
+        // 3. Sector Aggregation & Paginated Ledger Slice
+        const sectorCounts: Record<DomainSectorId, number> = {
+          "Public Policy & Governance": 0,
+          "Economics & Markets": 0,
+          "Technology & Cyber": 0,
+          "Infrastructure & Supply Chain": 0,
+          "Institutional Leadership": 0,
+        };
+
+        const sectorAllRes = await env.DB.prepare(
+          `SELECT source_feed, title, raw_excerpt
+           FROM telemetry_articles
+           WHERE status = 'synthesized' AND is_hidden = 0`
+        ).all<{ source_feed: string; title: string; raw_excerpt: string }>();
+
+        for (const r of sectorAllRes.results || []) {
+          const sec = inferWorkerDomainSector(r.source_feed, r.title, r.raw_excerpt);
+          sectorCounts[sec] = (sectorCounts[sec] || 0) + 1;
+        }
+
+        let items: PublicIncidentDto[] = [];
+        let totalCount = 0;
+        let totalPages = 1;
+        let currentPage = requestedPage;
+
+        if (!resolvedSector) {
+          // Fast SQL COUNT + LIMIT/OFFSET path
+          const countRes = await env.DB.prepare(
+            `SELECT COUNT(id) AS total_count FROM telemetry_articles WHERE ${whereSql}`
+          )
+            .bind(...bindings)
+            .first<{ total_count: number }>();
+
+          totalCount = Number(countRes?.total_count || 0);
+          totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+          currentPage = Math.min(requestedPage, totalPages);
+          const offset = (currentPage - 1) * pageSize;
+
+          const pageRes = await env.DB.prepare(
+            `SELECT ${TELEMETRY_ARTICLES_SYNTHESIS_COLUMNS}
+             FROM telemetry_articles
+             WHERE ${whereSql}
+             ORDER BY is_pinned DESC, published_at DESC, id DESC
+             LIMIT ? OFFSET ?`
+          )
+            .bind(...bindings, pageSize, offset)
+            .all<TelemetryArticleRow>();
+
+          for (const row of pageRes.results || []) {
+            const dto = mapWorkerRowToPublicIncidentDto(row);
+            if (dto) items.push(dto);
+          }
+        } else {
+          // Sector filter is inferred from source_feed/title/raw_excerpt; evaluate matching rows then slice
+          const matchingRes = await env.DB.prepare(
+            `SELECT ${TELEMETRY_ARTICLES_SYNTHESIS_COLUMNS}
+             FROM telemetry_articles
+             WHERE ${whereSql}
+             ORDER BY is_pinned DESC, published_at DESC, id DESC`
+          )
+            .bind(...bindings)
+            .all<TelemetryArticleRow>();
+
+          const matchingDtos: PublicIncidentDto[] = [];
+          for (const row of matchingRes.results || []) {
+            const dto = mapWorkerRowToPublicIncidentDto(row);
+            if (dto && dto.domainSector === resolvedSector.id) {
+              matchingDtos.push(dto);
+            }
+          }
+
+          totalCount = matchingDtos.length;
+          totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+          currentPage = Math.min(requestedPage, totalPages);
+          const offset = (currentPage - 1) * pageSize;
+          items = matchingDtos.slice(offset, offset + pageSize);
+        }
+
+        const startIndex = totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+        const endIndex = totalCount === 0 ? 0 : Math.min(totalCount, (currentPage - 1) * pageSize + items.length);
+
+        return jsonResponse(
+          {
+            ok: true,
+            items,
+            totalCount,
+            corpusTotalCount,
+            page: currentPage,
+            pageSize,
+            totalPages,
+            startIndex,
+            endIndex,
+            matrixCounts,
+            toolRowTotals,
+            failureColTotals,
+            maxCellCount,
+            sectorCounts,
+            sourceCounts,
+            appliedFilters: {
+              tool: resolvedTool?.id || null,
+              failure: resolvedFailure?.id || null,
+              sector: resolvedSector?.id || null,
+              source: sourceParam || null,
+              query: queryParam,
+              role: roleParam,
+            },
+          },
+          200,
+          {
+            "Cache-Control": "public, max-age=30",
           }
         );
       } catch (err) {

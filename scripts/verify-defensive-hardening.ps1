@@ -11,6 +11,8 @@ function Test-PublicLexiconAndUsability {
         "src/components/RubricCodexClient.tsx",
         "src/components/KnowledgeGraphClient.tsx",
         "src/components/PodcastArchiveClient.tsx",
+        "src/components/WorkingToolHubClient.tsx",
+        "src/components/FailureModeHubClient.tsx",
         "src/components/SiteHeader.tsx",
         "src/components/SiteFooter.tsx",
         "src/components/SystemStatusClient.tsx",
@@ -18,8 +20,11 @@ function Test-PublicLexiconAndUsability {
         "src/components/MasonicEngravings.tsx",
         "src/app/page.tsx",
         "src/app/incidents/[slug]/page.tsx",
+        "src/app/tools/[slug]/page.tsx",
+        "src/app/failures/[slug]/page.tsx",
         "src/app/knowledge-graph/page.tsx",
         "src/app/archive/page.tsx",
+        "src/app/podcast/page.tsx",
         "src/app/rubric/page.tsx",
         "src/app/status/page.tsx"
     )

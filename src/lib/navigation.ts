@@ -1,3 +1,9 @@
+import {
+  DOMAIN_SECTOR_SPECS,
+  SRE_FAILURE_MODES,
+  WORKING_TOOLS,
+} from "./taxonomy";
+
 export const PUBLIC_SITE_ORIGIN = "https://thecabcall.com";
 
 export interface NavSubItem {
@@ -25,7 +31,8 @@ export interface NavItemConfig {
 
 /**
  * Central, extensible navigation schema for The CAB Call two-tier masthead
- * and architectural dropdown ledger bar (Epic #27 / Issue #30).
+ * and architectural dropdown ledger bar (Epic #27 & Epic #44 / Issue #39).
+ * Derived directly from the canonical taxonomy in `src/lib/taxonomy.ts`.
  */
 export const NAVIGATION_SCHEMA: NavItemConfig[] = [
   {
@@ -59,45 +66,58 @@ export const NAVIGATION_SCHEMA: NavItemConfig[] = [
   {
     id: "archive",
     label: "The Archive",
-    href: "/knowledge-graph",
-    layout: "single",
-    items: [
+    href: "/archive",
+    layout: "two-column",
+    columns: [
       {
-        label: "Browse by Week",
-        href: "/knowledge-graph?view=week",
-        description: "Chronological ledger of verified civic and systems inspections",
+        heading: "Archive Views",
+        subtitle: "Ledger & Diagnostic Views",
+        items: [
+          {
+            label: "The Master Ledger",
+            href: "/archive",
+            description:
+              "Chronological & high-density case ledger of verified dispatches",
+          },
+          {
+            label: "6×6 Diagnostic Matrix",
+            href: "/archive#matrix",
+            description:
+              "Interactive Working Tool × Failure Mode heatmap",
+          },
+          {
+            label: "Monitored Publications",
+            href: "/archive?view=sources",
+            description:
+              "Cross-reference dispatches by upstream wire and publication",
+          },
+        ],
       },
       {
-        label: "Browse by Source",
-        href: "/knowledge-graph?view=source",
-        description: "Cross-reference dispatches across monitored publications",
-      },
-      {
-        label: "Search Dispatches",
-        href: "/knowledge-graph?view=search",
-        description: "Full-text search across case titles, codes, and plain facts",
-      },
-      {
-        label: "Historical Post-Mortems",
-        href: "/knowledge-graph?view=post-mortems",
-        description: "6×6 Working Tool × Failure Mode diagnostic matrix",
+        heading: "Browse by Sector (Axis III)",
+        subtitle: "Civic & Institutional Domains",
+        items: DOMAIN_SECTOR_SPECS.map((sector) => ({
+          label: sector.shortLabel,
+          href: `/archive?sector=${sector.slug}`,
+          description: sector.description,
+        })),
       },
     ],
   },
   {
     id: "podcast",
     label: "The CAB Call Podcast",
-    href: "/archive",
+    href: "/podcast",
     layout: "single",
     items: [
       {
         label: "Latest Episodes",
-        href: "/archive#latest",
+        href: "/podcast#latest",
         description: "Weekly Ledger Roundups and Foundational Craft & SRE Essays",
       },
       {
         label: "Episode Guides & Transcripts",
-        href: "/archive#transcripts",
+        href: "/podcast#transcripts",
         description: "Extended overviews, source dossiers, and full verified transcripts",
       },
       {
@@ -118,69 +138,21 @@ export const NAVIGATION_SCHEMA: NavItemConfig[] = [
       {
         heading: "The Working Tools",
         subtitle: "Axis I · Operative & Moral Craft Lenses",
-        items: [
-          {
-            label: "The 24-Inch Gauge",
-            href: "/rubric#24-inch-gauge",
-            description: "Budgeting crew hours, cutting busywork & guarding reserves",
-          },
-          {
-            label: "The Common Gavel",
-            href: "/rubric#common-gavel",
-            description: "Honest shop-floor reviews & stripping away partisan spin",
-          },
-          {
-            label: "The Square",
-            href: "/rubric#the-square",
-            description: "Squaring field work with the written blueprint & promises",
-          },
-          {
-            label: "The Level",
-            href: "/rubric#the-level",
-            description: "Shared accountability & equal footing across ranks",
-          },
-          {
-            label: "The Plumb",
-            href: "/rubric#the-plumb",
-            description: "Holding the line on safety standards under pressure",
-          },
-          {
-            label: "The Trowel",
-            href: "/rubric#the-trowel",
-            description: "Spreading the mortar of clear handoffs & civic trust",
-          },
-        ],
+        items: WORKING_TOOLS.map((tool) => ({
+          label: tool.navLabel,
+          href: `/tools/${tool.slug}`,
+          description: tool.navDescription,
+          badge: `TOOL ${tool.numeral}`,
+        })),
       },
       {
         heading: "System Failure Modes",
         subtitle: "Axis II · Site Reliability Fault Lines",
-        items: [
-          {
-            label: "Single Point of Failure (SPOF)",
-            href: "/rubric#spof",
-            description: "Betting the whole structure on a single load-bearing pin",
-          },
-          {
-            label: "Cascading Failure",
-            href: "/rubric#cascading-failure",
-            description: "Chain-reaction breakdowns across unbuffered supports",
-          },
-          {
-            label: "Configuration Drift",
-            href: "/rubric#configuration-drift",
-            description: "When daily field habits quietly wander off the blueprint",
-          },
-          {
-            label: "Silent Data Corruption",
-            href: "/rubric#silent-data-corruption",
-            description: "Drowning in false alarms & unverified telemetry signals",
-          },
-          {
-            label: "Untested Failover",
-            href: "/rubric#untested-failover",
-            description: "Emergency backups that only ever existed on paper",
-          },
-        ],
+        items: SRE_FAILURE_MODES.map((mode) => ({
+          label: mode.navLabel,
+          href: `/failures/${mode.slug}`,
+          description: mode.navDescription,
+        })),
       },
     ],
   },
@@ -241,7 +213,10 @@ export function isAdminDashboardPath(pathname: string): boolean {
 /**
  * Determines whether a top-level navigation item is the active "You Are Here"
  * street sign for the given pathname (Krug "Trunk Test" compliance).
- * Individual case briefs (`/incidents/[slug]`) and `/incidents` belong to The Trestleboard (`/`).
+ * - Individual case briefs (`/incidents/[slug]`) and `/incidents` belong to The Trestleboard (`/`).
+ * - `/archive` and `/knowledge-graph` belong to The Archive (`/archive`).
+ * - `/podcast` belongs to The CAB Call Podcast (`/podcast`).
+ * - `/rubric`, `/tools/[slug]`, and `/failures/[slug]` belong to The Working Tools & Rubric (`/rubric`).
  */
 export function isNavItemActive(
   itemHref: string,
@@ -262,12 +237,28 @@ export function isNavItemActive(
       normalizedPath.startsWith("/incidents/")
     );
   }
-  if (itemHref === "/archive") {
+  if (itemHref === "/archive" || itemHref === "/knowledge-graph") {
     return (
       normalizedPath === "/archive" ||
       normalizedPath.startsWith("/archive/") ||
+      normalizedPath === "/knowledge-graph" ||
+      normalizedPath.startsWith("/knowledge-graph/")
+    );
+  }
+  if (itemHref === "/podcast") {
+    return (
       normalizedPath === "/podcast" ||
       normalizedPath.startsWith("/podcast/")
+    );
+  }
+  if (itemHref === "/rubric") {
+    return (
+      normalizedPath === "/rubric" ||
+      normalizedPath.startsWith("/rubric/") ||
+      normalizedPath === "/tools" ||
+      normalizedPath.startsWith("/tools/") ||
+      normalizedPath === "/failures" ||
+      normalizedPath.startsWith("/failures/")
     );
   }
   if (itemHref === "/status") {

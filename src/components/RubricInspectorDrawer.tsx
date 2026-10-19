@@ -4,11 +4,13 @@ import React from "react";
 import Link from "next/link";
 import { X, Compass, Cpu, HelpCircle, ArrowRight } from "lucide-react";
 import {
+  getFailureModeHref,
   getSreFailureModeSpec,
+  getWorkingToolHref,
   getWorkingToolSpec,
 } from "@/lib/taxonomy";
 import { useTelemetry } from "./TelemetryContext";
-import { WorkingToolEngraving } from "./MasonicEngravings";
+import { FailureModeEngraving, WorkingToolEngraving } from "./MasonicEngravings";
 
 export function RubricInspectorDrawer() {
   const {
@@ -114,21 +116,21 @@ export function RubricInspectorDrawer() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
               <Link
-                href={`/knowledge-graph?tool=${encodeURIComponent(toolSpec.id)}`}
+                href={getWorkingToolHref(toolSpec.id)}
                 onClick={closeRubricInspector}
                 className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-wider px-4 py-2.5 bg-[#C5A059] text-[#0B0E14] font-semibold hover:bg-[#d6b36a] transition-colors"
               >
-                <span>Query All {toolSpec.id} Incidents</span>
+                <span>Open {toolSpec.id} Hub</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
               <Link
-                href="/rubric"
+                href={`/archive?tool=${toolSpec.slug}`}
                 onClick={closeRubricInspector}
                 className="font-mono text-xs text-[#C5A059] hover:underline"
               >
-                Full Rubric Codex →
+                Filter Archive Ledger →
               </Link>
             </div>
           </div>
@@ -139,12 +141,25 @@ export function RubricInspectorDrawer() {
           <div className="mt-6 pt-6 border-t border-[#8A6D3B]/40 space-y-4">
             <div className="flex items-center justify-between">
               <span className="font-mono text-xs uppercase tracking-wider text-[#F59E0B]">
-                PAIRED STRUCTURAL FAILURE MODE
+                PRIMARY PAIRED STRUCTURAL FAILURE MODE
               </span>
               <span className="font-mono text-[11px] uppercase px-2 py-0.5 border border-[#F59E0B]/50 text-[#F59E0B]">
                 Severity: {failureSpec.severity}
               </span>
             </div>
+
+            {!toolSpec && (
+              <div className="p-4 bg-[#111726] border border-[#8A6D3B]/50 flex flex-col items-center">
+                <FailureModeEngraving
+                  failureMode={failureSpec.id}
+                  size={128}
+                />
+                <span className="font-mono text-[11px] text-[#94A3B8] mt-2">
+                  {failureSpec.engravingCaption}
+                </span>
+              </div>
+            )}
+
             <h3 className="font-display text-lg text-[#F3EFE6]">
               {failureSpec.craftTitle}
             </h3>
@@ -165,16 +180,23 @@ export function RubricInspectorDrawer() {
                 {failureSpec.civicManifestation}
               </p>
             </div>
-            <Link
-              href={`/knowledge-graph?failure=${encodeURIComponent(
-                failureSpec.id
-              )}`}
-              onClick={closeRubricInspector}
-              className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-wider px-3.5 py-2 border border-[#C5A059]/60 text-[#C5A059] hover:bg-[#C5A059]/10 transition-colors"
-            >
-              <span>Filter Archive by {failureSpec.craftShortLabel}</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <Link
+                href={getFailureModeHref(failureSpec.id)}
+                onClick={closeRubricInspector}
+                className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-wider px-3.5 py-2 border border-[#C5A059]/60 text-[#C5A059] hover:bg-[#C5A059]/10 transition-colors"
+              >
+                <span>Open {failureSpec.craftShortLabel} Hub</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+              <Link
+                href={`/archive?failure=${failureSpec.slug}`}
+                onClick={closeRubricInspector}
+                className="font-mono text-xs text-[#C5A059] hover:underline"
+              >
+                Filter Archive Ledger →
+              </Link>
+            </div>
           </div>
         )}
       </aside>

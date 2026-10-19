@@ -47,15 +47,15 @@ export function SiteFooter() {
               </li>
               <li>
                 <Link
-                  href="/knowledge-graph"
+                  href="/archive"
                   className="hover:text-[#F3EFE6] transition-colors"
                 >
-                  The Archive &amp; Knowledge Graph
+                  The Archive &amp; Master Ledger
                 </Link>
               </li>
               <li>
                 <Link
-                  href="/archive"
+                  href="/podcast"
                   className="hover:text-[#F3EFE6] transition-colors"
                 >
                   The CAB Call Podcast

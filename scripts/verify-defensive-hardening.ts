@@ -17,7 +17,11 @@ import {
 } from "../src/lib/sanitize.ts";
 import {
   ensureD1Snapshot,
+  executeD1ArchivePaginationQueries,
+  executeD1FailureModeAggregations,
+  executeD1WorkingToolAggregations,
   extractStoredQuestionsPayload,
+  paginateAndAggregateIncidentCorpus,
   readLocalD1Snapshot,
 } from "../src/lib/d1-bridge.ts";
 import { INITIAL_INCIDENTS, INITIAL_EPISODES } from "../src/lib/seed-data.ts";
@@ -55,6 +59,7 @@ import {
 } from "../src/pipeline/rollup.ts";
 import {
   assertZeroTelemetryBleed,
+  formatCompactCaseId,
   formatCraftLedgerEntry,
   formatFriendlySourceName,
   mapDtoToCraftLexicon,
@@ -62,13 +67,28 @@ import {
   type PublicIncidentDto,
 } from "../src/lib/dto.ts";
 import {
+  DOMAIN_SECTOR_SPECS,
+  getDomainSectorBySlug,
+  getFailureModeBySlug,
+  getFailureModeHref,
   getSreFailureModeSpec,
+  getWorkingToolBySlug,
+  getWorkingToolHref,
   getWorkingToolSpec,
   mapFailureModeToCraftLexicon,
   mapWorkingToolToCraftLexicon,
   SRE_FAILURE_MODES,
   WORKING_TOOLS,
 } from "../src/lib/taxonomy.ts";
+import {
+  isNavItemActive,
+  NAVIGATION_SCHEMA,
+} from "../src/lib/navigation.ts";
+import {
+  getFailureModeHubData,
+  getPaginatedArchiveDispatches,
+  getWorkingToolHubData,
+} from "../src/lib/store.ts";
 import worker, { type ExecutionContextLike } from "../src/worker.ts";
 
 function createInMemoryD1Database(): {
@@ -1718,6 +1738,8 @@ async function runVerificationSuite() {
     "src/components/TrestleboardClient.tsx",
     "src/components/RubricInspectorDrawer.tsx",
     "src/components/RubricCodexClient.tsx",
+    "src/components/WorkingToolHubClient.tsx",
+    "src/components/FailureModeHubClient.tsx",
     "src/components/KnowledgeGraphClient.tsx",
     "src/components/PodcastArchiveClient.tsx",
     "src/components/SiteHeader.tsx",
@@ -1727,8 +1749,11 @@ async function runVerificationSuite() {
     "src/components/MasonicEngravings.tsx",
     "src/app/page.tsx",
     "src/app/incidents/[slug]/page.tsx",
+    "src/app/tools/[slug]/page.tsx",
+    "src/app/failures/[slug]/page.tsx",
     "src/app/knowledge-graph/page.tsx",
     "src/app/archive/page.tsx",
+    "src/app/podcast/page.tsx",
     "src/app/rubric/page.tsx",
     "src/app/status/page.tsx",
   ];
@@ -1838,7 +1863,7 @@ async function runVerificationSuite() {
       <header>
         <nav aria-label="Primary Broadsheet Navigation">
           <a href="/" aria-current="${isTrestleboardActive ? "page" : ""}" class="border-b-2 border-b-[#C5A059] text-[#F3EFE6] font-bold">The Trestleboard</a>
-          <a href="/knowledge-graph">The Archive</a>
+          <a href="/archive">The Archive</a>
         </nav>
       </header>
       <aside>
@@ -1849,7 +1874,7 @@ async function runVerificationSuite() {
         <span>${failureModeSpec.craftTitle}</span>
         <div>RECORD ID: ${ledgerEntry}</div>
         <a href="${inc.sourceUrl}">Read Original ${friendlySource} Article</a>
-        <a href="/knowledge-graph?tool=${encodeURIComponent(inc.primaryTool)}">More '${inc.primaryTool}' Cases →</a>
+        <a href="/archive?tool=${encodeURIComponent(primarySpec.slug)}">More '${inc.primaryTool}' Cases →</a>
       </aside>
       <main>
         <span>STRUCTURAL INSPECTION</span>
@@ -1948,10 +1973,10 @@ async function runVerificationSuite() {
   );
 
   // -------------------------------------------------------------------------
-  // 12. OBJECTIVE 12 (EPIC #27 / ISSUES #28–#32): TWO-TIER MASTHEAD, SEAL & DROPDOWN LEDGER
+  // 12. OBJECTIVE 12 (EPIC #27 / ISSUES #28–#32 + EPIC #44 / ISSUE #39): TWO-TIER MASTHEAD, SEAL & DROPDOWN LEDGER
   // -------------------------------------------------------------------------
   console.log(
-    "\n[12/12] Verifying Objective 12 (Epic #27 / Issues #28–#32): Two-Tier Masthead, Seal Backing & Architectural Dropdown Ledger..."
+    "\n[12/15] Verifying Objective 12 (Epic #27 & Issue #39): Two-Tier Masthead, Seal Backing & Canonical Dropdown Ledger..."
   );
 
   const navConfigSource = fs.readFileSync(
@@ -1987,38 +2012,43 @@ async function runVerificationSuite() {
     "Issue #29: SquareAndCompassesCrest must include solid #070A10 seal backing, ambient gold drop-shadow, 15deg/600ms hover rotation, and vertical gold plumb-line divider"
   );
 
-  // Issue #30: Central Navigation Schema
+  // Issue #30 + Issue #39: Central Navigation Schema derived from canonical taxonomy
+  const serializedNavSchema = JSON.stringify(NAVIGATION_SCHEMA);
   for (const expectedNavSnippet of [
-    "NAVIGATION_SCHEMA",
     "/#weekly-brief",
     "/#active-dispatches",
     "/incidents",
     "/#systemic-trends",
-    "/knowledge-graph?view=week",
-    "/knowledge-graph?view=source",
-    "/knowledge-graph?view=search",
-    "/knowledge-graph?view=post-mortems",
-    "/archive#latest",
-    "/archive#transcripts",
+    "/archive",
+    "/archive#matrix",
+    "/archive?view=sources",
+    "/archive?sector=public-policy-governance",
+    "/archive?sector=infrastructure-supply-chain",
+    "/archive?sector=technology-cyber",
+    "/archive?sector=economics-markets",
+    "/archive?sector=institutional-leadership",
+    "/podcast#latest",
+    "/podcast#transcripts",
     "Episode Guides & Transcripts",
-    "/rubric#24-inch-gauge",
-    "/rubric#common-gavel",
-    "/rubric#the-square",
-    "/rubric#the-level",
-    "/rubric#the-plumb",
-    "/rubric#the-trowel",
-    "/rubric#spof",
-    "/rubric#cascading-failure",
-    "/rubric#configuration-drift",
-    "/rubric#silent-data-corruption",
-    "/rubric#untested-failover",
+    "/tools/24-inch-gauge",
+    "/tools/common-gavel",
+    "/tools/the-square",
+    "/tools/the-level",
+    "/tools/the-plumb",
+    "/tools/the-trowel",
+    "/failures/single-point-of-failure",
+    "/failures/cascading-failure",
+    "/failures/configuration-drift",
+    "/failures/alert-fatigue",
+    "/failures/blame-culture",
+    "/failures/institutional-debt",
     "/status#mission",
     "/status#editorial-standards",
     "/status#feeds",
   ]) {
     assert.ok(
-      navConfigSource.includes(expectedNavSnippet),
-      `Issue #30: src/lib/navigation.ts must contain ${expectedNavSnippet}`
+      serializedNavSchema.includes(expectedNavSnippet),
+      `Issue #30 & #39: NAVIGATION_SCHEMA must contain canonical route ${expectedNavSnippet}`
     );
   }
 
@@ -2039,14 +2069,14 @@ async function runVerificationSuite() {
   );
 
   console.log(
-    "  ✓ Epic #27 (Issues #28–#32) Two-Tier Masthead, Seal Backing, Navigation Schema, Architectural Dropdowns & Accessibility verified."
+    "  ✓ Epic #27 & Issue #39 Two-Tier Masthead, Seal Backing, Canonical Navigation Schema, Architectural Dropdowns & Accessibility verified."
   );
 
   // -------------------------------------------------------------------------
   // 13. OBJECTIVE 13 (EPIC #33 / ISSUES #34–#38): PODCAST ARCHIVE UNIFICATION & DATA CLEANUP
   // -------------------------------------------------------------------------
   console.log(
-    "\n[13/13] Verifying Objective 13 (Epic #33 / Issues #34–#38): Podcast Archive Unification & Episode Description Data Cleanup..."
+    "\n[13/15] Verifying Objective 13 (Epic #33 / Issues #34–#38): Podcast Archive Unification & Episode Description Data Cleanup..."
   );
 
   const podcastArchiveSource = fs.readFileSync(
@@ -2061,8 +2091,12 @@ async function runVerificationSuite() {
     path.join(process.cwd(), "next.config.ts"),
     "utf8"
   );
+  const podcastPageSource = fs.readFileSync(
+    path.join(process.cwd(), "src/app/podcast/page.tsx"),
+    "utf8"
+  );
 
-  // Issue #34: Masthead & Filter Tabs
+  // Issue #34: Masthead & Filter Tabs + dedicated /podcast route
   assert.ok(
     podcastArchiveSource.includes("THE CAB CALL PODCAST // CONVERSATIONAL DEEP-DIVES &amp; ARCHIVE") &&
       podcastArchiveSource.includes("The CAB Call Podcast") &&
@@ -2073,9 +2107,9 @@ async function runVerificationSuite() {
       !podcastArchiveSource.includes("PODCAST ARCHIVE // FRIDAY 5-MINUTE ROLLUP & LEGACY CATALOG") &&
       !podcastArchiveSource.includes("Legacy Deep-Dive Archive") &&
       !podcastArchiveSource.includes("5-MIN BRIEF") &&
-      nextConfigSource.includes('source: "/podcast"') &&
-      nextConfigSource.includes('destination: "/archive"'),
-    "Issue #34: PodcastArchiveClient.tsx and next.config.ts must unify masthead, filter tabs, series badges, and /podcast -> /archive rewrite"
+      podcastPageSource.includes("PodcastArchiveClient") &&
+      nextConfigSource.includes('source: "/dispatches/:slug"'),
+    "Issue #34: PodcastArchiveClient.tsx and src/app/podcast/page.tsx must unify masthead, filter tabs, series badges, and dedicated /podcast route"
   );
 
   // Issue #35: Episode Description Sanitization & Source Extraction
@@ -2172,7 +2206,7 @@ async function runVerificationSuite() {
   // 14. OBJECTIVE 14 (EPIC #21 / ISSUES #22–#26): ADMIN DASHBOARD REDESIGN ("THE EDITOR'S STUDY")
   // -------------------------------------------------------------------------
   console.log(
-    "\n[14/14] Verifying Objective 14 (Epic #21 / Issues #22–#26): Admin Dashboard Redesign ('The Editor's Study')..."
+    "\n[14/15] Verifying Objective 14 (Epic #21 / Issues #22–#26): Admin Dashboard Redesign ('The Editor's Study')..."
   );
 
   const adminShellNavSource = fs.readFileSync(
@@ -2270,8 +2304,224 @@ async function runVerificationSuite() {
   console.log(
     "  ✓ Epic #21 (Issues #22–#26) Admin Dashboard Redesign ('The Editor's Study') verified."
   );
+
+  // -------------------------------------------------------------------------
+  // 15. OBJECTIVE 15 (EPIC #44 / ISSUES #39–#43): INFORMATION ARCHITECTURE, HUB PAGES & 1,000-ITEM PAGINATION
+  // -------------------------------------------------------------------------
   console.log(
-    "\n=== ALL 14 DEFENSIVE HARDENING, CRAFT PROSE, KRUG USABILITY, MASTHEAD, PODCAST ARCHIVE & ADMIN STUDY OBJECTIVES PASSED (100%) ==="
+    "\n[15/15] Verifying Objective 15 (Epic #44 / Issues #39–#43): Dedicated Tool/SRE Hub Pages, Navigation Alignment & 1,000-Item Archive Pagination..."
+  );
+
+  // Sub-Issue #39: Canonical Taxonomy Alignment & Navigation Dropdown Refactor
+  assert.equal(WORKING_TOOLS.length, 6, "Must have exactly 6 canonical Working Tools");
+  assert.equal(SRE_FAILURE_MODES.length, 6, "Must have exactly 6 canonical SRE Failure Modes");
+  assert.equal(DOMAIN_SECTOR_SPECS.length, 5, "Must have exactly 5 canonical Domain Sectors");
+
+  assert.equal(
+    serializedNavSchema.includes("Silent Data Corruption"),
+    false,
+    "Issue #39: NAVIGATION_SCHEMA must have zero drifted 'Silent Data Corruption' labels"
+  );
+
+  // Verify active nav street-sign matching for /tools/*, /failures/*, /archive*, and /podcast*
+  assert.equal(isNavItemActive("/rubric", "/tools/the-square"), true);
+  assert.equal(isNavItemActive("/rubric", "/failures/configuration-drift"), true);
+  assert.equal(isNavItemActive("/archive", "/archive"), true);
+  assert.equal(isNavItemActive("/archive", "/knowledge-graph"), true);
+  assert.equal(isNavItemActive("/podcast", "/podcast"), true);
+
+  // Sub-Issue #40: Dedicated Dynamic Hub Pages for Working Tools (/tools/[slug])
+  for (const tool of WORKING_TOOLS) {
+    assert.ok(
+      tool.slug &&
+        tool.operativeOriginEssay.length >= 2 &&
+        tool.moralCivicApplicationEssay.length >= 2 &&
+        tool.systemsEngineeringEquivalentEssay.length >= 2 &&
+        tool.operationalPractices.length >= 3,
+      `Issue #40: Working Tool ${tool.id} must define slug, 3-part essay paragraphs, and operationalPractices`
+    );
+    const resolved = getWorkingToolBySlug(tool.slug);
+    assert.equal(resolved?.id, tool.id);
+    assert.equal(getWorkingToolHref(tool.id), `/tools/${tool.slug}`);
+
+    const hubData = getWorkingToolHubData(tool.slug);
+    assert.ok(hubData, `getWorkingToolHubData('${tool.slug}') must return valid hub data`);
+    assert.equal(hubData.spec.id, tool.id);
+    assert.equal(hubData.telemetry.coOccurringFailureModes.length, 6);
+    assert.equal(hubData.telemetry.sectorBreakdown.length, 5);
+  }
+
+  // Sub-Issue #41: Dedicated Dynamic Hub Pages for Structural Failure Modes (/failures/[slug])
+  for (const mode of SRE_FAILURE_MODES) {
+    assert.ok(
+      mode.slug &&
+        mode.shopFloorMechanicsEssay.length >= 2 &&
+        mode.civicInstitutionalEssay.length >= 2 &&
+        mode.earlyWarningSignals.length >= 3,
+      `Issue #41: Failure Mode ${mode.id} must define slug, 3-part mechanics essays, and earlyWarningSignals`
+    );
+    const resolved = getFailureModeBySlug(mode.slug);
+    assert.equal(resolved?.id, mode.id);
+    assert.equal(getFailureModeHref(mode.id), `/failures/${mode.slug}`);
+
+    const hubData = getFailureModeHubData(mode.slug);
+    assert.ok(hubData, `getFailureModeHubData('${mode.slug}') must return valid hub data`);
+    assert.equal(hubData.spec.id, mode.id);
+    assert.equal(hubData.telemetry.intersectingTools.length, 6);
+    assert.equal(hubData.telemetry.sectorBreakdown.length, 5);
+  }
+  assert.ok(
+    engravingsSource.includes("export function FailureModeEngraving") &&
+      engravingsSource.includes("PLATE A — OFF-SQUARE DRIFT") &&
+      engravingsSource.includes("PLATE F — COMPOUNDING DEBT"),
+    "Issue #41: MasonicEngravings.tsx must export FailureModeEngraving with copperplate diagrams PLATE A through PLATE F"
+  );
+
+  // Sub-Issue #42: Streamlined /rubric Methodology Codex & Visual Directory
+  const rubricCodexSource = fs.readFileSync(
+    path.join(process.cwd(), "src/components/RubricCodexClient.tsx"),
+    "utf8"
+  );
+  const rubricDrawerSource = fs.readFileSync(
+    path.join(process.cwd(), "src/components/RubricInspectorDrawer.tsx"),
+    "utf8"
+  );
+  assert.equal(
+    /mutually exclusive/i.test(rubricCodexSource),
+    false,
+    "Issue #42: RubricCodexClient.tsx must eliminate all 'mutually exclusive' phrasing"
+  );
+  assert.equal(
+    rubricCodexSource.includes("setActiveToolId"),
+    false,
+    "Issue #42: RubricCodexClient.tsx must remove the redundant interactive split-screen tab switcher"
+  );
+  assert.ok(
+    rubricCodexSource.includes("getWorkingToolHref") &&
+      rubricCodexSource.includes("getFailureModeHref") &&
+      rubricCodexSource.includes("getDomainSectorHref") &&
+      rubricDrawerSource.includes("getWorkingToolHref") &&
+      rubricDrawerSource.includes("getFailureModeHref"),
+    "Issue #42: RubricCodexClient.tsx and RubricInspectorDrawer.tsx must link directly to /tools/[slug] and /failures/[slug]"
+  );
+
+  // Sub-Issue #43: Archive Scalability Refactor — 0010 D1 Indexes, 1,000-Item Pagination, 6x6 Brass Heatmap & Zero Overflow
+  const paginationIndexRows = rawSql
+    .prepare(
+      `SELECT name FROM sqlite_master WHERE type = 'index' AND name IN (
+        'idx_telemetry_matrix_lookup',
+        'idx_telemetry_secondary_tool_lookup',
+        'idx_telemetry_failure_published_lookup',
+        'idx_telemetry_source_feed_lookup',
+        'idx_telemetry_pinned_published_lookup'
+      )`
+    )
+    .all() as Array<{ name: string }>;
+  assert.equal(
+    paginationIndexRows.length,
+    5,
+    "Issue #43: All 5 composite pagination indexes from 0010_archive_pagination_indexes.sql must exist in D1"
+  );
+
+  // Verify D1 pagination and Worker GET /api/archive endpoint
+  const d1ArchivePage = await executeD1ArchivePaginationQueries(db, {
+    page: 1,
+    pageSize: 25,
+  });
+  assert.equal(d1ArchivePage.page, 1);
+  assert.equal(d1ArchivePage.pageSize, 25);
+  assert.ok(d1ArchivePage.totalCount >= 1);
+
+  const d1ToolAgg = await executeD1WorkingToolAggregations(db, "The Level");
+  assert.ok(d1ToolAgg.primaryCount >= 1);
+  assert.ok(d1ToolAgg.totalTagged >= 1);
+
+  const d1FailureAgg = await executeD1FailureModeAggregations(
+    db,
+    "Single Point of Failure (SPOF) / Untested Failover"
+  );
+  assert.ok(d1FailureAgg.totalTagged >= 1);
+
+  const workerArchiveRes = await worker.fetch(
+    new Request(
+      "https://thecabcall.thecabcall.workers.dev/api/archive?page=1&pageSize=25&tool=the-level"
+    ),
+    workerEnv,
+    mockExecutionContext
+  );
+  assert.equal(workerArchiveRes.status, 200);
+  const workerArchiveJson = (await workerArchiveRes.json()) as {
+    ok: boolean;
+    items: PublicIncidentDto[];
+    totalCount: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  };
+  assert.equal(workerArchiveJson.ok, true);
+  assert.equal(workerArchiveJson.totalCount, 1);
+  assert.equal(workerArchiveJson.items.length, 1);
+
+  // Verify 1,000-Item Corpus Pagination & Full-Corpus 6x6 Matrix Aggregation
+  const seedBaseDto = projectPublicIncidentDto(INITIAL_INCIDENTS[0])!;
+  const synthetic1000Corpus: PublicIncidentDto[] = Array.from(
+    { length: 1000 },
+    (_, idx) => {
+      const tool = WORKING_TOOLS[idx % WORKING_TOOLS.length];
+      const secondary = WORKING_TOOLS[(idx + 1) % WORKING_TOOLS.length];
+      const failure = SRE_FAILURE_MODES[idx % SRE_FAILURE_MODES.length];
+      const sector = DOMAIN_SECTOR_SPECS[idx % DOMAIN_SECTOR_SPECS.length];
+      return {
+        ...seedBaseDto,
+        id: `d1-${2000 + idx}`,
+        incidentCode: `#CAB-2026-${2000 + idx}`,
+        slug: `synthetic-dispatch-${2000 + idx}`,
+        title: `Synthetic Structural Dispatch #${2000 + idx}: ${tool.id} & ${failure.craftShortLabel}`,
+        primaryTool: tool.id,
+        secondaryTool: secondary.id,
+        sreFailureMode: failure.id,
+        domainSector: sector.id,
+      };
+    }
+  );
+
+  const page2Result = paginateAndAggregateIncidentCorpus(synthetic1000Corpus, {
+    page: 2,
+    pageSize: 25,
+  });
+  assert.equal(page2Result.totalCount, 1000);
+  assert.equal(page2Result.corpusTotalCount, 1000);
+  assert.equal(page2Result.totalPages, 40);
+  assert.equal(page2Result.page, 2);
+  assert.equal(page2Result.items.length, 25);
+  assert.equal(page2Result.startIndex, 26);
+  assert.equal(page2Result.endIndex, 50);
+
+  // Verify compact Case ID formatter (CAB-2026-XXXX)
+  assert.equal(
+    formatCompactCaseId("Ledger Entry — Case #CAB-2026-0912", "d1-912"),
+    "CAB-2026-0912"
+  );
+
+  // Verify KnowledgeGraphClient.tsx has 6-column zero-overflow table, brass heatmap, and Monitored Publications view
+  const knowledgeGraphSource = fs.readFileSync(
+    path.join(process.cwd(), "src/components/KnowledgeGraphClient.tsx"),
+    "utf8"
+  );
+  assert.ok(
+    knowledgeGraphSource.includes('id="matrix"') &&
+      knowledgeGraphSource.includes("rgba(212, 175, 55,") &&
+      knowledgeGraphSource.includes("formatCompactCaseId") &&
+      knowledgeGraphSource.includes("Monitored Publications") &&
+      !knowledgeGraphSource.includes("min-w-[880px]"),
+    "Issue #43: KnowledgeGraphClient.tsx must implement id='matrix', dynamic rgba(212, 175, 55, ...) brass heatmap shading, formatCompactCaseId, Monitored Publications view, and zero horizontal overflow (no min-w-[880px])"
+  );
+
+  console.log(
+    "  ✓ Epic #44 (Issues #39–#43) Canonical Taxonomy Navigation, /tools/[slug] & /failures/[slug] Hubs, Streamlined /rubric Codex, and 1,000-Item Archive Pagination verified."
+  );
+  console.log(
+    "\n=== ALL 15 DEFENSIVE HARDENING, CRAFT PROSE, KRUG USABILITY, MASTHEAD, PODCAST ARCHIVE, ADMIN STUDY & EPIC #44 IA SCALE OBJECTIVES PASSED (100%) ==="
   );
 }
 

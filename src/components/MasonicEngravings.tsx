@@ -1,5 +1,10 @@
 import React from "react";
-import { WORKING_TOOLS, WorkingToolId } from "@/lib/taxonomy";
+import {
+  mapFailureModeToCraftLexicon,
+  SreFailureModeId,
+  WORKING_TOOLS,
+  WorkingToolId,
+} from "@/lib/taxonomy";
 import { ToolProbabilityDistribution } from "@/lib/types";
 
 export function SquareAndCompassesCrest({
@@ -298,10 +303,13 @@ export function MasonSquareWatermark({
 export function WorkingToolEngraving({
   tool,
   className = "w-24 h-24",
+  size,
 }: {
   tool: WorkingToolId;
   className?: string;
+  size?: number;
 }) {
+  void size;
   switch (tool) {
     case "24-Inch Gauge":
       return (
@@ -794,4 +802,521 @@ export function EpisodeArtworkEmblem({
     </div>
   );
 }
+
+/**
+ * Bespoke copperplate architectural fault diagrams for all Six Structural Failure Modes (Issue #41).
+ */
+export function FailureModeEngraving({
+  failureMode,
+  className = "w-48 h-28",
+  size,
+}: {
+  failureMode: SreFailureModeId | string;
+  className?: string;
+  size?: number;
+}) {
+  void size;
+  const canonical = mapFailureModeToCraftLexicon(failureMode);
+
+  switch (canonical) {
+    case "Configuration Drift":
+    case "Structural Friction":
+      return (
+        <svg
+          viewBox="0 0 180 110"
+          fill="none"
+          className={className}
+          aria-label="Configuration Drift Copperplate Fault Diagram"
+        >
+          <rect
+            x="6"
+            y="6"
+            width="168"
+            height="98"
+            stroke="#8A6D3B"
+            strokeWidth="0.75"
+            strokeDasharray="3 2"
+          />
+          {/* Baseline Horizontal Reference Course */}
+          <line
+            x1="24"
+            y1="80"
+            x2="156"
+            y2="80"
+            stroke="#C5A059"
+            strokeWidth="1.5"
+          />
+          {/* True 90° Plumb Blueprint Axis */}
+          <line
+            x1="54"
+            y1="80"
+            x2="54"
+            y2="20"
+            stroke="#C5A059"
+            strokeWidth="1.5"
+          />
+          <rect
+            x="54"
+            y="68"
+            width="12"
+            height="12"
+            stroke="#F3EFE6"
+            strokeWidth="0.9"
+          />
+          {/* Drifted Field Wall Leaning Off-Square */}
+          <line
+            x1="54"
+            y1="80"
+            x2="86"
+            y2="22"
+            stroke="#F59E0B"
+            strokeWidth="1.6"
+            strokeDasharray="4 2"
+          />
+          {/* Drift Arc & Angle Callout */}
+          <path
+            d="M54 36 A44 44 0 0 1 76 40"
+            stroke="#F59E0B"
+            strokeWidth="1.1"
+          />
+          <circle cx="86" cy="22" r="2.5" fill="#F59E0B" />
+          <text
+            x="84"
+            y="38"
+            fill="#F59E0B"
+            fontSize="7.5"
+            fontFamily="monospace"
+          >
+            +14.2° DRIFT
+          </text>
+          <text
+            x="24"
+            y="30"
+            fill="#C5A059"
+            fontSize="7.5"
+            fontFamily="monospace"
+          >
+            90° SPEC
+          </text>
+          <text
+            x="32"
+            y="96"
+            fill="#94A3B8"
+            fontSize="7.5"
+            fontFamily="monospace"
+          >
+            PLATE A — OFF-SQUARE DRIFT
+          </text>
+        </svg>
+      );
+
+    case "Cascading Failure":
+      return (
+        <svg
+          viewBox="0 0 180 110"
+          fill="none"
+          className={className}
+          aria-label="Cascading Failure Copperplate Fault Diagram"
+        >
+          <rect
+            x="6"
+            y="6"
+            width="168"
+            height="98"
+            stroke="#8A6D3B"
+            strokeWidth="0.75"
+            strokeDasharray="3 2"
+          />
+          {/* Three Coupled Piers Transforming into Domino Shear */}
+          <rect
+            x="24"
+            y="34"
+            width="22"
+            height="46"
+            transform="rotate(18 35 80)"
+            stroke="#F59E0B"
+            strokeWidth="1.4"
+            fill="#0B0E14"
+          />
+          <rect
+            x="74"
+            y="34"
+            width="22"
+            height="46"
+            transform="rotate(11 85 80)"
+            stroke="#C5A059"
+            strokeWidth="1.4"
+            fill="#0B0E14"
+          />
+          <rect
+            x="124"
+            y="34"
+            width="22"
+            height="46"
+            stroke="#F3EFE6"
+            strokeWidth="1.4"
+            fill="#111726"
+          />
+          {/* Load-Transfer Arrows */}
+          <path
+            d="M52 46 L70 46 M66 42 L71 46 L66 50"
+            stroke="#F59E0B"
+            strokeWidth="1.3"
+          />
+          <path
+            d="M102 46 L120 46 M116 42 L121 46 L116 50"
+            stroke="#F59E0B"
+            strokeWidth="1.3"
+          />
+          <line
+            x1="18"
+            y1="80"
+            x2="162"
+            y2="80"
+            stroke="#8A6D3B"
+            strokeWidth="1.2"
+          />
+          <text
+            x="38"
+            y="24"
+            fill="#F59E0B"
+            fontSize="7.5"
+            fontFamily="monospace"
+          >
+            NO BULKHEAD // LOAD SURGE
+          </text>
+          <text
+            x="26"
+            y="96"
+            fill="#94A3B8"
+            fontSize="7.5"
+            fontFamily="monospace"
+          >
+            PLATE B — CHAIN-REACTION LOAD
+          </text>
+        </svg>
+      );
+
+    case "Alert Fatigue & Signal Loss":
+      return (
+        <svg
+          viewBox="0 0 180 110"
+          fill="none"
+          className={className}
+          aria-label="Alert Fatigue Copperplate Fault Diagram"
+        >
+          <rect
+            x="6"
+            y="6"
+            width="168"
+            height="98"
+            stroke="#8A6D3B"
+            strokeWidth="0.75"
+            strokeDasharray="3 2"
+          />
+          {/* Saturated High-Frequency Noise Waveform */}
+          <path
+            d="M18 54 L24 30 L30 76 L36 28 L42 78 L48 32 L54 74 L60 28 L66 76 L72 30 L78 74 L84 32 L90 76 L96 28 L102 78 L108 32 L114 74 L120 20 L126 84 L132 30 L138 74 L144 34 L150 72 L158 54"
+            stroke="#8A6D3B"
+            strokeWidth="1.1"
+          />
+          {/* Buried True Structural Signal Node */}
+          <circle
+            cx="120"
+            cy="20"
+            r="4.5"
+            stroke="#F59E0B"
+            strokeWidth="1.5"
+            fill="#0B0E14"
+          />
+          <line
+            x1="16"
+            y1="38"
+            x2="164"
+            y2="38"
+            stroke="#C5A059"
+            strokeWidth="0.9"
+            strokeDasharray="3 2"
+          />
+          <text
+            x="22"
+            y="22"
+            fill="#C5A059"
+            fontSize="7.5"
+            fontFamily="monospace"
+          >
+            NOISE CEILING
+          </text>
+          <text
+            x="104"
+            y="15"
+            fill="#F59E0B"
+            fontSize="7"
+            fontFamily="monospace"
+          >
+            FAULT LOST
+          </text>
+          <text
+            x="24"
+            y="96"
+            fill="#94A3B8"
+            fontSize="7.5"
+            fontFamily="monospace"
+          >
+            PLATE C — SATURATED ALARM BELL
+          </text>
+        </svg>
+      );
+
+    case "Single Point of Failure (SPOF) / Untested Failover":
+      return (
+        <svg
+          viewBox="0 0 180 110"
+          fill="none"
+          className={className}
+          aria-label="Single Point of Failure Copperplate Fault Diagram"
+        >
+          <rect
+            x="6"
+            y="6"
+            width="168"
+            height="98"
+            stroke="#8A6D3B"
+            strokeWidth="0.75"
+            strokeDasharray="3 2"
+          />
+          {/* Heavy Upper Entablature */}
+          <rect
+            x="24"
+            y="18"
+            width="132"
+            height="16"
+            stroke="#C5A059"
+            strokeWidth="1.4"
+            fill="#111726"
+          />
+          {/* Single Keystone Pin Bearing Full Load */}
+          <polygon
+            points="82,34 98,34 94,58 86,58"
+            stroke="#F59E0B"
+            strokeWidth="1.6"
+            fill="#0B0E14"
+          />
+          <line
+            x1="90"
+            y1="58"
+            x2="90"
+            y2="80"
+            stroke="#F59E0B"
+            strokeWidth="1.8"
+          />
+          {/* Untested Paper Failover Strut (Disconnected) */}
+          <line
+            x1="44"
+            y1="34"
+            x2="44"
+            y2="68"
+            stroke="#94A3B8"
+            strokeWidth="1"
+            strokeDasharray="2 3"
+          />
+          <line
+            x1="136"
+            y1="34"
+            x2="136"
+            y2="68"
+            stroke="#94A3B8"
+            strokeWidth="1"
+            strokeDasharray="2 3"
+          />
+          <line
+            x1="20"
+            y1="80"
+            x2="160"
+            y2="80"
+            stroke="#C5A059"
+            strokeWidth="1.4"
+          />
+          <text
+            x="100"
+            y="50"
+            fill="#F59E0B"
+            fontSize="7.5"
+            fontFamily="monospace"
+          >
+            SPOF PIN
+          </text>
+          <text
+            x="28"
+            y="96"
+            fill="#94A3B8"
+            fontSize="7.5"
+            fontFamily="monospace"
+          >
+            PLATE D — SINGLE LOAD PIN
+          </text>
+        </svg>
+      );
+
+    case "Blame Culture vs. Root-Cause Isolation":
+      return (
+        <svg
+          viewBox="0 0 180 110"
+          fill="none"
+          className={className}
+          aria-label="Blame Culture vs. Root-Cause Isolation Copperplate Fault Diagram"
+        >
+          <rect
+            x="6"
+            y="6"
+            width="168"
+            height="98"
+            stroke="#8A6D3B"
+            strokeWidth="0.75"
+            strokeDasharray="3 2"
+          />
+          {/* Shop Floor Line */}
+          <line
+            x1="20"
+            y1="52"
+            x2="160"
+            y2="52"
+            stroke="#C5A059"
+            strokeWidth="1.4"
+          />
+          {/* Above Floor: Exposed Lever */}
+          <line
+            x1="60"
+            y1="52"
+            x2="74"
+            y2="24"
+            stroke="#F3EFE6"
+            strokeWidth="1.6"
+          />
+          <circle cx="74" cy="24" r="3" fill="#C5A059" />
+          {/* Below Floor: Unfixed Subsurface Gear/Linkage Trap */}
+          <rect
+            x="44"
+            y="58"
+            width="92"
+            height="22"
+            stroke="#F59E0B"
+            strokeWidth="1.3"
+            strokeDasharray="3 2"
+            fill="#0B0E14"
+          />
+          <path
+            d="M54 69 L82 69 M92 64 L102 74 M102 64 L92 74 M108 69 L126 69"
+            stroke="#F59E0B"
+            strokeWidth="1.3"
+          />
+          <text
+            x="84"
+            y="32"
+            fill="#94A3B8"
+            fontSize="7.5"
+            fontFamily="monospace"
+          >
+            LAST HAND ON LEVER
+          </text>
+          <text
+            x="52"
+            y="73"
+            fill="#F59E0B"
+            fontSize="7"
+            fontFamily="monospace"
+          >
+            ROOT TRAP
+          </text>
+          <text
+            x="24"
+            y="96"
+            fill="#94A3B8"
+            fontSize="7.5"
+            fontFamily="monospace"
+          >
+            PLATE E — SURFACE vs. ROOT TRAP
+          </text>
+        </svg>
+      );
+
+    case "Technical & Institutional Debt":
+      return (
+        <svg
+          viewBox="0 0 180 110"
+          fill="none"
+          className={className}
+          aria-label="Institutional Debt Copperplate Fault Diagram"
+        >
+          <rect
+            x="6"
+            y="6"
+            width="168"
+            height="98"
+            stroke="#8A6D3B"
+            strokeWidth="0.75"
+            strokeDasharray="3 2"
+          />
+          {/* Upper Courses Intact */}
+          <rect
+            x="30"
+            y="22"
+            width="120"
+            height="18"
+            stroke="#C5A059"
+            strokeWidth="1.4"
+            fill="#111726"
+          />
+          <line
+            x1="70"
+            y1="22"
+            x2="70"
+            y2="40"
+            stroke="#C5A059"
+            strokeWidth="1.1"
+          />
+          <line
+            x1="110"
+            y1="22"
+            x2="110"
+            y2="40"
+            stroke="#C5A059"
+            strokeWidth="1.1"
+          />
+          {/* Lower Foundation Course Fractured & Subsiding */}
+          <path
+            d="M30 42 L150 48 L146 76 L30 68 Z"
+            stroke="#F59E0B"
+            strokeWidth="1.5"
+            fill="#0B0E14"
+          />
+          {/* Fracture Cracks in Foundation */}
+          <path
+            d="M64 44 L58 56 L66 69 M114 46 L108 60 L116 74"
+            stroke="#F59E0B"
+            strokeWidth="1.3"
+          />
+          <text
+            x="44"
+            y="61"
+            fill="#F59E0B"
+            fontSize="7.5"
+            fontFamily="monospace"
+          >
+            DEFERRED FOUNDATION ROT
+          </text>
+          <text
+            x="26"
+            y="96"
+            fill="#94A3B8"
+            fontSize="7.5"
+            fontFamily="monospace"
+          >
+            PLATE F — COMPOUNDING DEBT
+          </text>
+        </svg>
+      );
+  }
+}
+
 

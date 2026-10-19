@@ -1,20 +1,39 @@
-import React from "react";
-import { projectPublicEpisodeDto } from "@/lib/dto";
-import { ensureD1Snapshot, getAllEpisodes } from "@/lib/store";
-import { PodcastArchiveClient } from "@/components/PodcastArchiveClient";
+import React, { Suspense } from "react";
+import {
+  ensureD1Snapshot,
+  getAllPublicIncidentDtos,
+  getPaginatedArchiveDispatches,
+} from "@/lib/store";
+import { KnowledgeGraphClient } from "@/components/KnowledgeGraphClient";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "The CAB Call Podcast — Conversational Deep-Dives & Archive",
+  title: "The Archive — Master Case Ledger, 6×6 Diagnostic Matrix & Monitored Publications",
   description:
-    "Conversational deep-dives analyzing live Trestleboard ledger dispatches alongside foundational essays on Site Reliability Engineering and the Working Tools of Freemasonry.",
+    "Browse the complete Master Case Ledger of verified post-incident dispatches, filter across the 6×6 Working Tools × Failure Modes Diagnostic Matrix, and inspect Monitored Publications.",
 };
 
 export default async function ArchivePage() {
-  await ensureD1Snapshot(true);
-  const episodes = getAllEpisodes()
-    .map((ep) => projectPublicEpisodeDto(ep))
-    .filter((ep): ep is NonNullable<typeof ep> => ep !== null);
-  return <PodcastArchiveClient initialEpisodes={episodes} />;
+  await ensureD1Snapshot();
+  const incidents = getAllPublicIncidentDtos();
+  const initialArchivePage = getPaginatedArchiveDispatches({
+    page: 1,
+    pageSize: 25,
+  });
+
+  return (
+    <Suspense
+      fallback={
+        <div className="max-w-7xl mx-auto px-6 py-12 font-mono text-sm text-[#C5A059]">
+          Loading Master Case Ledger &amp; 6×6 Diagnostic Matrix…
+        </div>
+      }
+    >
+      <KnowledgeGraphClient
+        incidents={incidents}
+        initialArchivePage={initialArchivePage}
+      />
+    </Suspense>
+  );
 }

@@ -28,6 +28,7 @@ export {
  * Determines whether a top-level navigation item is the active "You Are Here"
  * street sign for the given pathname (Krug "Trunk Test" compliance).
  * Individual case briefs (`/incidents/[slug]`) belong to The Trestleboard (`/`).
+ * `/tools/[slug]` and `/failures/[slug]` belong to The Working Tools & Rubric (`/rubric`).
  */
 export function isNavItemActive(
   itemHref: string,
@@ -46,6 +47,30 @@ export function isNavItemActive(
       normalizedPath === "/" ||
       normalizedPath === "/incidents" ||
       normalizedPath.startsWith("/incidents/")
+    );
+  }
+  if (itemHref === "/archive" || itemHref === "/knowledge-graph") {
+    return (
+      normalizedPath === "/archive" ||
+      normalizedPath.startsWith("/archive/") ||
+      normalizedPath === "/knowledge-graph" ||
+      normalizedPath.startsWith("/knowledge-graph/")
+    );
+  }
+  if (itemHref === "/podcast") {
+    return (
+      normalizedPath === "/podcast" ||
+      normalizedPath.startsWith("/podcast/")
+    );
+  }
+  if (itemHref === "/rubric") {
+    return (
+      normalizedPath === "/rubric" ||
+      normalizedPath.startsWith("/rubric/") ||
+      normalizedPath === "/tools" ||
+      normalizedPath.startsWith("/tools/") ||
+      normalizedPath === "/failures" ||
+      normalizedPath.startsWith("/failures/")
     );
   }
   if (itemHref === "/status") {
@@ -288,6 +313,18 @@ export function SiteHeader() {
         <span className="pointer-events-none absolute bottom-1 right-1 w-2.5 h-2.5 border-b-2 border-r-2 border-[#C5A059]" />
 
         <div className="relative z-10 p-3.5 sm:p-4">
+          <div className="px-3.5 pb-2.5 mb-2.5 border-b border-[#8A6D3B]/40 flex items-center justify-between">
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#C5A059]">
+              {item.label}
+            </span>
+            <Link
+              href={resolveHref(item.href)}
+              onClick={() => setOpenDropdownId(null)}
+              className="font-mono text-[10px] text-[#94A3B8] hover:text-[#C5A059] transition-colors"
+            >
+              Overview →
+            </Link>
+          </div>
           {isTwoColumn && item.columns ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:divide-x sm:divide-[#8A6D3B]/35">
               {item.columns.map((col, colIdx) => (
@@ -315,18 +352,6 @@ export function SiteHeader() {
             </div>
           ) : (
             <div className="space-y-0.5">
-              <div className="px-3.5 pb-2 mb-1.5 border-b border-[#8A6D3B]/35 flex items-center justify-between">
-                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#C5A059]">
-                  {item.label}
-                </span>
-                <Link
-                  href={resolveHref(item.href)}
-                  onClick={() => setOpenDropdownId(null)}
-                  className="font-mono text-[10px] text-[#94A3B8] hover:text-[#C5A059] transition-colors"
-                >
-                  Overview →
-                </Link>
-              </div>
               {item.items?.map((subItem) =>
                 renderSubItemLink(subItem, item.id)
               )}

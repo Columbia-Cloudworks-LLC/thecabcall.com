@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   isRenderablePublicEpisode,
   isRenderablePublicIncident,
+  projectPublicIncidentDto,
   PublicEpisodeDto,
   PublicIncidentDto,
 } from "./dto";
@@ -15,10 +16,19 @@ import {
   validateAndNormalizeIncidentSummary,
 } from "./sanitize";
 import {
+  DOMAIN_SECTOR_SPECS,
   DomainSectorId,
+  formatFriendlySourceName,
+  getDomainSectorBySlug,
+  getFailureModeBySlug,
+  getSreFailureModeSpec,
+  getWorkingToolBySlug,
+  getWorkingToolSpec,
   mapFailureModeToCraftLexicon,
   mapWorkingToolToCraftLexicon,
+  SRE_FAILURE_MODES,
   SreFailureModeId,
+  WORKING_TOOLS,
   WorkingToolId,
 } from "./taxonomy";
 import {
@@ -1051,6 +1061,11 @@ function ensureLocalSqliteHardenedSchema(db: {
       CREATE INDEX IF NOT EXISTS idx_telemetry_articles_status_only ON telemetry_articles(status);
       CREATE INDEX IF NOT EXISTS idx_telemetry_articles_status_published ON telemetry_articles(status, published_at DESC);
       CREATE INDEX IF NOT EXISTS idx_telemetry_articles_published_desc ON telemetry_articles(published_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_telemetry_matrix_lookup ON telemetry_articles(status, is_hidden, primary_tool, sre_failure_mode, published_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_telemetry_secondary_tool_lookup ON telemetry_articles(status, is_hidden, secondary_tool, published_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_telemetry_failure_published_lookup ON telemetry_articles(status, is_hidden, sre_failure_mode, published_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_telemetry_source_feed_lookup ON telemetry_articles(status, is_hidden, source_feed, published_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_telemetry_pinned_published_lookup ON telemetry_articles(status, is_hidden, is_pinned DESC, published_at DESC, id DESC);
       CREATE INDEX IF NOT EXISTS idx_episodes_published_desc ON episodes(published_at DESC);
       CREATE INDEX IF NOT EXISTS idx_episodes_status_published ON episodes(status, published_at DESC);
     `);
@@ -1071,9 +1086,25 @@ export function readLocalSqliteSnapshot(): LocalD1Snapshot {
   }
 
   try {
-    // Dynamic require of built-in node:sqlite so bundlers don't complain on client side
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { DatabaseSync } = require("node:sqlite");
+    // Load built-in node:sqlite via process.getBuiltinModule so bundlers and ESM both work cleanly
+    const sqliteModule = (
+      process as unknown as {
+        getBuiltinModule?: (id: string) => {
+          DatabaseSync: new (
+            path: string,
+            opts?: { open?: boolean }
+          ) => {
+            exec: (sql: string) => void;
+            prepare: (sql: string) => { all: () => unknown[] };
+            close: () => void;
+          };
+        };
+      }
+    ).getBuiltinModule?.("node:sqlite");
+    if (!sqliteModule?.DatabaseSync) {
+      return emptyD1Snapshot(sqlitePath);
+    }
+    const { DatabaseSync } = sqliteModule;
     const db = new DatabaseSync(sqlitePath, { open: true });
 
     try {
@@ -1833,3 +1864,272 @@ export function triggerAutoRefreshIfStale(maxAgeHours = 6): void {
     }
   })();
 }
+
+// ============================================================================
+// EPIC #44: SERVER-SIDE PAGINATION, 6x6 MATRIX & HUB TELEMETRY AGGREGATIONS
+// ============================================================================
+
+export {
+  DEFAULT_ARCHIVE_PAGE_SIZE,
+  createEmptyMatrixCounts,
+  createEmptySectorCounts,
+  paginateAndAggregateIncidentCorpus,
+  buildWorkingToolHubTelemetryFromCorpus,
+  buildFailureModeHubTelemetryFromCorpus,
+} from "./archive-pagination";
+export type {
+  ArchiveSourceSummary,
+  PaginatedArchiveQueryParams,
+  ArchivePaginationQueryOptions,
+  PaginatedArchiveResult,
+  ArchivePaginationResult,
+  WorkingToolHubTelemetry,
+  WorkingToolHubAggregationResult,
+  FailureModeHubTelemetry,
+  FailureModeHubAggregationResult,
+} from "./archive-pagination";
+import type { PaginatedArchiveQueryParams } from "./archive-pagination";
+
+/**
+ * Executes parameterized D1 SQL queries (`LIMIT ? OFFSET ?`, `COUNT(*)`, and `GROUP BY primary_tool, sre_failure_mode`)
+ * against a `D1DatabaseLike` instance for server-side archive pagination and 6x6 matrix aggregation (Issue #43).
+ */
+export async function executeD1ArchivePaginationQueries(
+  db: D1DatabaseLike,
+  params: PaginatedArchiveQueryParams
+): Promise<{
+  pagedRows: TelemetryArticleRow[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  matrixCellRows: Array<{
+    primary_tool: string;
+    sre_failure_mode: string;
+    cell_count: number;
+  }>;
+}> {
+  const pageSize = Math.max(1, Math.min(100, Number(params.pageSize || 25)));
+  const page = Math.max(1, Number(params.page || 1));
+  const offset = (page - 1) * pageSize;
+
+  const toolSpec =
+    params.tool && params.tool !== "ALL"
+      ? getWorkingToolBySlug(params.tool)
+      : null;
+  const d1Tool = toolSpec ? toolSpec.d1Key : null;
+
+  const failureSpec =
+    params.failure && params.failure !== "ALL"
+      ? getFailureModeBySlug(params.failure)
+      : null;
+  const d1Failure = failureSpec ? failureSpec.d1Key : null;
+
+  const sourceParam =
+    params.source && params.source !== "ALL" && params.source.trim()
+      ? params.source.trim()
+      : null;
+
+  const rawQuery = params.q ?? params.query;
+  const qParam =
+    rawQuery && rawQuery.trim() ? rawQuery.trim() : null;
+
+  // 1. Paginated Ledger Rows (25 per page via LIMIT ? OFFSET ?)
+  const pagedSql = `
+    SELECT
+      id, url_hash, source_feed, title, original_title, title_rewritten,
+      title_rewrite_reason, source_url, raw_excerpt, published_at, ingested_at,
+      is_systemic_prob, jev_confidence, primary_tool, secondary_tool,
+      sre_failure_mode, jev_raw_json, socratic_brief, questions_json,
+      status, image_url, image_alt, image_caption, image_source_type,
+      editorial_notes, is_pinned, is_hidden
+    FROM telemetry_articles
+    WHERE status = 'synthesized' AND is_hidden = 0
+      AND (? IS NULL OR primary_tool = ?)
+      AND (? IS NULL OR sre_failure_mode = ?)
+      AND (? IS NULL OR UPPER(source_feed) = UPPER(?))
+      AND (? IS NULL OR (title LIKE '%' || ? || '%' OR source_feed LIKE '%' || ? || '%' OR socratic_brief LIKE '%' || ? || '%'))
+    ORDER BY is_pinned DESC, published_at DESC, id DESC
+    LIMIT ? OFFSET ?
+  `;
+
+  const pagedRes = await db
+    .prepare(pagedSql)
+    .bind(
+      d1Tool,
+      d1Tool,
+      d1Failure,
+      d1Failure,
+      sourceParam,
+      sourceParam,
+      qParam,
+      qParam,
+      qParam,
+      qParam,
+      pageSize,
+      offset
+    )
+    .all<TelemetryArticleRow>();
+
+  // 2. Total Matching Count for Pagination Bar
+  const countSql = `
+    SELECT COUNT(*) AS total_count
+    FROM telemetry_articles
+    WHERE status = 'synthesized' AND is_hidden = 0
+      AND (? IS NULL OR primary_tool = ?)
+      AND (? IS NULL OR sre_failure_mode = ?)
+      AND (? IS NULL OR UPPER(source_feed) = UPPER(?))
+      AND (? IS NULL OR (title LIKE '%' || ? || '%' OR source_feed LIKE '%' || ? || '%' OR socratic_brief LIKE '%' || ? || '%'))
+  `;
+
+  const countRow = await db
+    .prepare(countSql)
+    .bind(
+      d1Tool,
+      d1Tool,
+      d1Failure,
+      d1Failure,
+      sourceParam,
+      sourceParam,
+      qParam,
+      qParam,
+      qParam,
+      qParam
+    )
+    .first<{ total_count: number }>();
+
+  // 3. 6x6 Matrix Cell Aggregation Query (Independent of current page slice)
+  const matrixSql = `
+    SELECT primary_tool, sre_failure_mode, COUNT(*) AS cell_count
+    FROM telemetry_articles
+    WHERE status = 'synthesized' AND is_hidden = 0
+    GROUP BY primary_tool, sre_failure_mode
+  `;
+
+  const matrixRes = await db.prepare(matrixSql).all<{
+    primary_tool: string;
+    sre_failure_mode: string;
+    cell_count: number;
+  }>();
+
+  return {
+    pagedRows: pagedRes.results || [],
+    totalCount: Number(countRow?.total_count ?? 0),
+    page,
+    pageSize,
+    matrixCellRows: matrixRes.results || [],
+  };
+}
+
+/**
+ * Executes the Working Tool Hub D1 SQL aggregations (Issue #40):
+ * 1. Primary vs. Secondary Classification Volume
+ * 2. Co-Occurring Failure Modes Breakdown (Axis 2 Intersection)
+ */
+export async function executeD1WorkingToolAggregations(
+  db: D1DatabaseLike,
+  toolSlugOrKey: string
+): Promise<{
+  primaryCount: number;
+  secondaryCount: number;
+  totalMatching: number;
+  totalTagged: number;
+  failureRows: Array<{ sre_failure_mode: string; case_count: number }>;
+}> {
+  const resolvedTool = getWorkingToolBySlug(toolSlugOrKey);
+  const d1ToolKey = resolvedTool ? resolvedTool.d1Key : toolSlugOrKey;
+
+  const volumeSql = `
+    SELECT
+      SUM(CASE WHEN primary_tool = ? THEN 1 ELSE 0 END) AS primary_count,
+      SUM(CASE WHEN secondary_tool = ? THEN 1 ELSE 0 END) AS secondary_count,
+      COUNT(*) AS total_matching
+    FROM telemetry_articles
+    WHERE status = 'synthesized' AND is_hidden = 0
+      AND (primary_tool = ? OR secondary_tool = ?)
+  `;
+  const volRow = await db
+    .prepare(volumeSql)
+    .bind(d1ToolKey, d1ToolKey, d1ToolKey, d1ToolKey)
+    .first<{
+      primary_count: number | null;
+      secondary_count: number | null;
+      total_matching: number | null;
+    }>();
+
+  const failureSql = `
+    SELECT sre_failure_mode, COUNT(*) AS case_count
+    FROM telemetry_articles
+    WHERE status = 'synthesized' AND is_hidden = 0
+      AND (primary_tool = ? OR secondary_tool = ?)
+    GROUP BY sre_failure_mode
+    ORDER BY case_count DESC
+  `;
+  const failureRes = await db
+    .prepare(failureSql)
+    .bind(d1ToolKey, d1ToolKey)
+    .all<{ sre_failure_mode: string; case_count: number }>();
+
+  const totalMatching = Number(volRow?.total_matching ?? 0);
+  return {
+    primaryCount: Number(volRow?.primary_count ?? 0),
+    secondaryCount: Number(volRow?.secondary_count ?? 0),
+    totalMatching,
+    totalTagged: totalMatching,
+    failureRows: failureRes.results || [],
+  };
+}
+
+/**
+ * Executes the Structural Failure Mode Hub D1 SQL aggregations (Issue #41):
+ * Intersecting Working Tools (`Axis 1` Breakdown) with primary & secondary case counts.
+ */
+export async function executeD1FailureModeAggregations(
+  db: D1DatabaseLike,
+  failureSlugOrKey: string
+): Promise<{
+  totalTagged: number;
+  toolRows: Array<{
+    primary_tool: string;
+    primary_cases: number;
+    secondary_cases: number;
+  }>;
+}> {
+  const resolvedMode = getFailureModeBySlug(failureSlugOrKey);
+  const d1FailureKey = resolvedMode ? resolvedMode.d1Key : failureSlugOrKey;
+
+  const toolBreakdownSql = `
+    SELECT
+      primary_tool,
+      COUNT(*) AS primary_cases,
+      (SELECT COUNT(*) FROM telemetry_articles t2
+       WHERE t2.status = 'synthesized' AND t2.is_hidden = 0
+         AND t2.sre_failure_mode = ? AND t2.secondary_tool = telemetry_articles.primary_tool) AS secondary_cases
+    FROM telemetry_articles
+    WHERE status = 'synthesized' AND is_hidden = 0
+      AND sre_failure_mode = ?
+    GROUP BY primary_tool
+    ORDER BY primary_cases DESC
+  `;
+  const res = await db
+    .prepare(toolBreakdownSql)
+    .bind(d1FailureKey, d1FailureKey)
+    .all<{
+      primary_tool: string;
+      primary_cases: number;
+      secondary_cases: number;
+    }>();
+
+  const rows = res.results || [];
+  const totalTagged = rows.reduce(
+    (sum, r) => sum + Number(r.primary_cases || 0),
+    0
+  );
+
+  return {
+    totalTagged,
+    toolRows: rows,
+  };
+}
+
+
+

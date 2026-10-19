@@ -1,13 +1,30 @@
 import {
+  ArchivePaginationQueryOptions,
+  ArchivePaginationResult,
+  buildFailureModeHubTelemetryFromCorpus,
+  buildWorkingToolHubTelemetryFromCorpus,
   ensureD1Snapshot,
+  FailureModeHubAggregationResult,
   getPipelineRuns as getD1PipelineRuns,
+  paginateAndAggregateIncidentCorpus,
   readLocalD1Snapshot,
+  WorkingToolHubAggregationResult,
 } from "./d1-bridge";
 
 export { ensureD1Snapshot };
+export type {
+  ArchivePaginationQueryOptions,
+  ArchivePaginationResult,
+  FailureModeHubAggregationResult,
+  WorkingToolHubAggregationResult,
+};
 import {
   isRenderablePublicEpisode,
   isRenderablePublicIncident,
+  projectPublicEpisodeDto,
+  projectPublicIncidentDto,
+  PublicEpisodeDto,
+  PublicIncidentDto,
 } from "./dto";
 import {
   buildOrSanitizeArticleDiagnostics,
@@ -19,9 +36,13 @@ import {
   INITIAL_PIPELINE_RUNS,
 } from "./seed-data";
 import {
+  getFailureModeBySlug,
+  getWorkingToolBySlug,
   SreFailureModeId,
+  SreFailureModeSpec,
   WORKING_TOOLS,
   WorkingToolId,
+  WorkingToolSpec,
 } from "./taxonomy";
 import {
   IncidentArticle,
@@ -379,3 +400,100 @@ export function getWeeklyTrestleboardState(): WeeklyTrestleboardState {
   return buildWeeklyTrestleboardState(incidents, posture, pinnedEpisode);
 }
 
+export function getAllPublicIncidentDtos(): PublicIncidentDto[] {
+  return getAllIncidents()
+    .map((inc) => projectPublicIncidentDto(inc))
+    .filter((inc): inc is PublicIncidentDto => inc !== null);
+}
+
+export function getAllPublicEpisodeDtos(): PublicEpisodeDto[] {
+  return getAllEpisodes()
+    .map((ep) => projectPublicEpisodeDto(ep))
+    .filter((ep): ep is PublicEpisodeDto => ep !== null);
+}
+
+/**
+ * Returns a paginated slice of the Master Case Ledger along with full-corpus 6x6 matrix
+ * counts, Axis III sector counts, and Monitored Publication source counts.
+ */
+export function getPaginatedArchiveDispatches(
+  options: ArchivePaginationQueryOptions = {}
+): ArchivePaginationResult {
+  const corpus = getAllPublicIncidentDtos();
+  return paginateAndAggregateIncidentCorpus(corpus, options);
+}
+
+export interface WorkingToolHubPageData {
+  spec: WorkingToolSpec;
+  telemetry: WorkingToolHubAggregationResult;
+  relatedEpisodes: PublicEpisodeDto[];
+}
+
+export function getWorkingToolHubData(
+  slugOrId: string,
+  options?: {
+    page?: number;
+    pageSize?: number;
+    roleFilter?: "all" | "primary" | "secondary";
+  }
+): WorkingToolHubPageData | null {
+  const spec = getWorkingToolBySlug(slugOrId);
+  if (!spec) return null;
+
+  const corpus = getAllPublicIncidentDtos();
+  const telemetry = buildWorkingToolHubTelemetryFromCorpus(spec.id, corpus, options);
+
+  const toolIncidents = corpus.filter(
+    (inc) => inc.primaryTool === spec.id || inc.secondaryTool === spec.id
+  );
+  const toolIncidentCodes = new Set(toolIncidents.map((inc) => inc.incidentCode));
+
+  const episodes = getAllPublicEpisodeDtos().filter(
+    (ep) =>
+      ep.dominantTool === spec.id ||
+      ep.incidentMarkers.some((inc) => toolIncidentCodes.has(inc.incidentCode))
+  );
+
+  return {
+    spec,
+    telemetry,
+    relatedEpisodes: episodes.length > 0 ? episodes : getAllPublicEpisodeDtos().slice(0, 2),
+  };
+}
+
+export interface FailureModeHubPageData {
+  spec: SreFailureModeSpec;
+  telemetry: FailureModeHubAggregationResult;
+  relatedEpisodes: PublicEpisodeDto[];
+}
+
+export function getFailureModeHubData(
+  slugOrId: string,
+  options?: {
+    page?: number;
+    pageSize?: number;
+  }
+): FailureModeHubPageData | null {
+  const spec = getFailureModeBySlug(slugOrId);
+  if (!spec) return null;
+
+  const corpus = getAllPublicIncidentDtos();
+  const telemetry = buildFailureModeHubTelemetryFromCorpus(spec.id, corpus, options);
+
+  const modeIncidents = corpus.filter((inc) => inc.sreFailureMode === spec.id);
+  const modeIncidentCodes = new Set(modeIncidents.map((inc) => inc.incidentCode));
+  const modePrimaryTools = new Set(modeIncidents.map((inc) => inc.primaryTool));
+
+  const episodes = getAllPublicEpisodeDtos().filter(
+    (ep) =>
+      ep.dominantFailureMode === spec.id ||
+      ep.incidentMarkers.some((inc) => modeIncidentCodes.has(inc.incidentCode)) ||
+      modePrimaryTools.has(ep.dominantTool)
+  );
+
+  return {
+    spec,
+    telemetry,
+    relatedEpisodes: episodes.length > 0 ? episodes : getAllPublicEpisodeDtos().slice(0, 2),
+  };
+}

@@ -1,29 +1,39 @@
 import React, { Suspense } from "react";
-import { projectPublicIncidentDto } from "@/lib/dto";
-import { ensureD1Snapshot, getAllIncidents } from "@/lib/store";
+import {
+  ensureD1Snapshot,
+  getAllPublicIncidentDtos,
+  getPaginatedArchiveDispatches,
+} from "@/lib/store";
 import { KnowledgeGraphClient } from "@/components/KnowledgeGraphClient";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "The Knowledge Graph — Dual-Axis Taxonomy & Archive Explorer",
+  title: "The Archive & Knowledge Graph — Dual-Axis Taxonomy & Master Case Ledger",
+  description:
+    "Browse the complete Master Case Ledger of verified post-incident dispatches, filter across the 6×6 Working Tools × Failure Modes Diagnostic Matrix, and inspect Monitored Publications.",
 };
 
 export default async function KnowledgeGraphPage() {
   await ensureD1Snapshot();
-  const incidents = getAllIncidents()
-    .map((inc) => projectPublicIncidentDto(inc))
-    .filter((inc): inc is NonNullable<typeof inc> => inc !== null);
+  const incidents = getAllPublicIncidentDtos();
+  const initialArchivePage = getPaginatedArchiveDispatches({
+    page: 1,
+    pageSize: 25,
+  });
 
   return (
     <Suspense
       fallback={
         <div className="max-w-7xl mx-auto px-6 py-12 font-mono text-sm text-[#C5A059]">
-          Loading Knowledge Graph Matrix...
+          Loading Master Case Ledger &amp; 6×6 Diagnostic Matrix…
         </div>
       }
     >
-      <KnowledgeGraphClient incidents={incidents} />
+      <KnowledgeGraphClient
+        incidents={incidents}
+        initialArchivePage={initialArchivePage}
+      />
     </Suspense>
   );
 }

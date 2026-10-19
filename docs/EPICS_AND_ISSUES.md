@@ -54,11 +54,11 @@
 - [x] **Issue #19 ([GitHub Issue #19](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/19)): [Verification] Add a 'Banned Jargon & Krug Usability Gate' to the PowerShell Test Harness**
 
 ### Admin Dashboard Redesign — "The Editor's Study" Epic ([GitHub Issue #21](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/21) — Issues #22 to #26)
-- [ ] **Issue #22 ([GitHub Issue #22](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/22)): [Admin UI 1/5] Navigation Consolidation & Header De-cluttering (`AdminShellNav.tsx`, `AdminLayout`)**
-- [ ] **Issue #23 ([GitHub Issue #23](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/23)): [Admin UI 2/5] Overview Tab Simplification & Plain-English Action Cards (`AdminOverviewClient.tsx`)**
-- [ ] **Issue #24 ([GitHub Issue #24](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/24)): [Admin UI 3/5] Podcast Studio Overhaul — Compact List & Slide-Out Inspector Drawer (`AdminEpisodesClient.tsx`)**
-- [ ] **Issue #25 ([GitHub Issue #25](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/25)): [Admin UI 4/5] Unified "Editorial & Feeds" Workspace (`AdminIncidentsClient.tsx`, `AdminFeedsClient.tsx`, `AdminFiltersClient.tsx`)**
-- [ ] **Issue #26 ([GitHub Issue #26](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/26)): [Admin UI 5/5] Aesthetic Polish & Micro-Interactions ("Delight" Pass across `globals.css` & `Admin*.tsx`)**
+- [x] **Issue #22 ([GitHub Issue #22](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/22)): [Admin UI 1/5] Navigation Consolidation & Header De-cluttering (`AdminShellNav.tsx`, `AdminLayout`)**
+- [x] **Issue #23 ([GitHub Issue #23](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/23)): [Admin UI 2/5] Overview Tab Simplification & Plain-English Action Cards (`AdminOverviewClient.tsx`)**
+- [x] **Issue #24 ([GitHub Issue #24](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/24)): [Admin UI 3/5] Podcast Studio Overhaul — Compact List & Slide-Out Inspector Drawer (`AdminEpisodesClient.tsx`)**
+- [x] **Issue #25 ([GitHub Issue #25](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/25)): [Admin UI 4/5] Unified "Editorial & Feeds" Workspace (`AdminIncidentsClient.tsx`, `AdminFeedsClient.tsx`, `AdminFiltersClient.tsx`)**
+- [x] **Issue #26 ([GitHub Issue #26](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/26)): [Admin UI 5/5] Aesthetic Polish & Micro-Interactions ("Delight" Pass across `globals.css` & `Admin*.tsx`)**
 
 ### Header & Navigation Architecture — Two-Tier Editorial Masthead & Extensible Dropdown System Epic ([GitHub Issue #27](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/27) — Issues #28 to #32)
 - [x] **Issue #28 ([GitHub Issue #28](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/28)): Refactor header into a two-tier editorial masthead and align max-width container (`SiteHeader.tsx`, `TrestleboardClient.tsx`)**
@@ -68,11 +68,18 @@
 - [x] **Issue #32 ([GitHub Issue #32](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/32)): Implement dropdown hover-intent protection, sticky nav bar, and keyboard/touch accessibility (`SiteHeader.tsx`, `globals.css`)**
 
 ### Podcast Archive Unification & Episode Description Data Cleanup Epic ([GitHub Issue #33](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/33) — Issues #34 to #38)
-- [ ] **Issue #34 ([GitHub Issue #34](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/34)): Simplify Podcast Page Masthead & Replace "Legacy / 5m Brief" Filter Tabs (`PodcastArchiveClient.tsx`, `archive/page.tsx`, `navigation.ts`)**
-- [ ] **Issue #35 ([GitHub Issue #35](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/35)): Sanitize Episode #1–#21 Descriptions (Strip Raw Markdown, Tables, and Inline URLs) (`scripts/import-legacy-episodes.ts`, `d1-bridge.ts`, `dto.ts`, `PodcastArchiveClient.tsx`)**
-- [ ] **Issue #36 ([GitHub Issue #36](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/36)): Deduplicate AI Generation Disclaimers Across Episode Cards (`PodcastArchiveClient.tsx`, `scripts/import-legacy-episodes.ts`, `SiteFooter.tsx`)**
-- [ ] **Issue #37 ([GitHub Issue #37](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/37)): Unify Episode Card Layout & Artwork Thumbnails (`PodcastArchiveClient.tsx`, `MasonicEngravings.tsx`)**
-- [ ] **Issue #38 ([GitHub Issue #38](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/38)): Adapt the Expandable "Read Script" Drawer for NotebookLM Episodes (`PodcastArchiveClient.tsx`, `types.ts`, `dto.ts`, `d1-bridge.ts`)**
+- [x] **Issue #34 ([GitHub Issue #34](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/34)): Simplify Podcast Page Masthead & Replace "Legacy / 5m Brief" Filter Tabs (`PodcastArchiveClient.tsx`, `archive/page.tsx`, `navigation.ts`)**
+- [x] **Issue #35 ([GitHub Issue #35](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/35)): Sanitize Episode #1–#21 Descriptions (Strip Raw Markdown, Tables, and Inline URLs) (`scripts/import-legacy-episodes.ts`, `d1-bridge.ts`, `dto.ts`, `PodcastArchiveClient.tsx`)**
+- [x] **Issue #36 ([GitHub Issue #36](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/36)): Deduplicate AI Generation Disclaimers Across Episode Cards (`PodcastArchiveClient.tsx`, `scripts/import-legacy-episodes.ts`, `SiteFooter.tsx`)**
+- [x] **Issue #37 ([GitHub Issue #37](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/37)): Unify Episode Card Layout & Artwork Thumbnails (`PodcastArchiveClient.tsx`, `MasonicEngravings.tsx`)**
+- [x] **Issue #38 ([GitHub Issue #38](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/38)): Adapt the Expandable "Read Script" Drawer for NotebookLM Episodes (`PodcastArchiveClient.tsx`, `types.ts`, `dto.ts`, `d1-bridge.ts`)**
+
+### Information Architecture & Scale — Dedicated Tool/SRE Hub Pages, Navigation Alignment & 1,000-Item Archive Pagination Epic ([GitHub Issue #44](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/44) — Issues #39 to #43)
+- [x] **Issue #39 ([GitHub Issue #39](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/39)): [Navigation & Taxonomy] Align Header Dropdowns & Canonical Slug Mappings with `taxonomy.ts` (`src/lib/taxonomy.ts`, `src/lib/navigation.ts`, `SiteHeader.tsx`)**
+- [x] **Issue #40 ([GitHub Issue #40](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/40)): [Routing & Content] Create Dedicated Dynamic Hub Pages for the Six Working Tools (`/tools/[slug]`) (`src/app/tools/[slug]/page.tsx`, `WorkingToolHubClient.tsx`)**
+- [x] **Issue #41 ([GitHub Issue #41](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/41)): [Routing & Content] Create Dedicated Dynamic Hub Pages for the Six Structural Failure Modes (`/failures/[slug]`) (`src/app/failures/[slug]/page.tsx`, `FailureModeHubClient.tsx`, `MasonicEngravings.tsx`)**
+- [x] **Issue #42 ([GitHub Issue #42](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/42)): [UX Refactor] Streamline `/rubric` into a Clean Methodology Codex & Visual Directory (`RubricCodexClient.tsx`, `RubricInspectorDrawer.tsx`, `src/app/rubric/page.tsx`)**
+- [x] **Issue #43 ([GitHub Issue #43](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/43)): [Scale & Data] Archive Scalability Refactor: Server-Side Pagination, URL State, 6×6 Brass Heatmap & Zero Horizontal Overflow (`migrations/0010_archive_pagination_indexes.sql`, `d1-bridge.ts`, `worker.ts`, `KnowledgeGraphClient.tsx`, `src/app/archive/page.tsx`)**
 
 ---
 
@@ -660,6 +667,40 @@
 - **GitHub Issue:** [#38](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/38)
 - **Status:** `[x] Completed`
 - **Target Files:** `src/components/PodcastArchiveClient.tsx`, `src/lib/episode-metadata.ts`, `src/lib/types.ts`, `src/lib/dto.ts`, `src/lib/d1-bridge.ts`, `src/components/AdminEpisodesClient.tsx`
+
+---
+
+# Epic #44: Information Architecture & Scale — Dedicated Tool/SRE Hub Pages, Navigation Alignment & 1,000-Item Archive Pagination (Issues #39 – #43)
+
+- **GitHub Epic:** [#44](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/44)
+- **Status:** `[x] Completed`
+- **Objective:** Align the Two-Tier Navigation Ledger (`src/lib/navigation.ts`) and URL routing directly with the canonical 3-axis taxonomy (`src/lib/taxonomy.ts`), introduce dedicated monograph Hub pages for all 6 Masonic Working Tools (`/tools/[slug]`) and all 6 Structural Failure Modes (`/failures/[slug]`) with bespoke copperplate engravings and live cross-axis telemetry breakdowns, streamline `/rubric` into a clean Three-Axis Methodology Codex & Visual Directory, and refactor `/archive` (with `/knowledge-graph` alias and `/podcast` dedicated route) for 1,000-item scale with D1 composite indexes (`migrations/0010_archive_pagination_indexes.sql`), URL-synchronized pagination (`25` per page), a 6×6 brass heatmap matrix (`#matrix`), a Monitored Publications view (`?view=sources`), and a 6-column zero-horizontal-overflow ledger table.
+
+### Issue #39 (Sub-Issue 1): [Navigation & Taxonomy] Align Header Dropdowns & Canonical Slug Mappings with `taxonomy.ts`
+- **GitHub Issue:** [#39](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/39)
+- **Status:** `[x] Completed`
+- **Target Files:** `src/lib/taxonomy.ts`, `src/lib/navigation.ts`, `src/components/SiteHeader.tsx`, `src/components/SiteFooter.tsx`
+
+### Issue #40 (Sub-Issue 2): [Routing & Content] Create Dedicated Dynamic Hub Pages for the Six Working Tools (`/tools/[slug]`)
+- **GitHub Issue:** [#40](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/40)
+- **Status:** `[x] Completed`
+- **Target Files:** `src/app/tools/[slug]/page.tsx`, `src/components/WorkingToolHubClient.tsx`, `src/lib/taxonomy.ts`, `src/lib/d1-bridge.ts`, `src/lib/store.ts`
+
+### Issue #41 (Sub-Issue 3): [Routing & Content] Create Dedicated Dynamic Hub Pages for the Six Structural Failure Modes (`/failures/[slug]`)
+- **GitHub Issue:** [#41](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/41)
+- **Status:** `[x] Completed`
+- **Target Files:** `src/app/failures/[slug]/page.tsx`, `src/components/FailureModeHubClient.tsx`, `src/components/MasonicEngravings.tsx`, `src/lib/taxonomy.ts`, `src/lib/d1-bridge.ts`, `src/lib/store.ts`
+
+### Issue #42 (Sub-Issue 4): [UX Refactor] Streamline `/rubric` into a Clean Methodology Codex & Visual Directory
+- **GitHub Issue:** [#42](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/42)
+- **Status:** `[x] Completed`
+- **Target Files:** `src/components/RubricCodexClient.tsx`, `src/components/RubricInspectorDrawer.tsx`, `src/app/rubric/page.tsx`
+
+### Issue #43 (Sub-Issue 5): [Scale & Data] Archive Scalability Refactor: Server-Side Pagination, URL State, 6×6 Brass Heatmap & Zero Horizontal Overflow
+- **GitHub Issue:** [#43](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/43)
+- **Status:** `[x] Completed`
+- **Target Files:** `migrations/0010_archive_pagination_indexes.sql`, `src/lib/d1-bridge.ts`, `src/lib/store.ts`, `src/worker.ts`, `src/components/KnowledgeGraphClient.tsx`, `src/app/archive/page.tsx`, `src/app/knowledge-graph/page.tsx`, `src/app/podcast/page.tsx`, `next.config.ts`, `src/middleware.ts`
+
 
 
 
