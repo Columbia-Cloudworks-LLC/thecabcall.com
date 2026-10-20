@@ -358,8 +358,10 @@ export function buildWeeklyTrestleboardState(
     )
   );
 
-  const episodeNumber = pinnedEpisode.episodeNumber || 43;
+  const episodeNumber = pinnedEpisode.episodeNumber || 21;
   const failureDisplayLabel = formatFailureModeDisplayLabel(primaryFailureMode);
+  const latestIncidentPublishedAt =
+    incidents[0]?.publishedAt || pinnedEpisode.publishedAt || new Date().toISOString();
 
   const sectorSet = Array.from(
     new Set(
@@ -395,16 +397,20 @@ export function buildWeeklyTrestleboardState(
     structuralSynthesisByFailure[primaryFailureMode] ||
     structuralSynthesisByFailure["Configuration Drift"];
 
-  const heroTitle = `CAB Weekly Brief #${episodeNumber}: ${dominantTool} (${dominantToolPercentage}%), ${failureDisplayLabel}, and This Week's Trestleboard`;
+  const heroTitle = `Trestleboard Systems Posture: ${dominantTool} (${dominantToolPercentage}%), ${failureDisplayLabel}, and This Week's Active Dispatches`;
 
   const heroOpeningProse = `${dominantTool} leads this week's Trestleboard at ${dominantToolPercentage}% of active classifications, with ${failureDisplayLabel} emerging as the primary failure mode across ${activeIncidentCount} verified incident briefs ${sectorPhrase}. ${thematicClause} Applying ${dominantTool} separates the 24-hour commentary cycle from the underlying structural gap between formal institutional commitments and live shop-floor state.`;
 
-  const podcastDescription = `Friday audio synthesis anchored by ${dominantTool} (${dominantToolPercentage}%) and ${failureDisplayLabel} across ${activeIncidentCount} active dispatches on the Trestleboard.`;
+  const podcastDescription =
+    pinnedEpisode.summary?.trim() ||
+    `Episode #${episodeNumber} of The CAB Call Podcast examining institutional reliability through ${pinnedEpisode.dominantTool} and ${formatFailureModeDisplayLabel(pinnedEpisode.dominantFailureMode)}.`;
 
   return Object.freeze({
     episodeNumber,
     episodeSlug: pinnedEpisode.slug,
-    publishedAt: pinnedEpisode.publishedAt,
+    episodeTitle: pinnedEpisode.title,
+    episodePublishedAt: pinnedEpisode.publishedAt,
+    publishedAt: latestIncidentPublishedAt,
     durationFormatted: pinnedEpisode.durationFormatted,
     audioUrl: pinnedEpisode.audioUrl,
     dominantTool,

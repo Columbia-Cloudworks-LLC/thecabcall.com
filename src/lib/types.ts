@@ -74,6 +74,8 @@ export interface WeeklyDocketItem {
 export interface WeeklyTrestleboardState {
   readonly episodeNumber: number;
   readonly episodeSlug: string;
+  readonly episodeTitle: string;
+  readonly episodePublishedAt: string;
   readonly publishedAt: string;
   readonly durationFormatted: string;
   readonly audioUrl: string;

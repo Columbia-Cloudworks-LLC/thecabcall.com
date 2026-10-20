@@ -56,8 +56,17 @@ export async function POST(req: NextRequest) {
   try {
     let body: {
       episodeNumber?: number;
+      slugOverride?: string;
       titleOverride?: string;
       summaryOverride?: string;
+      extendedNotesOverride?: string;
+      transcriptOverride?: string;
+      audioUrl?: string;
+      artworkUrlOverride?: string;
+      artworkWidescreenUrlOverride?: string;
+      durationSeconds?: number;
+      fileSizeBytes?: number;
+      publishedAtOverride?: string;
       editorialFocusNote?: string;
       windowDays?: number;
       incidentIds?: number[];
@@ -74,8 +83,17 @@ export async function POST(req: NextRequest) {
 
     const overrides: GenerateEpisodeOverrides = {
       episodeNumber: body.episodeNumber,
+      slugOverride: body.slugOverride,
       titleOverride: body.titleOverride,
       summaryOverride: body.summaryOverride,
+      extendedNotesOverride: body.extendedNotesOverride,
+      transcriptOverride: body.transcriptOverride,
+      audioUrl: body.audioUrl,
+      artworkUrlOverride: body.artworkUrlOverride,
+      artworkWidescreenUrlOverride: body.artworkWidescreenUrlOverride,
+      durationSeconds: body.durationSeconds,
+      fileSizeBytes: body.fileSizeBytes,
+      publishedAtOverride: body.publishedAtOverride,
       editorialFocusNote: body.editorialFocusNote,
       windowDays: body.windowDays,
       incidentIds: Array.isArray(body.incidentIds)
@@ -142,6 +160,11 @@ export async function PUT(req: NextRequest) {
       };
       episodeNumber?: number;
       publishedAt?: string;
+      audioUrl?: string;
+      artworkUrl?: string | null;
+      artworkWidescreenUrl?: string | null;
+      durationSeconds?: number;
+      fileSizeBytes?: number;
       regenerateAudio?: boolean;
       ttsVoice?: string;
       ttsProvider?: "gemini-tts" | "mpeg-framed";
@@ -177,6 +200,11 @@ export async function PUT(req: NextRequest) {
         transcriptSections: body.transcriptSections,
         episodeNumber: body.episodeNumber,
         publishedAt: body.publishedAt,
+        audioUrl: body.audioUrl,
+        artworkUrl: body.artworkUrl,
+        artworkWidescreenUrl: body.artworkWidescreenUrl,
+        durationSeconds: body.durationSeconds,
+        fileSizeBytes: body.fileSizeBytes,
         regenerateAudio: body.regenerateAudio,
         ttsVoice: body.ttsVoice,
         ttsProvider: body.ttsProvider,

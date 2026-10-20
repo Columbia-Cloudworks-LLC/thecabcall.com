@@ -444,7 +444,7 @@ export function mapD1RowToPodcastEpisode(
   row: D1EpisodeRow,
   d1Incidents: IncidentArticle[]
 ): PodcastEpisode {
-  const episodeNumber = row.episode_number || 43;
+  const episodeNumber = row.episode_number || 21;
   const durationSeconds = row.duration_seconds || 300;
   const mins = Math.floor(durationSeconds / 60)
     .toString()
@@ -469,11 +469,16 @@ export function mapD1RowToPodcastEpisode(
   );
   if (matchedExactTool) {
     dominantTool = matchedExactTool;
-  } else if (combinedLower.includes("gauge")) {
+  } else if (combinedLower.includes("gauge") || combinedLower.includes("error budget")) {
     dominantTool = "24-Inch Gauge";
   } else if (combinedLower.includes("gavel") || combinedLower.includes("ashlar")) {
     dominantTool = "Common Gavel";
-  } else if (combinedLower.includes("plumb") || combinedLower.includes("watchtower")) {
+  } else if (
+    combinedLower.includes("plumb") ||
+    combinedLower.includes("watchtower") ||
+    combinedLower.includes("magna est veritas") ||
+    combinedLower.includes("truth")
+  ) {
     dominantTool = "The Plumb";
   } else if (combinedLower.includes("level")) {
     dominantTool = "The Level";
@@ -497,19 +502,49 @@ export function mapD1RowToPodcastEpisode(
     "Blame Culture vs. Root-Cause Isolation",
     "Technical & Institutional Debt",
   ];
+  let matchedExactFailure = false;
   for (const fm of allFailureModes) {
     if (row.title.includes(fm) || row.summary.includes(fm)) {
       dominantFailureMode = fm;
+      matchedExactFailure = true;
       break;
+    }
+  }
+  if (!matchedExactFailure) {
+    if (
+      combinedLower.includes("blameless") ||
+      combinedLower.includes("blame") ||
+      combinedLower.includes("scapegoat")
+    ) {
+      dominantFailureMode = "Blame Culture vs. Root-Cause Isolation";
+    } else if (combinedLower.includes("cascad")) {
+      dominantFailureMode = "Cascading Failure";
+    } else if (
+      combinedLower.includes("alert fatigue") ||
+      combinedLower.includes("toil") ||
+      combinedLower.includes("error budget")
+    ) {
+      dominantFailureMode = "Alert Fatigue & Signal Loss";
+    } else if (
+      combinedLower.includes("failover") ||
+      combinedLower.includes("single point") ||
+      combinedLower.includes("spof")
+    ) {
+      dominantFailureMode = "Single Point of Failure (SPOF) / Untested Failover";
+    } else if (
+      combinedLower.includes("debt") ||
+      combinedLower.includes("deferred") ||
+      combinedLower.includes("unfinished")
+    ) {
+      dominantFailureMode = "Technical & Institutional Debt";
+    } else if (combinedLower.includes("drift") || combinedLower.includes("trestleboard")) {
+      dominantFailureMode = "Configuration Drift";
     }
   }
 
   const isLegacy =
-    row.slug.startsWith("legacy-") ||
-    row.slug.startsWith("the-cab-call-") ||
-    row.title.toLowerCase().includes("legacy archive") ||
-    row.title.toLowerCase().startsWith("the cab call #") ||
-    episodeNumber <= 30;
+    !row.slug.startsWith("cab-weekly-brief-") &&
+    !row.title.toLowerCase().startsWith("cab weekly brief");
 
   const series: "weekly_rollup" | "legacy_archive" = isLegacy
     ? "legacy_archive"

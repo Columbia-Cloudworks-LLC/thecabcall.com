@@ -44,45 +44,13 @@ async function isAuthorizedCronOrAdmin(req: NextRequest): Promise<{
 }
 
 async function executeD1WeeklyRollup() {
-  if (shouldUseRemoteWorker()) {
-    try {
-      await triggerRemoteWorkerRollup();
-      await ensureD1Snapshot(true);
-      const episode = projectPublicEpisodeDto(getLatestWeeklyRollup());
-
-      return {
-        ok: true,
-        episode,
-      };
-    } catch (err) {
-      console.warn(
-        "[Cron Weekly Rollup] Remote Cloudflare Worker call failed, checking local fallback:",
-        err
-      );
-    }
-  }
-
-  const db = createLocalSqliteD1Adapter();
-  if (!db) {
-    const episode = projectPublicEpisodeDto(generateWeeklyRollupEpisode());
-    return {
-      ok: true,
-      episode,
-    };
-  }
-
-  const envVars = loadLocalEnvVars();
-  const audioBucket = createLocalR2AudioAdapter();
-  await runWeeklyRollupPipeline({
-    db,
-    audioBucket,
-    geminiApiKey: envVars.GEMINI_API_KEY,
-  });
-
+  await ensureD1Snapshot(true);
   const episode = projectPublicEpisodeDto(getLatestWeeklyRollup());
-
   return {
     ok: true,
+    skipped: true,
+    reason:
+      "Automatic article-to-podcast rollup generation is disabled; episodes are published using externally produced MP3/M4A audio files.",
     episode,
   };
 }

@@ -24,6 +24,7 @@ import { useTelemetry } from "./TelemetryContext";
 import { IncidentCard } from "./IncidentCard";
 import {
   BrassSectionDivider,
+  EpisodeArtworkEmblem,
   MasonSquareWatermark,
 } from "./MasonicEngravings";
 
@@ -106,10 +107,13 @@ export function TrestleboardClient({
 
   const [selectedTool, setSelectedTool] = useState<string>("ALL");
   const [selectedFailure, setSelectedFailure] = useState<string>("ALL");
+  const [artworkFailed, setArtworkFailed] = useState<boolean>(false);
 
   const pinnedEpisode = mapDtoToCraftLexicon(rawPinnedEpisode);
   const isPinnedActive = activeEpisode.id === pinnedEpisode.id;
   const isPinnedEpisodeRenderable = isRenderablePublicEpisode(pinnedEpisode);
+  const hasPinnedArtwork =
+    Boolean(pinnedEpisode.artworkUrl) && !artworkFailed;
 
   const validIncidents = initialIncidents
     .map((inc) => mapDtoToCraftLexicon(inc))
@@ -161,7 +165,7 @@ export function TrestleboardClient({
         <span className="pointer-events-none absolute bottom-1 right-1 w-3.5 h-3.5 border-b-2 border-r-2 border-[#C5A059]" />
 
         <div className="relative z-10 flex flex-col lg:flex-row">
-          {/* Left Column (65% Width) — Pattern of the Week */}
+          {/* Left Column (65% Width) — Pattern of the Week & Active Docket */}
           <div className="relative lg:w-[65%] p-6 sm:p-8 lg:p-10 overflow-hidden flex flex-col justify-between">
             {/* Subtle 10% opacity copperplate vector engraving of a Mason's Square */}
             <div className="pointer-events-none select-none absolute -bottom-6 -right-4 opacity-10">
@@ -207,38 +211,25 @@ export function TrestleboardClient({
               <p className="font-serif text-base sm:text-[17px] text-[#F3EFE6]/90 leading-relaxed pt-1">
                 {weeklyState.heroOpeningProse}
               </p>
-            </div>
-          </div>
 
-          {/* Right Column (35% Width) — The Friday CAB Call (Audio Feature + Weekly Docket) */}
-          <div className="lg:w-[35%] p-6 sm:p-8 lg:p-10 border-t lg:border-t-0 lg:border-l border-[#C5A059]/35 bg-[#0B0E14]/35 flex flex-col justify-between">
-            <div className="space-y-4">
-              <div className="font-mono text-xs uppercase tracking-[0.18em] text-[#C5A059]">
-                THE CAB CALL // EPISODE #{weeklyState.episodeNumber} ({weeklyState.durationFormatted})
-              </div>
-
-              <p className="font-serif italic text-sm sm:text-[15px] text-[#F3EFE6]/90 leading-relaxed">
-                {weeklyState.podcastDescription}
-              </p>
-
-              {/* Compact 3-Item Bulleted Weekly Docket Eliminating Vertical Dead Space */}
+              {/* Compact 3-Item Bulleted Weekly Docket inside the Trestleboard Retrospective */}
               {weeklyState.anchorIncidents.length > 0 && (
-                <div className="pt-3 border-t border-[#8A6D3B]/35 space-y-2">
+                <div className="pt-4 mt-2 border-t border-[#8A6D3B]/35 space-y-2">
                   <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#C5A059]">
-                    Weekly Docket // 3 Anchor Incidents
+                    Trestleboard Docket // 3 Anchor Incidents
                   </div>
-                  <ul className="space-y-2">
+                  <ul className="space-y-1.5">
                     {weeklyState.anchorIncidents.slice(0, 3).map((item) => (
                       <li
                         key={item.id}
-                        className="flex items-start gap-2 text-xs leading-snug"
+                        className="flex items-start gap-2 text-xs sm:text-[13px] leading-snug"
                       >
                         <span className="text-[#C5A059] font-mono mt-0.5 select-none">
                           •
                         </span>
                         <Link
                           href={`/incidents/${item.slug}`}
-                          className="font-serif text-[#F3EFE6]/90 hover:text-[#C5A059] transition-colors line-clamp-2"
+                          className="font-serif text-[#F3EFE6]/90 hover:text-[#C5A059] transition-colors line-clamp-1"
                         >
                           {item.title}
                         </Link>
@@ -247,6 +238,64 @@ export function TrestleboardClient({
                   </ul>
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Right Column (35% Width) — The CAB Call Podcast (Latest Available Episode) */}
+          <div className="lg:w-[35%] p-6 sm:p-8 lg:p-10 border-t lg:border-t-0 lg:border-l border-[#C5A059]/35 bg-[#0B0E14]/35 flex flex-col justify-between">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-2 font-mono text-xs uppercase tracking-[0.18em] text-[#C5A059]">
+                <span>
+                  THE CAB CALL PODCAST // EPISODE #{pinnedEpisode.episodeNumber}
+                </span>
+                <span className="text-[#94A3B8]">
+                  {pinnedEpisode.durationFormatted}
+                </span>
+              </div>
+
+              <div className="flex items-start gap-3.5 pt-1">
+                <Link
+                  href={`/podcast#${pinnedEpisode.slug}`}
+                  className="w-16 h-16 sm:w-20 sm:h-20 shrink-0 rounded-none border border-[#8A6D3B]/60 bg-[#0B0E14] overflow-hidden shadow-md relative block"
+                >
+                  {hasPinnedArtwork ? (
+                    <img
+                      src={pinnedEpisode.artworkUrl}
+                      alt={`${pinnedEpisode.title} episode artwork`}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                      onError={() => setArtworkFailed(true)}
+                    />
+                  ) : (
+                    <EpisodeArtworkEmblem
+                      episodeNumber={pinnedEpisode.episodeNumber}
+                      tool={pinnedEpisode.dominantTool}
+                      series={pinnedEpisode.series}
+                    />
+                  )}
+                </Link>
+
+                <div className="space-y-1.5 min-w-0 flex-1">
+                  <div className="font-mono text-[10px] uppercase tracking-wider text-[#94A3B8]">
+                    {formatLeadDateline(pinnedEpisode.publishedAt)} •{" "}
+                    <span className="text-[#C5A059]">
+                      {pinnedEpisode.dominantTool}
+                    </span>
+                  </div>
+                  <Link
+                    href={`/podcast#${pinnedEpisode.slug}`}
+                    className="block group/ep"
+                  >
+                    <h3 className="font-display text-base sm:text-lg text-[#F3EFE6] group-hover/ep:text-[#C5A059] transition-colors leading-snug">
+                      {pinnedEpisode.title}
+                    </h3>
+                  </Link>
+                </div>
+              </div>
+
+              <p className="font-serif italic text-sm sm:text-[15px] text-[#F3EFE6]/90 leading-relaxed pt-1">
+                {pinnedEpisode.summary || weeklyState.podcastDescription}
+              </p>
             </div>
 
             <div className="pt-5 mt-5 border-t border-[#8A6D3B]/35 space-y-3.5">
@@ -264,17 +313,17 @@ export function TrestleboardClient({
                 >
                   {isPinnedActive && isPlaying ? (
                     <span>
-                      ⏸ Pause Weekly Brief (
+                      ⏸ Pause Episode #{pinnedEpisode.episodeNumber} (
                       <span className="font-mono font-semibold">
-                        {weeklyState.durationFormatted}
+                        {pinnedEpisode.durationFormatted}
                       </span>
                       )
                     </span>
                   ) : (
                     <span>
-                      ▶ Listen to Weekly Brief (
+                      ▶ Listen to Episode #{pinnedEpisode.episodeNumber} (
                       <span className="font-mono font-semibold">
-                        {weeklyState.durationFormatted}
+                        {pinnedEpisode.durationFormatted}
                       </span>
                       )
                     </span>
@@ -284,10 +333,10 @@ export function TrestleboardClient({
 
               <div className="flex items-center justify-between gap-3 pt-1 text-xs">
                 <Link
-                  href="/archive"
+                  href={`/podcast#${pinnedEpisode.slug}`}
                   className="font-serif text-sm text-[#F3EFE6] hover:text-[#C5A059] transition-colors"
                 >
-                  Read Full Transcript →
+                  Episode Guide &amp; Transcript →
                 </Link>
                 <a
                   href="/feed.xml"

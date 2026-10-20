@@ -24,8 +24,17 @@ export async function POST(req: NextRequest) {
   try {
     let body: {
       episodeNumber?: number;
+      slugOverride?: string;
       titleOverride?: string;
       summaryOverride?: string;
+      extendedNotesOverride?: string;
+      transcriptOverride?: string;
+      audioUrl?: string;
+      artworkUrlOverride?: string;
+      artworkWidescreenUrlOverride?: string;
+      durationSeconds?: number;
+      fileSizeBytes?: number;
+      publishedAtOverride?: string;
       editorialFocusNote?: string;
       windowDays?: number;
       incidentIds?: number[];
@@ -42,8 +51,17 @@ export async function POST(req: NextRequest) {
 
     const overrides: GenerateEpisodeOverrides = {
       episodeNumber: body.episodeNumber,
+      slugOverride: body.slugOverride,
       titleOverride: body.titleOverride,
       summaryOverride: body.summaryOverride,
+      extendedNotesOverride: body.extendedNotesOverride,
+      transcriptOverride: body.transcriptOverride,
+      audioUrl: body.audioUrl,
+      artworkUrlOverride: body.artworkUrlOverride,
+      artworkWidescreenUrlOverride: body.artworkWidescreenUrlOverride,
+      durationSeconds: body.durationSeconds,
+      fileSizeBytes: body.fileSizeBytes,
+      publishedAtOverride: body.publishedAtOverride,
       editorialFocusNote: body.editorialFocusNote,
       windowDays: body.windowDays,
       incidentIds: Array.isArray(body.incidentIds)

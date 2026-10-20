@@ -73,6 +73,7 @@ import {
   R2BucketLike,
   runWeeklyRollupPipeline,
   updateAdminEpisode,
+  uploadEpisodeAudioToR2,
 } from "./pipeline/rollup";
 import {
   runSynthesizePipeline,
@@ -331,7 +332,7 @@ function mapWorkerRowToPublicEpisodeDto(
   if (row.status && row.status !== "PUBLISHED") {
     return null;
   }
-  const episodeNumber = Number(row.episode_number || 42);
+  const episodeNumber = Number(row.episode_number || 21);
   const durationSeconds = Number(row.duration_seconds || 300);
   const mins = Math.floor(durationSeconds / 60)
     .toString()
@@ -348,11 +349,16 @@ function mapWorkerRowToPublicEpisodeDto(
   const combinedLower = `${row.title} ${row.summary}`.toLowerCase();
   if (matchedExactTool) {
     dominantTool = matchedExactTool;
-  } else if (combinedLower.includes("gauge")) {
+  } else if (combinedLower.includes("gauge") || combinedLower.includes("error budget")) {
     dominantTool = "24-Inch Gauge";
   } else if (combinedLower.includes("gavel") || combinedLower.includes("ashlar")) {
     dominantTool = "Common Gavel";
-  } else if (combinedLower.includes("plumb") || combinedLower.includes("watchtower")) {
+  } else if (
+    combinedLower.includes("plumb") ||
+    combinedLower.includes("watchtower") ||
+    combinedLower.includes("magna est veritas") ||
+    combinedLower.includes("truth")
+  ) {
     dominantTool = "The Plumb";
   } else if (combinedLower.includes("level")) {
     dominantTool = "The Level";
@@ -364,19 +370,49 @@ function mapWorkerRowToPublicEpisodeDto(
 
   let dominantFailureMode: SreFailureModeId =
     incidents[0]?.sreFailureMode || "Configuration Drift";
+  let matchedExactFailure = false;
   for (const fm of Object.values(WORKER_FAILURE_DISPLAY)) {
     if (row.title.includes(fm) || row.summary.includes(fm)) {
       dominantFailureMode = fm;
+      matchedExactFailure = true;
       break;
+    }
+  }
+  if (!matchedExactFailure) {
+    if (
+      combinedLower.includes("blameless") ||
+      combinedLower.includes("blame") ||
+      combinedLower.includes("scapegoat")
+    ) {
+      dominantFailureMode = "Blame Culture vs. Root-Cause Isolation";
+    } else if (combinedLower.includes("cascad")) {
+      dominantFailureMode = "Cascading Failure";
+    } else if (
+      combinedLower.includes("alert fatigue") ||
+      combinedLower.includes("toil") ||
+      combinedLower.includes("error budget")
+    ) {
+      dominantFailureMode = "Alert Fatigue & Signal Loss";
+    } else if (
+      combinedLower.includes("failover") ||
+      combinedLower.includes("single point") ||
+      combinedLower.includes("spof")
+    ) {
+      dominantFailureMode = "Single Point of Failure (SPOF) / Untested Failover";
+    } else if (
+      combinedLower.includes("debt") ||
+      combinedLower.includes("deferred") ||
+      combinedLower.includes("unfinished")
+    ) {
+      dominantFailureMode = "Technical & Institutional Debt";
+    } else if (combinedLower.includes("drift") || combinedLower.includes("trestleboard")) {
+      dominantFailureMode = "Configuration Drift";
     }
   }
 
   const isLegacy =
-    row.slug.startsWith("legacy-") ||
-    row.slug.startsWith("the-cab-call-") ||
-    row.title.toLowerCase().includes("legacy archive") ||
-    row.title.toLowerCase().startsWith("the cab call #") ||
-    episodeNumber <= 30;
+    !row.slug.startsWith("cab-weekly-brief-") &&
+    !row.title.toLowerCase().startsWith("cab weekly brief");
   const series: "weekly_rollup" | "legacy_archive" = isLegacy
     ? "legacy_archive"
     : "weekly_rollup";
@@ -3114,8 +3150,19 @@ const worker = {
         try {
           let body: {
             episodeNumber?: number;
+            slugOverride?: string;
             titleOverride?: string;
             summaryOverride?: string;
+            extendedNotesOverride?: string;
+            transcriptOverride?: string;
+            audioUrl?: string;
+            artworkUrlOverride?: string;
+            artworkWidescreenUrlOverride?: string;
+            durationSeconds?: number;
+            fileSizeBytes?: number;
+            publishedAtOverride?: string;
+            externalSourcesOverride?: EpisodeExternalSource[];
+            sourcePagesOverride?: EpisodeSourcePage[];
             editorialFocusNote?: string;
             windowDays?: number;
             incidentIds?: number[];
@@ -3135,8 +3182,19 @@ const worker = {
 
           const overrides: GenerateEpisodeOverrides = {
             episodeNumber: body.episodeNumber,
+            slugOverride: body.slugOverride,
             titleOverride: body.titleOverride,
             summaryOverride: body.summaryOverride,
+            extendedNotesOverride: body.extendedNotesOverride,
+            transcriptOverride: body.transcriptOverride,
+            audioUrl: body.audioUrl,
+            artworkUrlOverride: body.artworkUrlOverride,
+            artworkWidescreenUrlOverride: body.artworkWidescreenUrlOverride,
+            durationSeconds: body.durationSeconds,
+            fileSizeBytes: body.fileSizeBytes,
+            publishedAtOverride: body.publishedAtOverride,
+            externalSourcesOverride: body.externalSourcesOverride,
+            sourcePagesOverride: body.sourcePagesOverride,
             editorialFocusNote: body.editorialFocusNote,
             windowDays: body.windowDays,
             incidentIds: Array.isArray(body.incidentIds)
@@ -3203,6 +3261,11 @@ const worker = {
             };
             episodeNumber?: number;
             publishedAt?: string;
+            audioUrl?: string;
+            artworkUrl?: string | null;
+            artworkWidescreenUrl?: string | null;
+            durationSeconds?: number;
+            fileSizeBytes?: number;
             regenerateAudio?: boolean;
             ttsVoice?: string;
             ttsProvider?: "elevenlabs" | "openai-tts" | "gemini-tts" | "mpeg-framed";
@@ -3246,6 +3309,11 @@ const worker = {
               transcriptSections: body.transcriptSections,
               episodeNumber: body.episodeNumber,
               publishedAt: body.publishedAt,
+              audioUrl: body.audioUrl,
+              artworkUrl: body.artworkUrl,
+              artworkWidescreenUrl: body.artworkWidescreenUrl,
+              durationSeconds: body.durationSeconds,
+              fileSizeBytes: body.fileSizeBytes,
               regenerateAudio: body.regenerateAudio,
               ttsVoice: body.ttsVoice,
               ttsProvider: body.ttsProvider,
@@ -3348,6 +3416,84 @@ const worker = {
               episodes,
             },
             200,
+            { "Cache-Control": "no-store" }
+          );
+        } catch (err) {
+          return jsonResponse(
+            {
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            400
+          );
+        }
+      }
+      // Direct R2 Audio File Upload Route: POST /api/admin/episodes/upload-audio
+      if (request.method === "POST" && subPath === "upload-audio") {
+        try {
+          const contentTypeHeader = (
+            request.headers.get("content-type") || ""
+          ).toLowerCase();
+          let filename =
+            url.searchParams.get("filename") || "episode-audio.mp3";
+          let contentType =
+            url.searchParams.get("contentType") || "audio/mpeg";
+          let episodeNumber = url.searchParams.get("episodeNumber")
+            ? parseInt(url.searchParams.get("episodeNumber")!, 10)
+            : undefined;
+          let bytes: Uint8Array | null = null;
+
+          if (contentTypeHeader.includes("multipart/form-data")) {
+            const formData = await request.formData();
+            const fileEntry = formData.get("file");
+            if (
+              fileEntry &&
+              typeof (fileEntry as Blob).arrayBuffer === "function"
+            ) {
+              const f = fileEntry as File;
+              filename = f.name || filename;
+              contentType = f.type || contentType;
+              const buf = await f.arrayBuffer();
+              bytes = new Uint8Array(buf);
+            }
+            const epVal = formData.get("episodeNumber");
+            if (epVal) {
+              const parsed = parseInt(String(epVal), 10);
+              if (Number.isFinite(parsed) && parsed > 0) {
+                episodeNumber = parsed;
+              }
+            }
+          } else {
+            const buf = await request.arrayBuffer();
+            if (buf.byteLength > 0) {
+              bytes = new Uint8Array(buf);
+              if (contentTypeHeader.startsWith("audio/")) {
+                contentType = contentTypeHeader;
+              }
+            }
+          }
+
+          if (!bytes || bytes.byteLength === 0) {
+            return jsonResponse(
+              { ok: false, error: "No audio bytes received for upload." },
+              400
+            );
+          }
+
+          const uploaded = await uploadEpisodeAudioToR2({
+            audioBucket: env.AUDIO_BUCKET,
+            filename,
+            contentType,
+            bytes,
+            episodeNumber,
+          });
+
+          return jsonResponse(
+            {
+              ok: true,
+              ...uploaded,
+            },
+            201,
             { "Cache-Control": "no-store" }
           );
         } catch (err) {
@@ -4002,7 +4148,7 @@ const worker = {
         })()
       );
     } else if (controller.cron === "0 12 * * 5") {
-      // Weekly Friday 12:00 UTC rollup hook: runs latest ingestion + synthesis sweep, then generates the Weekly Rollup
+      // Automatic article-to-podcast rollup generation is disabled; only run standard ingestion + synthesis
       ctx.waitUntil(
         (async () => {
           try {
@@ -4026,18 +4172,6 @@ const worker = {
               "[Scheduled Friday Cron] Synthesize stage error:",
               err
             );
-          }
-          try {
-            await runWeeklyRollupPipeline({
-              db: env.DB,
-              audioBucket: env.AUDIO_BUCKET,
-              geminiApiKey: env.GEMINI_API_KEY,
-              elevenlabsApiKey: env.ELEVENLABS_API_KEY,
-              elevenlabsVoiceId: env.ELEVENLABS_VOICE_ID,
-              openaiApiKey: env.OPENAI_API_KEY,
-            });
-          } catch (err) {
-            console.error("[Scheduled Friday Cron] Rollup stage error:", err);
           }
         })()
       );

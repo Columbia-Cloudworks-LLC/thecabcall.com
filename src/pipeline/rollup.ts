@@ -228,8 +228,19 @@ export const DEFAULT_GEMINI_AI_DISCLAIMER =
 
 export interface GenerateEpisodeOverrides {
   episodeNumber?: number;
+  slugOverride?: string;
   titleOverride?: string;
   summaryOverride?: string;
+  extendedNotesOverride?: string;
+  transcriptOverride?: string;
+  audioUrl?: string;
+  artworkUrlOverride?: string;
+  artworkWidescreenUrlOverride?: string;
+  durationSeconds?: number;
+  fileSizeBytes?: number;
+  publishedAtOverride?: string;
+  externalSourcesOverride?: EpisodeExternalSource[];
+  sourcePagesOverride?: EpisodeSourcePage[];
   editorialFocusNote?: string;
   windowDays?: number;
   incidentIds?: number[];
@@ -381,48 +392,7 @@ const BASELINE_ARCHIVE_EPISODES: Array<{
   duration_seconds: number;
   file_size_bytes: number;
   published_at: string;
-}> = [
-  {
-    episode_number: 42,
-    slug: "cab-weekly-brief-042-configuration-drift-and-the-square",
-    title:
-      "CAB Weekly Brief #42: Configuration Drift, Unpinned Certs, and Separated Signal",
-    summary:
-      "Friday systems retrospective covering October 10–16, 2026. The Square and Configuration Drift lead the Trestleboard across municipal water SCADA audits, regional banking TLS halts, and federal aviation routing outages.",
-    published_at: "2026-10-16T12:00:00Z",
-    duration_seconds: 304,
-    file_size_bytes: 4864000,
-    audio_url: "/audio/cab-weekly-brief-042.mp3",
-    transcript: `[00:00 — THE WEEKLY TELEMETRY]
-The Square leads this week's Trestleboard across primary classifications, with Configuration Drift emerging as the primary failure mode across municipal water utilities, regional clearing banks, and federal aviation dispatch. Three anchor incidents set the weekly docket: fourteen water districts signing annual segmentation attestations while leaving vendor VPN bridges wide open (#CAB-2026-1042); a four-hour settlement halt across sixty-two credit unions triggered by an unpinned standby TLS certificate (#CAB-2026-1041); and a regional aviation routing outage traced to an unvalidated night-shift sync script (#CAB-2026-1040). Across all three sectors, live production environments had quietly drifted away from their written specifications.
-
-[01:15 — SEPARATING SIGNAL FROM PANIC]
-The outrage cycle wants you to treat every one of these disclosures as either an imminent collapse or a morality play with a convenient villain. Good systems architecture tells us otherwise: a noisy alert on an edge node isn't a core outage, and an audit finding is telemetry, not an attack. Look at Wednesday's four-hour settlement halt across sixty-two credit unions (#CAB-2026-1041). Social feeds immediately jumped to liquidity panic. In reality, not a single ledger was compromised; a warm-standby node rotated an intermediate TLS certificate that legacy middleware still had pinned, and synthetic health checks missed it because those probes bypassed the mutual-TLS proxy. The news cycle overblew the four-hour delay while missing the actual structural constraint: synthetic monitoring that bypasses the authentication boundary is worse than no monitoring at all, because it manufactures false confidence. We saw the exact same inversion in the transportation subcommittee hearing (#CAB-2026-1040), where three hours of cameras focused on a single night-shift technician who ran an unvalidated sync script, while burying Appendix C—which showed management had decommissioned the pre-production staging environment eight months ago to shave cloud hosting costs.
-
-[03:30 — THE FORWARD POSTURE / TOOLS ON THE TRESTLEBOARD]
-Here is how to set your posture on the trestleboard for the coming week. First, for the utility boards and regulatory staff walking into next week's remediation reviews on the SCADA audit, the work requires Common Gavel before anything else—chipping away defensive PR language and vendor finger-pointing so teams can inspect why maintenance budgets forced reliance on undocumented remote tunnels. Second, as banks and clearing houses review their standby runbooks after Wednesday's TLS halt, apply The Plumb directly to the synthetic test suite: if a health check passes by skipping the hardest boundary in production, realign the check even if it drops your quarterly uptime graph below four nines. Finally, for all of us observing from the outside, keep the 24-Inch Gauge firmly on your own attention budget. Refuse to spend cognitive cycles on televised blame sessions that punish the last operator to touch the keyboard while the missing staging environment remains unfunded. Until the post-mortem addresses the system that permitted the error, treat the commentary as jitter.`,
-  },
-  {
-    episode_number: 41,
-    slug: "cab-weekly-brief-041-alert-fatigue-and-interface-mortar",
-    title:
-      "CAB Weekly Brief #41: Alert Fatigue in Clinical Workflows and Spreading the Trowel Across Port APIs",
-    summary:
-      "Friday systems retrospective covering October 3–9, 2026. Examining cognitive error budgets under the 24-Inch Gauge and how unilateral API schema cutovers fracture institutional trust.",
-    published_at: "2026-10-09T12:00:00Z",
-    duration_seconds: 292,
-    file_size_bytes: 4672000,
-    audio_url: "/audio/cab-weekly-brief-041.mp3",
-    transcript: `[00:00 — THE WEEKLY TELEMETRY]
-The 24-Inch Gauge leads this week's Trestleboard alongside Alert Fatigue & Signal Loss as the primary operational failure mode, anchored by clinical medication-alert override telemetry (#CAB-2026-1039), a fourteen-thousand-container port manifest stall (#CAB-2026-1038), and municipal pension COBOL batch exhaustion (#CAB-2026-1037). Across these three anchor incidents, organizations treated operator attention as a free, inexhaustible buffer while upstream authorities broke shared interface contracts without backward-compatible mortar.
-
-[01:15 — SEPARATING SIGNAL FROM PANIC]
-When the clinical informatics study (#CAB-2026-1039) showed physicians overriding ninety-four percent of medication pop-ups within two seconds, pundits called for stricter clinician training. Systems engineering points to the opposite conclusion: when compliance committees add 114 modal interrupts per shift to transfer legal liability downward, they exhaust the cognitive error budget and train operators to auto-dismiss everything. Similarly, the fourteen-thousand-container port backup (#CAB-2026-1038) wasn't a macroeconomic trade freeze—it was an unversioned JSON validator rejecting dry-freight manifests over an optional hazmat field.
-
-[03:30 — THE FORWARD POSTURE / TOOLS ON THE TRESTLEBOARD]
-Going into next week, apply the 24-Inch Gauge to every interruptive rule in your governance and alerting queues: if an alert does not require immediate human action, delete or demote it so true Tier-1 warnings regain their weight. And where your systems meet external partners, use The Trowel—version your schemas, run dual-read windows, and never let a strict parser halt physical throughput when a dead-letter queue can preserve flow.`,
-  },
-];
+}> = [];
 
 export async function ensureEpisodesStatusColumn(db: D1DatabaseLike): Promise<void> {
   const alterStatements = [
@@ -765,7 +735,7 @@ export function formatThreePartTranscript(sections: {
 export function mapD1RowToAdminEpisode(
   row: D1EpisodeTableRow
 ): AdminEpisodeRecord {
-  const episodeNumber = Number(row.episode_number || 43);
+  const episodeNumber = Number(row.episode_number || 21);
   const durationSeconds = Number(row.duration_seconds || 300);
   const mins = Math.floor(durationSeconds / 60)
     .toString()
@@ -775,11 +745,8 @@ export function mapD1RowToAdminEpisode(
     .padStart(2, "0");
   const transcript = stripAiDisclaimers(row.transcript || row.summary || "");
   const isLegacy =
-    row.slug.startsWith("legacy-") ||
-    row.slug.startsWith("the-cab-call-") ||
-    row.title.toLowerCase().includes("legacy archive") ||
-    row.title.toLowerCase().startsWith("the cab call #") ||
-    episodeNumber <= 30;
+    !row.slug.startsWith("cab-weekly-brief-") &&
+    !row.title.toLowerCase().startsWith("cab weekly brief");
   const series: "weekly_rollup" | "legacy_archive" = isLegacy
     ? "legacy_archive"
     : "weekly_rollup";
@@ -1523,9 +1490,9 @@ export async function runWeeklyRollupPipeline(options: {
       .first<{ max_ep: number | null }>();
 
     nextEpisodeNumber =
-      latestEpRow?.max_ep && latestEpRow.max_ep >= 42
+      latestEpRow?.max_ep && latestEpRow.max_ep >= 1
         ? latestEpRow.max_ep + 1
-        : 43;
+        : 22;
   }
 
   const dateTag = new Date().toISOString().slice(0, 10);
@@ -1784,8 +1751,80 @@ export async function getAdminEpisodeByIdOrSlug(
 }
 
 /**
- * Generates a new podcast episode on-demand with optional admin overrides and appends
- * an `episode.generate` entry to `audit_ledger`.
+ * Uploads an externally produced audio file (MP3, M4A, WAV, AAC, OGG, FLAC) to R2 `AUDIO_BUCKET`
+ * and verifies that the R2 object is ready for publication.
+ */
+export async function uploadEpisodeAudioToR2(options: {
+  audioBucket: R2BucketLike;
+  filename: string;
+  contentType?: string;
+  bytes: Uint8Array;
+  episodeNumber?: number;
+}): Promise<{
+  r2Key: string;
+  audioUrl: string;
+  fileSizeBytes: number;
+  contentType: string;
+  verified: boolean;
+}> {
+  const rawName = (options.filename || "episode-audio.mp3")
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, "-");
+  const lower = rawName.toLowerCase();
+  let ext = ".mp3";
+  if (lower.endsWith(".m4a")) ext = ".m4a";
+  else if (lower.endsWith(".mp4")) ext = ".m4a";
+  else if (lower.endsWith(".wav")) ext = ".wav";
+  else if (lower.endsWith(".aac")) ext = ".aac";
+  else if (lower.endsWith(".ogg")) ext = ".ogg";
+  else if (lower.endsWith(".flac")) ext = ".flac";
+
+  const baseWithoutExt = rawName.replace(/\.(mp3|m4a|mp4|wav|aac|ogg|flac)$/i, "");
+  const r2Key = `${baseWithoutExt || `the-cab-call-${options.episodeNumber || Date.now()}`}${ext}`;
+  const effectiveContentType =
+    options.contentType && /^audio\//i.test(options.contentType)
+      ? options.contentType
+      : ext === ".m4a"
+      ? "audio/mp4"
+      : ext === ".wav"
+      ? "audio/wav"
+      : ext === ".aac"
+      ? "audio/aac"
+      : ext === ".ogg"
+      ? "audio/ogg"
+      : ext === ".flac"
+      ? "audio/flac"
+      : "audio/mpeg";
+
+  await options.audioBucket.put(r2Key, options.bytes, {
+    httpMetadata: {
+      contentType: effectiveContentType,
+    },
+    customMetadata: {
+      uploadedAt: new Date().toISOString(),
+      ...(options.episodeNumber
+        ? { episodeNumber: String(options.episodeNumber) }
+        : {}),
+    },
+  });
+
+  const verification = await verifyR2AudioObjectForPublish(
+    options.audioBucket,
+    r2Key
+  );
+
+  return {
+    r2Key,
+    audioUrl: `/audio/${r2Key}`,
+    fileSizeBytes: verification.size || options.bytes.byteLength,
+    contentType: verification.contentType || effectiveContentType,
+    verified: verification.verified,
+  };
+}
+
+/**
+ * Publishes a new podcast episode (either from an externally produced audio file / URL
+ * or via optional overrides) and appends an `episode.generate` entry to `audit_ledger`.
  */
 export async function generateAdminEpisode(options: {
   db: D1DatabaseLike;
@@ -1802,6 +1841,199 @@ export async function generateAdminEpisode(options: {
   rollup: RollupEpisodeRecord;
   auditEntry: AuditLedgerEntry;
 }> {
+  const ov = options.overrides || {};
+
+  // Direct external media publishing path (user-provided MP3/M4A audio file or URL)
+  if (ov.audioUrl && ov.audioUrl.trim()) {
+    await ensureBaselineEpisodesSeeded(options.db);
+
+    let nextEpisodeNumber: number;
+    if (
+      ov.episodeNumber &&
+      Number.isFinite(Number(ov.episodeNumber)) &&
+      Number(ov.episodeNumber) > 0
+    ) {
+      nextEpisodeNumber = Math.floor(Number(ov.episodeNumber));
+    } else {
+      const latestEpRow = await options.db
+        .prepare("SELECT MAX(episode_number) as max_ep FROM episodes")
+        .first<{ max_ep: number | null }>();
+      nextEpisodeNumber =
+        latestEpRow?.max_ep && latestEpRow.max_ep >= 1
+          ? latestEpRow.max_ep + 1
+          : 22;
+    }
+
+    const paddedNum = String(nextEpisodeNumber).padStart(3, "0");
+    const slug = (ov.slugOverride || `legacy-cab-${paddedNum}`)
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    const finalTitle =
+      ov.titleOverride?.trim() || `The CAB Call #${nextEpisodeNumber}`;
+    const finalSummary =
+      ov.summaryOverride?.trim() ||
+      `Episode #${nextEpisodeNumber} of The CAB Call Podcast.`;
+    const finalExtendedNotes =
+      ov.extendedNotesOverride?.trim() || finalSummary;
+    const finalTranscript =
+      ov.transcriptOverride?.trim() || finalExtendedNotes;
+    const finalAudioUrl = ov.audioUrl.trim();
+    const r2Key = extractR2KeyFromAudioUrl(finalAudioUrl, slug);
+    const publishedAt =
+      ov.publishedAtOverride?.trim() || new Date().toISOString();
+    const durationSeconds =
+      ov.durationSeconds && Number(ov.durationSeconds) > 0
+        ? Math.round(Number(ov.durationSeconds))
+        : 1800;
+
+    let fileSizeBytes =
+      ov.fileSizeBytes && Number(ov.fileSizeBytes) > 0
+        ? Math.round(Number(ov.fileSizeBytes))
+        : 24000000;
+    if (options.audioBucket) {
+      const r2Check = await verifyR2AudioObjectForPublish(
+        options.audioBucket,
+        r2Key
+      );
+      if (r2Check.verified && r2Check.size > 0) {
+        fileSizeBytes = r2Check.size;
+      }
+    }
+
+    const sourcesJson = ov.externalSourcesOverride
+      ? JSON.stringify(ov.externalSourcesOverride)
+      : null;
+    const sourcePagesJson = ov.sourcePagesOverride
+      ? JSON.stringify(ov.sourcePagesOverride)
+      : null;
+
+    await options.db
+      .prepare(
+        `INSERT INTO episodes (
+          episode_number,
+          slug,
+          title,
+          summary,
+          extended_notes,
+          sources_json,
+          source_pages_json,
+          transcript,
+          audio_url,
+          artwork_url,
+          artwork_widescreen_url,
+          duration_seconds,
+          file_size_bytes,
+          published_at,
+          status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PUBLISHED')
+        ON CONFLICT(slug) DO UPDATE SET
+          episode_number = excluded.episode_number,
+          title = excluded.title,
+          summary = excluded.summary,
+          extended_notes = excluded.extended_notes,
+          sources_json = COALESCE(excluded.sources_json, episodes.sources_json),
+          source_pages_json = COALESCE(excluded.source_pages_json, episodes.source_pages_json),
+          transcript = excluded.transcript,
+          audio_url = excluded.audio_url,
+          artwork_url = COALESCE(excluded.artwork_url, episodes.artwork_url),
+          artwork_widescreen_url = COALESCE(excluded.artwork_widescreen_url, episodes.artwork_widescreen_url),
+          duration_seconds = excluded.duration_seconds,
+          file_size_bytes = excluded.file_size_bytes,
+          published_at = excluded.published_at,
+          status = 'PUBLISHED'`
+      )
+      .bind(
+        nextEpisodeNumber,
+        slug,
+        finalTitle,
+        finalSummary,
+        finalExtendedNotes,
+        sourcesJson,
+        sourcePagesJson,
+        finalTranscript,
+        finalAudioUrl,
+        ov.artworkUrlOverride?.trim() || null,
+        ov.artworkWidescreenUrlOverride?.trim() || null,
+        durationSeconds,
+        fileSizeBytes,
+        publishedAt
+      )
+      .run();
+
+    const fetched = await getAdminEpisodeByIdOrSlug(options.db, slug);
+    if (!fetched) {
+      throw new Error(`Failed to read back published episode ${slug} from D1`);
+    }
+
+    const parsedSections = parseEpisodeTranscriptSections(finalTranscript);
+    const rollup: RollupEpisodeRecord = {
+      id: fetched.row.id,
+      episode_number: nextEpisodeNumber,
+      slug,
+      title: finalTitle,
+      summary: finalSummary,
+      transcript: finalTranscript,
+      transcript_sections: {
+        weekly_telemetry: parsedSections.weeklyTelemetry,
+        separating_signal_from_panic: parsedSections.separatingSignalFromPanic,
+        forward_posture: parsedSections.forwardPosture,
+      },
+      audio_url: finalAudioUrl,
+      r2_key: r2Key,
+      duration_seconds: durationSeconds,
+      file_size_bytes: fileSizeBytes,
+      published_at: publishedAt,
+      status: "PUBLISHED",
+      r2_verified: true,
+      model_used: "external-studio-upload",
+      audio_source: "external-media-file",
+      aggregates: {
+        total_evaluated: 0,
+        noise_rejection_rate_pct: 0,
+        dominant_tool: "plumb",
+        dominant_tool_pct: 100,
+        top_sre_failure_mode: "configuration_drift",
+        featured_incident_ids: [],
+      },
+    };
+
+    const auditEntry = await appendAuditEntry(options.db, {
+      actorEmail: options.actor.actorEmail,
+      actorRole: options.actor.actorRole || "owner",
+      authMethod: options.actor.authMethod,
+      actorIpHash: options.actor.actorIpHash ?? null,
+      actionType: "episode.generate",
+      targetType: "episode",
+      targetId: String(fetched.row.id),
+      reason:
+        options.reason?.trim() ||
+        `Published Episode #${nextEpisodeNumber}: "${finalTitle}" with externally produced media (${r2Key})`,
+      beforeState: null,
+      afterState: {
+        ...fetched.row,
+        r2_key: r2Key,
+        audio_source: "external-media-file",
+      },
+      replayCommand: {
+        op: "create",
+        action_type: "episode.generate",
+        target_type: "episode",
+        target_id: String(fetched.row.id),
+        slug: fetched.row.slug,
+        r2_key: r2Key,
+        invertible: true,
+      },
+    });
+
+    return {
+      episode: fetched.record,
+      rollup,
+      auditEntry,
+    };
+  }
+
   const rollup = await runWeeklyRollupPipeline({
     db: options.db,
     audioBucket: options.audioBucket,
@@ -1865,8 +2097,8 @@ export async function generateAdminEpisode(options: {
 
 /**
  * Updates an existing podcast episode's title, summary, transcript (or 3-part sections),
- * episode_number, or published_at, optionally re-synthesizing R2 MP3 audio, and appends
- * an `episode.update` entry to `audit_ledger`.
+ * episode_number, published_at, audio_url, duration_seconds, file_size_bytes, or artwork,
+ * and appends an `episode.update` entry to `audit_ledger`.
  */
 export async function updateAdminEpisode(options: {
   db: D1DatabaseLike;
@@ -1890,6 +2122,11 @@ export async function updateAdminEpisode(options: {
     };
     episodeNumber?: number;
     publishedAt?: string;
+    audioUrl?: string;
+    artworkUrl?: string | null;
+    artworkWidescreenUrl?: string | null;
+    durationSeconds?: number;
+    fileSizeBytes?: number;
     regenerateAudio?: boolean;
     ttsVoice?: string;
     ttsProvider?: TtsProviderId;
@@ -1943,6 +2180,18 @@ export async function updateAdminEpisode(options: {
     input.publishedAt !== undefined && input.publishedAt.trim()
       ? input.publishedAt.trim()
       : beforeRow.published_at;
+  const updatedAudioUrl =
+    input.audioUrl !== undefined && input.audioUrl.trim()
+      ? input.audioUrl.trim()
+      : beforeRow.audio_url;
+  const updatedArtworkUrl =
+    input.artworkUrl !== undefined
+      ? input.artworkUrl?.trim() || null
+      : beforeRow.artwork_url ?? null;
+  const updatedArtworkWidescreenUrl =
+    input.artworkWidescreenUrl !== undefined
+      ? input.artworkWidescreenUrl?.trim() || null
+      : beforeRow.artwork_widescreen_url ?? null;
 
   let updatedTranscript = beforeRow.transcript || "";
   if (input.transcriptSections) {
@@ -1961,12 +2210,22 @@ export async function updateAdminEpisode(options: {
     updatedTranscript = input.transcript.trim();
   }
 
-  let updatedFileSizeBytes = Number(beforeRow.file_size_bytes || 256000);
-  let updatedDurationSeconds = Number(beforeRow.duration_seconds || 300);
+  let updatedFileSizeBytes =
+    input.fileSizeBytes !== undefined && Number(input.fileSizeBytes) > 0
+      ? Math.round(Number(input.fileSizeBytes))
+      : Number(beforeRow.file_size_bytes || 256000);
+  let updatedDurationSeconds =
+    input.durationSeconds !== undefined && Number(input.durationSeconds) > 0
+      ? Math.round(Number(input.durationSeconds))
+      : Number(beforeRow.duration_seconds || 300);
   let updatedStatus: EpisodePublishStatus = beforeRow.status || "PUBLISHED";
-  let audioRegenerated = false;
-  let audioSource: string | undefined = undefined;
-  const r2Key = extractR2KeyFromAudioUrl(beforeRow.audio_url, beforeRow.slug);
+  let audioRegenerated = Boolean(
+    input.audioUrl && input.audioUrl.trim() !== beforeRow.audio_url
+  );
+  let audioSource: string | undefined = audioRegenerated
+    ? "external-media-upload"
+    : undefined;
+  const r2Key = extractR2KeyFromAudioUrl(updatedAudioUrl, beforeRow.slug);
 
   if (input.regenerateAudio) {
     const synth = await synthesizeRollupAudioBytes(
@@ -1995,7 +2254,7 @@ export async function updateAdminEpisode(options: {
           contentType: "audio/mpeg",
         },
         customMetadata: {
-          episodeNumber: String(updatedEpisodeNumber ?? 43),
+          episodeNumber: String(updatedEpisodeNumber ?? 21),
           slug: beforeRow.slug,
           regeneratedAt: new Date().toISOString(),
         },
@@ -2022,6 +2281,9 @@ export async function updateAdminEpisode(options: {
            sources_json = ?,
            source_pages_json = ?,
            transcript = ?,
+           audio_url = ?,
+           artwork_url = ?,
+           artwork_widescreen_url = ?,
            duration_seconds = ?,
            file_size_bytes = ?,
            published_at = ?,
@@ -2036,6 +2298,9 @@ export async function updateAdminEpisode(options: {
       updatedSourcesJson,
       updatedSourcePagesJson,
       updatedTranscript,
+      updatedAudioUrl,
+      updatedArtworkUrl,
+      updatedArtworkWidescreenUrl,
       updatedDurationSeconds,
       updatedFileSizeBytes,
       updatedPublishedAt,
@@ -2051,7 +2316,7 @@ export async function updateAdminEpisode(options: {
 
   const defaultReason = `Updated Episode #${updated.record.episodeNumber} ("${
     updated.record.title
-  }")${audioRegenerated ? ` and re-synthesized R2 audio (${r2Key})` : ""}`;
+  }")${audioRegenerated ? ` and updated audio (${r2Key})` : ""}`;
 
   const auditEntry = await appendAuditEntry(options.db, {
     actorEmail: options.actor.actorEmail,

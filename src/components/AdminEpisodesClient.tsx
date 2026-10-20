@@ -17,44 +17,9 @@ interface AdminEpisodesClientProps {
   candidateIncidents: TelemetryArticleRow[];
   initialAuditEntries: AuditLedgerEntry[];
   chainIntegrity?: AuditChainVerificationResult;
+  workerAudioUploadUrl?: string;
+  sessionToken?: string | null;
 }
-
-const TTS_VOICE_OPTIONS: Array<{
-  label: string;
-  provider: "gemini-tts" | "mpeg-framed";
-  voice: string;
-}> = [
-  {
-    label: "Gemini TTS — Kore (Default Host Cadence)",
-    provider: "gemini-tts",
-    voice: "Kore",
-  },
-  {
-    label: "Gemini TTS — Charon (Deep Analytical)",
-    provider: "gemini-tts",
-    voice: "Charon",
-  },
-  {
-    label: "Gemini TTS — Fenrir (Broadcast Baritone)",
-    provider: "gemini-tts",
-    voice: "Fenrir",
-  },
-  {
-    label: "Gemini TTS — Puck (Crisp Studio)",
-    provider: "gemini-tts",
-    voice: "Puck",
-  },
-  {
-    label: "Gemini TTS — Aoede (Warm Narrative)",
-    provider: "gemini-tts",
-    voice: "Aoede",
-  },
-  {
-    label: "Deterministic MPEG-1 Layer 3 Framed Stream (Instant MP3)",
-    provider: "mpeg-framed",
-    voice: "Kore",
-  },
-];
 
 function formatBytes(bytes: number): string {
   if (!bytes || bytes <= 0) return "0 KB";
@@ -83,10 +48,52 @@ function formatCleanDate(iso: string): string {
   });
 }
 
+function formatDurationMmSs(seconds: number): string {
+  if (!seconds || seconds <= 0) return "00:00";
+  const m = Math.floor(seconds / 60)
+    .toString()
+    .padStart(2, "0");
+  const s = Math.floor(seconds % 60)
+    .toString()
+    .padStart(2, "0");
+  return `${m}:${s}`;
+}
+
+async function detectAudioFileDurationSeconds(file: File): Promise<number | null> {
+  if (typeof window === "undefined") return null;
+  return new Promise((resolve) => {
+    try {
+      const objectUrl = URL.createObjectURL(file);
+      const audio = new Audio();
+      audio.preload = "metadata";
+      const cleanup = () => {
+        URL.revokeObjectURL(objectUrl);
+      };
+      audio.onloadedmetadata = () => {
+        const dur = audio.duration;
+        cleanup();
+        if (Number.isFinite(dur) && dur > 0) {
+          resolve(Math.round(dur));
+        } else {
+          resolve(null);
+        }
+      };
+      audio.onerror = () => {
+        cleanup();
+        resolve(null);
+      };
+      audio.src = objectUrl;
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
 export function AdminEpisodesClient({
   actor,
   initialEpisodes,
-  candidateIncidents,
+  workerAudioUploadUrl,
+  sessionToken,
 }: AdminEpisodesClientProps) {
   const router = useRouter();
   const [episodes, setEpisodes] =
@@ -99,24 +106,31 @@ export function AdminEpisodesClient({
     "all" | "weekly_rollup" | "legacy_archive"
   >("all");
 
-  // Generate New Episode Studio state
-  const [showGeneratePanel, setShowGeneratePanel] = useState(false);
+  // Publish New Episode (External Media Upload) state
+  const [showPublishPanel, setShowPublishPanel] = useState(false);
   const [useCustomEpNumber, setUseCustomEpNumber] = useState(false);
   const [customEpNumber, setCustomEpNumber] = useState<number>(() => {
     const maxEp = initialEpisodes.reduce(
       (max, ep) => Math.max(max, ep.episodeNumber || 0),
-      42
+      21
     );
     return maxEp + 1;
   });
-  const [genWindowDays, setGenWindowDays] = useState<number>(7);
-  const [genTitleOverride, setGenTitleOverride] = useState("");
-  const [genSummaryOverride, setGenSummaryOverride] = useState("");
-  const [genFocusNote, setGenFocusNote] = useState("");
-  const [selectedIncidentIds, setSelectedIncidentIds] = useState<number[]>([]);
-  const [selectedTtsIdx, setSelectedTtsIdx] = useState<number>(0);
-  const [genReason, setGenReason] = useState("");
-  const [submittingGenerate, setSubmittingGenerate] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newSummary, setNewSummary] = useState("");
+  const [newExtendedNotes, setNewExtendedNotes] = useState("");
+  const [newTranscript, setNewTranscript] = useState("");
+  const [newAudioFile, setNewAudioFile] = useState<File | null>(null);
+  const [newAudioUrl, setNewAudioUrl] = useState("");
+  const [newDurationSeconds, setNewDurationSeconds] = useState<number>(1800);
+  const [newFileSizeBytes, setNewFileSizeBytes] = useState<number>(0);
+  const [newArtworkUrl, setNewArtworkUrl] = useState("");
+  const [newPublishedAt, setNewPublishedAt] = useState<string>(() =>
+    new Date().toISOString()
+  );
+  const [newReason, setNewReason] = useState("");
+  const [submittingPublish, setSubmittingPublish] = useState(false);
+  const [uploadStatusText, setUploadStatusText] = useState<string | null>(null);
 
   // Slide-out Episode Inspector Drawer state
   const [inspectingEpisode, setInspectingEpisode] =
@@ -125,15 +139,19 @@ export function AdminEpisodesClient({
   const [editSummary, setEditSummary] = useState("");
   const [editExtendedNotes, setEditExtendedNotes] = useState("");
   const [editExternalSourcesJson, setEditExternalSourcesJson] = useState("[]");
-  const [editEpisodeNumber, setEditEpisodeNumber] = useState<number>(43);
+  const [editEpisodeNumber, setEditEpisodeNumber] = useState<number>(21);
   const [editPublishedAt, setEditPublishedAt] = useState("");
-  const [editMode, setEditMode] = useState<"sections" | "raw">("sections");
+  const [editAudioUrl, setEditAudioUrl] = useState("");
+  const [editDurationSeconds, setEditDurationSeconds] = useState<number>(1800);
+  const [editArtworkUrl, setEditArtworkUrl] = useState("");
+  const [replacementAudioFile, setReplacementAudioFile] = useState<File | null>(
+    null
+  );
+  const [editMode, setEditMode] = useState<"sections" | "raw">("raw");
   const [editPart1, setEditPart1] = useState("");
   const [editPart2, setEditPart2] = useState("");
   const [editPart3, setEditPart3] = useState("");
   const [editRawTranscript, setEditRawTranscript] = useState("");
-  const [editRegenerateAudio, setEditRegenerateAudio] = useState(false);
-  const [editTtsIdx, setEditTtsIdx] = useState<number>(0);
   const [editReason, setEditReason] = useState("");
   const [submittingEdit, setSubmittingEdit] = useState(false);
 
@@ -159,7 +177,7 @@ export function AdminEpisodesClient({
   const nextAutoEpisodeNumber = useMemo(() => {
     const maxEp = episodes.reduce(
       (max, ep) => Math.max(max, ep.episodeNumber || 0),
-      42
+      21
     );
     return maxEp + 1;
   }, [episodes]);
@@ -207,10 +225,105 @@ export function AdminEpisodesClient({
     router.refresh();
   }
 
-  function toggleIncidentSelection(id: number) {
-    setSelectedIncidentIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+  /**
+   * Uploads an audio file (MP3, M4A, WAV, AAC, OGG, FLAC) directly to the Cloudflare Worker R2 endpoint
+   * (so large 25-80 MB .m4a/.mp3 files bypass Vercel's 4.5 MB limit) with fallback to Next.js API route.
+   */
+  async function uploadAudioFileToR2(
+    file: File,
+    episodeNumber: number
+  ): Promise<{
+    r2Key: string;
+    audioUrl: string;
+    fileSizeBytes: number;
+  }> {
+    const padded = String(episodeNumber).padStart(3, "0");
+    const extMatch = file.name.match(/\.(mp3|m4a|mp4|wav|aac|ogg|flac)$/i);
+    const ext = extMatch ? extMatch[0].toLowerCase() : ".mp3";
+    const cleanFilename = `legacy-cab-${padded}${ext === ".mp4" ? ".m4a" : ext}`;
+    const contentType =
+      file.type && file.type.startsWith("audio/")
+        ? file.type
+        : cleanFilename.endsWith(".m4a")
+        ? "audio/mp4"
+        : "audio/mpeg";
+
+    const qs = new URLSearchParams({
+      filename: cleanFilename,
+      contentType,
+      episodeNumber: String(episodeNumber),
+    });
+
+    // Try direct Worker upload first if workerAudioUploadUrl & sessionToken are available
+    if (workerAudioUploadUrl && sessionToken) {
+      try {
+        const directRes = await fetch(
+          `${workerAudioUploadUrl}?${qs.toString()}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": contentType,
+              "x-session-token": sessionToken,
+            },
+            body: file,
+          }
+        );
+        if (directRes.ok) {
+          const directData = (await directRes.json()) as {
+            ok?: boolean;
+            r2Key?: string;
+            audioUrl?: string;
+            fileSizeBytes?: number;
+          };
+          if (directData.ok && directData.audioUrl && directData.r2Key) {
+            return {
+              r2Key: directData.r2Key,
+              audioUrl: directData.audioUrl,
+              fileSizeBytes: directData.fileSizeBytes || file.size,
+            };
+          }
+        }
+      } catch {
+        // Fall through to local Next.js upload route
+      }
+    }
+
+    const fallbackRes = await fetch(
+      `/api/admin/episodes/upload-audio?${qs.toString()}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": contentType,
+        },
+        body: file,
+      }
     );
+
+    const fallbackData = (await fallbackRes.json()) as {
+      ok?: boolean;
+      error?: string;
+      r2Key?: string;
+      audioUrl?: string;
+      fileSizeBytes?: number;
+    };
+
+    if (
+      !fallbackRes.ok ||
+      !fallbackData.ok ||
+      !fallbackData.audioUrl ||
+      !fallbackData.r2Key
+    ) {
+      throw new Error(
+        fallbackData.error ||
+          `Audio upload failed (HTTP ${fallbackRes.status})`
+      );
+    }
+
+    return {
+      r2Key: fallbackData.r2Key,
+      audioUrl: fallbackData.audioUrl,
+      fileSizeBytes: fallbackData.fileSizeBytes || file.size,
+    };
   }
 
   function openInspectorDrawer(ep: AdminEpisodeRecord) {
@@ -223,6 +336,10 @@ export function AdminEpisodesClient({
     );
     setEditEpisodeNumber(ep.episodeNumber);
     setEditPublishedAt(ep.publishedAt);
+    setEditAudioUrl(ep.audioUrl);
+    setEditDurationSeconds(ep.durationSeconds || 1800);
+    setEditArtworkUrl(ep.artworkUrl || "");
+    setReplacementAudioFile(null);
     const hasThreeParts = Boolean(
       ep.transcriptSections.separatingSignalFromPanic ||
         ep.transcriptSections.forwardPosture
@@ -232,8 +349,6 @@ export function AdminEpisodesClient({
     setEditPart2(ep.transcriptSections.separatingSignalFromPanic || "");
     setEditPart3(ep.transcriptSections.forwardPosture || "");
     setEditRawTranscript(ep.transcript || "");
-    setEditRegenerateAudio(false);
-    setEditTtsIdx(0);
     setEditReason("");
     setShowTechMetadata(false);
     setShowDangerZone(false);
@@ -241,38 +356,97 @@ export function AdminEpisodesClient({
     setDeleteReason("");
   }
 
-  async function handleGenerateEpisode(e: React.FormEvent) {
+  async function handleNewAudioFileChange(
+    e: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const file = e.target.files?.[0] || null;
+    setNewAudioFile(file);
+    if (file) {
+      setNewFileSizeBytes(file.size);
+      const detectedSeconds = await detectAudioFileDurationSeconds(file);
+      if (detectedSeconds) {
+        setNewDurationSeconds(detectedSeconds);
+      }
+      const epNum = useCustomEpNumber ? customEpNumber : nextAutoEpisodeNumber;
+      const padded = String(epNum).padStart(3, "0");
+      const extMatch = file.name.match(/\.(mp3|m4a|mp4|wav|aac|ogg|flac)$/i);
+      const ext = extMatch ? extMatch[0].toLowerCase() : ".mp3";
+      setNewAudioUrl(`/audio/legacy-cab-${padded}${ext === ".mp4" ? ".m4a" : ext}`);
+    }
+  }
+
+  async function handleReplacementAudioFileChange(
+    e: React.ChangeEvent<HTMLInputElement>
+  ) {
+    const file = e.target.files?.[0] || null;
+    setReplacementAudioFile(file);
+    if (file) {
+      const detectedSeconds = await detectAudioFileDurationSeconds(file);
+      if (detectedSeconds) {
+        setEditDurationSeconds(detectedSeconds);
+      }
+    }
+  }
+
+  async function handlePublishEpisode(e: React.FormEvent) {
     e.preventDefault();
     if (!canMutate) return;
 
-    setSubmittingGenerate(true);
+    const epNum = useCustomEpNumber ? customEpNumber : nextAutoEpisodeNumber;
+    if (!newAudioFile && !newAudioUrl.trim()) {
+      setBanner({
+        type: "error",
+        title: "Audio File Required",
+        detail:
+          "Please select an MP3 / M4A / WAV audio file to upload (or provide an existing /audio/... URL).",
+      });
+      return;
+    }
+
+    setSubmittingPublish(true);
     setBanner(null);
 
-    const ttsSpec = TTS_VOICE_OPTIONS[selectedTtsIdx] || TTS_VOICE_OPTIONS[0];
-
     try {
+      let effectiveAudioUrl = newAudioUrl.trim();
+      let effectiveFileSize = newFileSizeBytes || 24000000;
+
+      if (newAudioFile) {
+        setUploadStatusText(
+          `Uploading ${newAudioFile.name} (${formatBytes(
+            newAudioFile.size
+          )}) to R2 storage…`
+        );
+        const uploaded = await uploadAudioFileToR2(newAudioFile, epNum);
+        effectiveAudioUrl = uploaded.audioUrl;
+        effectiveFileSize = uploaded.fileSizeBytes;
+      }
+
+      setUploadStatusText("Publishing episode metadata & updating RSS feed…");
+
+      const finalTitle =
+        newTitle.trim() || `The CAB Call #${epNum}`;
+      const finalSummary =
+        newSummary.trim() ||
+        `Episode #${epNum} of The CAB Call Podcast.`;
+
       const res = await fetch("/api/admin/episodes/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          episodeNumber: useCustomEpNumber ? customEpNumber : undefined,
-          titleOverride: genTitleOverride.trim() || undefined,
-          summaryOverride: genSummaryOverride.trim() || undefined,
-          editorialFocusNote: genFocusNote.trim() || undefined,
-          windowDays: genWindowDays,
-          incidentIds:
-            selectedIncidentIds.length > 0 ? selectedIncidentIds : undefined,
-          ttsVoice: ttsSpec.voice,
-          ttsProvider: ttsSpec.provider,
+          episodeNumber: epNum,
+          titleOverride: finalTitle,
+          summaryOverride: finalSummary,
+          extendedNotesOverride: newExtendedNotes.trim() || finalSummary,
+          transcriptOverride:
+            newTranscript.trim() || newExtendedNotes.trim() || finalSummary,
+          audioUrl: effectiveAudioUrl,
+          artworkUrlOverride: newArtworkUrl.trim() || undefined,
+          durationSeconds: newDurationSeconds,
+          fileSizeBytes: effectiveFileSize,
+          publishedAtOverride: newPublishedAt.trim() || new Date().toISOString(),
           reason:
-            genReason.trim() ||
-            `On-demand generation of Episode #${
-              useCustomEpNumber ? customEpNumber : nextAutoEpisodeNumber
-            } from Podcast Studio (${genWindowDays}-day window${
-              selectedIncidentIds.length > 0
-                ? `, ${selectedIncidentIds.length} hand-picked stories`
-                : ""
-            })`,
+            newReason.trim() ||
+            `Published Episode #${epNum} ("${finalTitle}") with externally produced audio file (${effectiveAudioUrl})`,
         }),
       });
 
@@ -287,7 +461,7 @@ export function AdminEpisodesClient({
       if (!res.ok || !data.ok || !data.episode) {
         setBanner({
           type: "error",
-          title: "Episode Generation Failed",
+          title: "Episode Publication Failed",
           detail: data.error || `HTTP ${res.status}`,
         });
       } else {
@@ -299,30 +473,34 @@ export function AdminEpisodesClient({
             ...prev.filter((item) => item.id !== data.episode!.id),
           ]);
         }
-        setShowGeneratePanel(false);
-        setGenTitleOverride("");
-        setGenSummaryOverride("");
-        setGenFocusNote("");
-        setSelectedIncidentIds([]);
-        setGenReason("");
+        setShowPublishPanel(false);
+        setNewTitle("");
+        setNewSummary("");
+        setNewExtendedNotes("");
+        setNewTranscript("");
+        setNewAudioFile(null);
+        setNewAudioUrl("");
+        setNewArtworkUrl("");
+        setNewReason("");
         openInspectorDrawer(data.episode);
         setBanner({
           type: "success",
           title: `Episode #${data.episode.episodeNumber} Published`,
           detail: `"${data.episode.title}" (${formatBytes(
             data.episode.fileSizeBytes
-          )}) is now live on /archive and /podcast.xml.`,
+          )}, ${data.episode.durationFormatted}) is now live on the home page, /podcast, and /feed.xml.`,
         });
         await refreshEpisodes();
       }
     } catch (err) {
       setBanner({
         type: "error",
-        title: "Episode Generation Error",
+        title: "Episode Publication Error",
         detail: err instanceof Error ? err.message : String(err),
       });
     } finally {
-      setSubmittingGenerate(false);
+      setSubmittingPublish(false);
+      setUploadStatusText(null);
     }
   }
 
@@ -333,9 +511,19 @@ export function AdminEpisodesClient({
     setSubmittingEdit(true);
     setBanner(null);
 
-    const ttsSpec = TTS_VOICE_OPTIONS[editTtsIdx] || TTS_VOICE_OPTIONS[0];
-
     try {
+      let effectiveAudioUrl = editAudioUrl.trim() || inspectingEpisode.audioUrl;
+      let effectiveFileSize = inspectingEpisode.fileSizeBytes;
+
+      if (replacementAudioFile) {
+        const uploaded = await uploadAudioFileToR2(
+          replacementAudioFile,
+          editEpisodeNumber
+        );
+        effectiveAudioUrl = uploaded.audioUrl;
+        effectiveFileSize = uploaded.fileSizeBytes;
+      }
+
       let parsedExternalSources = inspectingEpisode.externalSources || [];
       if (editExternalSourcesJson.trim()) {
         try {
@@ -355,13 +543,16 @@ export function AdminEpisodesClient({
         externalSources: parsedExternalSources,
         episodeNumber: editEpisodeNumber,
         publishedAt: editPublishedAt.trim(),
-        regenerateAudio: editRegenerateAudio,
-        ttsVoice: ttsSpec.voice,
-        ttsProvider: ttsSpec.provider,
+        audioUrl: effectiveAudioUrl,
+        artworkUrl: editArtworkUrl.trim() || null,
+        durationSeconds: editDurationSeconds,
+        fileSizeBytes: effectiveFileSize,
         reason:
           editReason.trim() ||
-          `Updated Episode #${editEpisodeNumber} notes/transcript in Podcast Studio${
-            editRegenerateAudio ? " and re-recorded MP3 audio" : ""
+          `Updated Episode #${editEpisodeNumber} in Podcast Studio${
+            replacementAudioFile
+              ? ` and uploaded replacement audio file (${replacementAudioFile.name})`
+              : ""
           }`,
       };
 
@@ -411,11 +602,12 @@ export function AdminEpisodesClient({
           );
         }
         setInspectingEpisode(data.episode);
+        setReplacementAudioFile(null);
         setBanner({
           type: "success",
           title: `Episode #${data.episode.episodeNumber} Saved`,
           detail: `Saved updates to "${data.episode.title}"${
-            data.audioRegenerated ? " and updated the MP3 audio stream" : ""
+            replacementAudioFile ? " and updated the R2 audio stream" : ""
           }.`,
         });
         await refreshEpisodes();
@@ -527,34 +719,33 @@ export function AdminEpisodesClient({
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2.5">
               <span className="font-display text-[11px] uppercase tracking-[0.18em] text-[#C5A059]">
-                Podcast Studio • Audio &amp; Transcripts
+                Podcast Studio • External Media &amp; Transcripts
               </span>
               <span className="px-2 py-0.5 bg-[#0B0E14] border border-[#8A6D3B]/45 font-sans text-[11px] text-[#94A3B8]">
-                {episodes.length} episodes ({weeklyRollupCount} Weekly Briefs •{" "}
-                {legacyArchiveCount} Legacy Archive)
+                {episodes.length} published episodes
               </span>
             </div>
             <h1 className="font-display text-2xl sm:text-3xl text-[#F3EFE6] tracking-wide">
               Podcast Studio
             </h1>
             <p className="font-serif text-sm text-[#94A3B8] max-w-2xl leading-relaxed">
-              Select any episode below to listen, refine show notes and
-              transcripts in the slide-out inspector, or produce a new weekly
-              episode.
+              Upload your externally produced MP3 / M4A / WAV episode files
+              directly to R2 storage, or select any episode below to refine show
+              notes, artwork, and transcripts.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             <a
-              href="https://thecabcall.com/archive"
+              href="https://thecabcall.com/podcast"
               target="_blank"
               rel="noopener noreferrer"
               className="px-3.5 py-2 border border-[#8A6D3B]/50 hover:border-[#C5A059] bg-[#0B0E14] text-xs font-display uppercase tracking-wider text-[#F3EFE6] transition-all duration-200 ease-out"
             >
-              Public Archive ↗
+              Public Podcast Page ↗
             </a>
             <a
-              href="https://thecabcall.com/podcast.xml"
+              href="https://thecabcall.com/feed.xml"
               target="_blank"
               rel="noopener noreferrer"
               className="px-3.5 py-2 border border-[#8A6D3B]/50 hover:border-[#C5A059] bg-[#0B0E14] text-xs font-display uppercase tracking-wider text-[#F3EFE6] transition-all duration-200 ease-out"
@@ -564,12 +755,12 @@ export function AdminEpisodesClient({
             {canMutate && (
               <button
                 type="button"
-                onClick={() => setShowGeneratePanel((prev) => !prev)}
+                onClick={() => setShowPublishPanel((prev) => !prev)}
                 className="px-4 py-2 bg-[#C5A059] hover:bg-[#d4b06a] text-[#0B0E14] font-display text-xs font-bold uppercase tracking-wider transition-all duration-200 ease-out cursor-pointer"
               >
-                {showGeneratePanel
-                  ? "Close Episode Producer"
-                  : "+ Produce New Episode"}
+                {showPublishPanel
+                  ? "Close Upload Studio"
+                  : "+ Upload & Publish Episode"}
               </button>
             )}
           </div>
@@ -603,28 +794,28 @@ export function AdminEpisodesClient({
         </div>
       )}
 
-      {/* Produce New Episode Panel */}
-      {showGeneratePanel && canMutate && (
+      {/* Upload & Publish New Episode Panel */}
+      {showPublishPanel && canMutate && (
         <div className="relative bg-[#111726] border-2 border-[#C5A059] p-6 space-y-5 shadow-2xl">
           <div className="flex items-center justify-between border-b border-[#8A6D3B]/35 pb-4">
             <div>
               <span className="font-display text-[10px] uppercase tracking-[0.18em] text-[#C5A059]">
-                Weekly Broadcast Producer
+                External Media Publisher (MP3 / M4A / WAV / AAC)
               </span>
               <h2 className="font-display text-xl text-[#F3EFE6] mt-0.5">
-                Produce &amp; Publish New Podcast Episode
+                Upload &amp; Publish New Podcast Episode
               </h2>
             </div>
             <button
               type="button"
-              onClick={() => setShowGeneratePanel(false)}
+              onClick={() => setShowPublishPanel(false)}
               className="px-3 py-1 border border-[#8A6D3B]/45 text-xs font-display uppercase tracking-wider text-[#94A3B8] hover:text-[#F3EFE6] cursor-pointer"
             >
               ✕ Close
             </button>
           </div>
 
-          <form onSubmit={handleGenerateEpisode} className="space-y-5">
+          <form onSubmit={handlePublishEpisode} className="space-y-5">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Episode Number */}
               <div className="bg-[#0B0E14] border border-[#8A6D3B]/40 p-3.5 space-y-2">
@@ -653,7 +844,7 @@ export function AdminEpisodesClient({
                     max={9999}
                     value={customEpNumber}
                     onChange={(e) =>
-                      setCustomEpNumber(parseInt(e.target.value, 10) || 43)
+                      setCustomEpNumber(parseInt(e.target.value, 10) || 22)
                     }
                     className="w-full bg-[#111726] border border-[#8A6D3B]/50 px-3 py-1.5 text-sm font-mono text-[#F3EFE6]"
                   />
@@ -664,148 +855,153 @@ export function AdminEpisodesClient({
                 )}
               </div>
 
-              {/* Story Window */}
-              <div className="bg-[#0B0E14] border border-[#8A6D3B]/40 p-3.5 space-y-2">
-                <label className="block font-display text-xs uppercase tracking-wider text-[#F3EFE6]">
-                  Story Window
+              {/* Audio File Selector (MP3 / M4A / WAV / AAC) */}
+              <div className="bg-[#0B0E14] border border-[#8A6D3B]/40 p-3.5 space-y-2 md:col-span-2">
+                <label className="block font-display text-xs uppercase tracking-wider text-[#C5A059]">
+                  Upload Produced Audio File (MP3, M4A, WAV, AAC, OGG, FLAC)
                 </label>
-                <select
-                  value={genWindowDays}
-                  onChange={(e) =>
-                    setGenWindowDays(parseInt(e.target.value, 10) || 7)
-                  }
-                  className="w-full bg-[#111726] border border-[#8A6D3B]/50 px-3 py-1.5 text-xs font-sans text-[#F3EFE6]"
-                >
-                  <option value={7}>Past 7 Days (Standard Weekly Brief)</option>
-                  <option value={14}>Past 14 Days (Bi-Weekly Window)</option>
-                  <option value={30}>Past 30 Days (Monthly Window)</option>
-                </select>
+                <input
+                  type="file"
+                  accept="audio/*,.mp3,.m4a,.mp4,.wav,.aac,.ogg,.flac"
+                  onChange={handleNewAudioFileChange}
+                  className="w-full bg-[#111726] border border-[#8A6D3B]/50 px-3 py-1.5 text-xs font-mono text-[#F3EFE6] file:mr-3 file:px-2.5 file:py-1 file:border-0 file:bg-[#C5A059] file:text-[#0B0E14] file:font-display file:text-[10px] file:uppercase file:font-bold file:cursor-pointer"
+                />
+                {newAudioFile && (
+                  <div className="text-[11px] font-mono text-emerald-300">
+                    Selected: {newAudioFile.name} (
+                    {formatBytes(newAudioFile.size)} • Detected Duration:{" "}
+                    {formatDurationMmSs(newDurationSeconds)})
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <label className="block font-display text-xs uppercase tracking-wider text-[#C5A059]">
+                  Episode Title
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  placeholder={`e.g., The CAB Call #${
+                    useCustomEpNumber ? customEpNumber : nextAutoEpisodeNumber
+                  }: ...`}
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-serif text-[#F3EFE6]"
+                />
               </div>
 
-              {/* Voice Cadence */}
-              <div className="bg-[#0B0E14] border border-[#8A6D3B]/40 p-3.5 space-y-2">
-                <label className="block font-display text-xs uppercase tracking-wider text-[#F3EFE6]">
-                  Host Voice &amp; Audio Engine
+              <div className="space-y-1.5">
+                <label className="block font-display text-xs uppercase tracking-wider text-[#C5A059]">
+                  Duration (Seconds — {formatDurationMmSs(newDurationSeconds)})
                 </label>
-                <select
-                  value={selectedTtsIdx}
+                <input
+                  type="number"
+                  min={1}
+                  value={newDurationSeconds}
                   onChange={(e) =>
-                    setSelectedTtsIdx(parseInt(e.target.value, 10) || 0)
+                    setNewDurationSeconds(parseInt(e.target.value, 10) || 1800)
                   }
-                  className="w-full bg-[#111726] border border-[#8A6D3B]/50 px-3 py-1.5 text-xs font-sans text-[#F3EFE6]"
-                >
-                  {TTS_VOICE_OPTIONS.map((opt, idx) => (
-                    <option key={opt.label} value={idx}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block font-display text-xs uppercase tracking-wider text-[#C5A059]">
+                  Artwork URL{" "}
+                  <span className="text-[#94A3B8] normal-case font-serif italic">
+                    (optional)
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  value={newArtworkUrl}
+                  onChange={(e) => setNewArtworkUrl(e.target.value)}
+                  placeholder="e.g., /media/legacy-cab-022.png"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-mono text-[#F3EFE6]"
+                />
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="block font-display text-xs uppercase tracking-wider text-[#C5A059]">
-                  Custom Title Override{" "}
+                  Audio Stream Path / URL{" "}
                   <span className="text-[#94A3B8] normal-case font-serif italic">
-                    (optional)
+                    (auto-filled on file select or enter existing R2 path)
                   </span>
                 </label>
                 <input
                   type="text"
-                  value={genTitleOverride}
-                  onChange={(e) => setGenTitleOverride(e.target.value)}
-                  placeholder="Leave blank to title automatically from the week's lead brief"
-                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-serif text-[#F3EFE6]"
+                  value={newAudioUrl}
+                  onChange={(e) => setNewAudioUrl(e.target.value)}
+                  placeholder={`/audio/legacy-cab-${String(
+                    useCustomEpNumber ? customEpNumber : nextAutoEpisodeNumber
+                  ).padStart(3, "0")}.m4a`}
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-mono text-[#F3EFE6]"
                 />
               </div>
 
               <div className="space-y-1.5">
                 <label className="block font-display text-xs uppercase tracking-wider text-[#C5A059]">
-                  Custom Summary Override{" "}
-                  <span className="text-[#94A3B8] normal-case font-serif italic">
-                    (optional)
-                  </span>
+                  Published Date (ISO-8601)
                 </label>
                 <input
                   type="text"
-                  value={genSummaryOverride}
-                  onChange={(e) => setGenSummaryOverride(e.target.value)}
-                  placeholder="Leave blank to auto-draft 2-sentence episode summary"
-                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-serif text-[#F3EFE6]"
+                  value={newPublishedAt}
+                  onChange={(e) => setNewPublishedAt(e.target.value)}
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-mono text-[#F3EFE6]"
                 />
               </div>
             </div>
 
             <div className="space-y-1.5">
               <label className="block font-display text-xs uppercase tracking-wider text-[#C5A059]">
-                Editorial Focus Note{" "}
-                <span className="text-[#94A3B8] normal-case font-serif italic">
-                  (optional guidance for the weekly script)
-                </span>
+                Episode Summary (Show Notes Hook)
               </label>
               <textarea
                 rows={2}
-                value={genFocusNote}
-                onChange={(e) => setGenFocusNote(e.target.value)}
-                placeholder="e.g., Highlight the common thread between municipal utility maintenance and aviation failover readiness."
+                required
+                value={newSummary}
+                onChange={(e) => setNewSummary(e.target.value)}
+                placeholder="2-sentence episode summary displayed on the Home Page hero card, /podcast archive, and RSS feed..."
                 className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-serif text-[#F3EFE6]"
               />
             </div>
 
-            {/* Featured Stories Selection */}
-            <div className="space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <label className="font-display text-xs uppercase tracking-wider text-[#F3EFE6]">
-                  Featured Stories{" "}
-                  <span className="text-[#94A3B8] font-serif italic normal-case">
-                    (
-                    {selectedIncidentIds.length === 0
-                      ? "Auto-selecting top 5 stories in window"
-                      : `${selectedIncidentIds.length} story(s) selected`}
-                    )
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="block font-display text-xs uppercase tracking-wider text-[#C5A059]">
+                  Extended Episode Guide &amp; Key Takeaways{" "}
+                  <span className="text-[#94A3B8] normal-case font-serif italic">
+                    (optional)
                   </span>
                 </label>
-                {selectedIncidentIds.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setSelectedIncidentIds([])}
-                    className="text-xs font-display uppercase tracking-wider text-[#C5A059] underline cursor-pointer"
-                  >
-                    Reset to Auto Top 5
-                  </button>
-                )}
+                <textarea
+                  rows={4}
+                  value={newExtendedNotes}
+                  onChange={(e) => setNewExtendedNotes(e.target.value)}
+                  placeholder="Extended overview and bulleted key takeaways..."
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-serif text-[#F3EFE6]"
+                />
               </div>
 
-              <div className="max-h-48 overflow-y-auto bg-[#0B0E14] border border-[#8A6D3B]/40 divide-y divide-[#8A6D3B]/25">
-                {candidateIncidents.slice(0, 15).map((inc) => {
-                  const checked = selectedIncidentIds.includes(inc.id);
-                  return (
-                    <label
-                      key={inc.id}
-                      className={`flex items-start gap-3 p-2.5 text-xs cursor-pointer transition-colors ${
-                        checked
-                          ? "bg-[#C5A059]/15 text-[#F3EFE6]"
-                          : "hover:bg-[#111726] text-[#94A3B8]"
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => toggleIncidentSelection(inc.id)}
-                        className="mt-0.5 accent-[#C5A059]"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-serif text-sm text-[#F3EFE6] truncate">
-                          {inc.title}
-                        </div>
-                        <div className="text-[11px] font-sans text-[#94A3B8] mt-0.5">
-                          {inc.source_feed} • Tool: {inc.primary_tool}
-                        </div>
-                      </div>
-                    </label>
-                  );
-                })}
+              <div className="space-y-1.5">
+                <label className="block font-display text-xs uppercase tracking-wider text-[#C5A059]">
+                  Full Episode Transcript{" "}
+                  <span className="text-[#94A3B8] normal-case font-serif italic">
+                    (optional)
+                  </span>
+                </label>
+                <textarea
+                  rows={4}
+                  value={newTranscript}
+                  onChange={(e) => setNewTranscript(e.target.value)}
+                  placeholder="Paste episode transcript..."
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-serif text-[#F3EFE6]"
+                />
               </div>
             </div>
 
@@ -816,21 +1012,21 @@ export function AdminEpisodesClient({
                 </label>
                 <input
                   type="text"
-                  value={genReason}
-                  onChange={(e) => setGenReason(e.target.value)}
-                  placeholder="e.g., Produced Friday Weekly Brief for publication"
+                  value={newReason}
+                  onChange={(e) => setNewReason(e.target.value)}
+                  placeholder="e.g., Uploaded produced M4A/MP3 episode audio and show notes"
                   className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-serif text-[#F3EFE6]"
                 />
               </div>
 
               <button
                 type="submit"
-                disabled={submittingGenerate}
+                disabled={submittingPublish}
                 className="px-6 py-2.5 bg-[#C5A059] hover:bg-[#d4b06a] disabled:opacity-50 text-[#0B0E14] font-display text-xs font-bold uppercase tracking-wider transition-all duration-200 ease-out cursor-pointer shrink-0"
               >
-                {submittingGenerate
-                  ? "Producing Audio & Transcript…"
-                  : "Produce & Publish Episode"}
+                {submittingPublish
+                  ? uploadStatusText || "Uploading & Publishing…"
+                  : "Upload & Publish Episode"}
               </button>
             </div>
           </form>
@@ -851,28 +1047,32 @@ export function AdminEpisodesClient({
           >
             All Episodes ({episodes.length})
           </button>
-          <button
-            type="button"
-            onClick={() => setSeriesFilter("weekly_rollup")}
-            className={`px-3 py-1.5 border transition-all duration-200 ease-out cursor-pointer ${
-              seriesFilter === "weekly_rollup"
-                ? "bg-[#C5A059] text-[#0B0E14] border-[#C5A059] font-bold"
-                : "bg-[#0B0E14] text-[#94A3B8] border-[#8A6D3B]/40 hover:text-[#F3EFE6]"
-            }`}
-          >
-            Weekly Briefs ({weeklyRollupCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => setSeriesFilter("legacy_archive")}
-            className={`px-3 py-1.5 border transition-all duration-200 ease-out cursor-pointer ${
-              seriesFilter === "legacy_archive"
-                ? "bg-[#C5A059] text-[#0B0E14] border-[#C5A059] font-bold"
-                : "bg-[#0B0E14] text-[#94A3B8] border-[#8A6D3B]/40 hover:text-[#F3EFE6]"
-            }`}
-          >
-            Legacy Archive ({legacyArchiveCount})
-          </button>
+          {weeklyRollupCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setSeriesFilter("weekly_rollup")}
+              className={`px-3 py-1.5 border transition-all duration-200 ease-out cursor-pointer ${
+                seriesFilter === "weekly_rollup"
+                  ? "bg-[#C5A059] text-[#0B0E14] border-[#C5A059] font-bold"
+                  : "bg-[#0B0E14] text-[#94A3B8] border-[#8A6D3B]/40 hover:text-[#F3EFE6]"
+              }`}
+            >
+              Weekly Briefs ({weeklyRollupCount})
+            </button>
+          )}
+          {weeklyRollupCount > 0 && legacyArchiveCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setSeriesFilter("legacy_archive")}
+              className={`px-3 py-1.5 border transition-all duration-200 ease-out cursor-pointer ${
+                seriesFilter === "legacy_archive"
+                  ? "bg-[#C5A059] text-[#0B0E14] border-[#C5A059] font-bold"
+                  : "bg-[#0B0E14] text-[#94A3B8] border-[#8A6D3B]/40 hover:text-[#F3EFE6]"
+              }`}
+            >
+              Foundational Essays ({legacyArchiveCount})
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-2 flex-1 sm:max-w-md">
@@ -928,24 +1128,16 @@ export function AdminEpisodesClient({
                     <span className="px-2 py-0.5 bg-[#0B0E14] border border-[#C5A059]/60 font-display text-[11px] uppercase tracking-wider text-[#C5A059] font-bold">
                       Ep #{ep.episodeNumber}
                     </span>
-                    <span
-                      className={`px-2 py-0.5 border font-display text-[10px] uppercase tracking-wider ${
-                        ep.series === "weekly_rollup"
-                          ? "bg-emerald-950/50 border-emerald-500/40 text-emerald-300"
-                          : "bg-[#0B0E14] border-[#8A6D3B]/50 text-[#94A3B8]"
-                      }`}
-                    >
-                      {ep.series === "weekly_rollup"
-                        ? "Weekly Brief"
-                        : "Legacy Archive"}
-                    </span>
-                    <span className="text-[#8A6D3B]">•</span>
                     <span className="font-sans text-xs text-[#94A3B8]">
                       {formatCleanDate(ep.publishedAt)}
                     </span>
                     <span className="text-[#8A6D3B]">•</span>
                     <span className="font-mono text-xs text-[#F3EFE6]/90">
                       {ep.durationFormatted}
+                    </span>
+                    <span className="text-[#8A6D3B]">•</span>
+                    <span className="font-mono text-[11px] text-[#94A3B8]">
+                      {ep.r2Key}
                     </span>
                   </div>
 
@@ -1025,7 +1217,7 @@ export function AdminEpisodesClient({
             <div className="bg-[#0B0E14] border border-[#8A6D3B]/45 p-4 space-y-2.5">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-display text-[11px] uppercase tracking-wider text-[#C5A059]">
-                  Episode Audio Player
+                  Episode Audio Player ({inspectingEpisode.r2Key})
                 </span>
                 <a
                   href={inspectingEpisode.audioUrl}
@@ -1033,7 +1225,7 @@ export function AdminEpisodesClient({
                   rel="noopener noreferrer"
                   className="font-display text-[11px] uppercase tracking-wider text-[#94A3B8] hover:text-[#C5A059] transition-colors"
                 >
-                  Open MP3 Stream ↗
+                  Open Audio Stream ↗
                 </a>
               </div>
               <audio
@@ -1046,7 +1238,7 @@ export function AdminEpisodesClient({
               />
             </div>
 
-            {/* 2. Description & Transcript Editor */}
+            {/* 2. Description, Audio File Replacement & Transcript Editor */}
             <form onSubmit={handleSaveEdit} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <div>
@@ -1107,6 +1299,26 @@ export function AdminEpisodesClient({
                 />
               </div>
 
+              {/* Replace / Upload Audio File Option */}
+              <div className="bg-[#0B0E14] border border-[#8A6D3B]/40 p-3.5 space-y-2.5">
+                <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059]">
+                  Replace / Upload Audio File (MP3, M4A, WAV, AAC)
+                </label>
+                <input
+                  type="file"
+                  accept="audio/*,.mp3,.m4a,.mp4,.wav,.aac,.ogg,.flac"
+                  onChange={handleReplacementAudioFileChange}
+                  className="w-full bg-[#111726] border border-[#8A6D3B]/50 px-3 py-1.5 text-xs font-mono text-[#F3EFE6] file:mr-3 file:px-2.5 file:py-1 file:border-0 file:bg-[#C5A059] file:text-[#0B0E14] file:font-display file:text-[10px] file:uppercase file:font-bold file:cursor-pointer"
+                />
+                {replacementAudioFile && (
+                  <div className="text-[11px] font-mono text-emerald-300">
+                    Ready to upload on Save: {replacementAudioFile.name} (
+                    {formatBytes(replacementAudioFile.size)} • Duration:{" "}
+                    {formatDurationMmSs(editDurationSeconds)})
+                  </div>
+                )}
+              </div>
+
               {/* Transcript Editor */}
               <div className="space-y-3 pt-3 border-t border-[#8A6D3B]/35">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1114,17 +1326,6 @@ export function AdminEpisodesClient({
                     Episode Transcript
                   </span>
                   <div className="flex items-center gap-1.5 font-display text-[11px] uppercase tracking-wider">
-                    <button
-                      type="button"
-                      onClick={() => setEditMode("sections")}
-                      className={`px-2.5 py-1 border cursor-pointer ${
-                        editMode === "sections"
-                          ? "bg-[#C5A059] text-[#0B0E14] border-[#C5A059] font-bold"
-                          : "bg-[#0B0E14] text-[#94A3B8] border-[#8A6D3B]/40"
-                      }`}
-                    >
-                      3-Part Structured
-                    </button>
                     <button
                       type="button"
                       onClick={() => setEditMode("raw")}
@@ -1136,6 +1337,17 @@ export function AdminEpisodesClient({
                     >
                       Full Text
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditMode("sections")}
+                      className={`px-2.5 py-1 border cursor-pointer ${
+                        editMode === "sections"
+                          ? "bg-[#C5A059] text-[#0B0E14] border-[#C5A059] font-bold"
+                          : "bg-[#0B0E14] text-[#94A3B8] border-[#8A6D3B]/40"
+                      }`}
+                    >
+                      3-Part Structured
+                    </button>
                   </div>
                 </div>
 
@@ -1144,7 +1356,7 @@ export function AdminEpisodesClient({
                     <div>
                       <div className="flex justify-between text-[11px] mb-1">
                         <span className="font-display uppercase tracking-wider text-[#C5A059]">
-                          Part 1: [00:00 — The Weekly Telemetry]
+                          Part 1: [00:00 — Opening]
                         </span>
                         <span className="font-sans text-[#94A3B8]">
                           {countWords(editPart1)} words
@@ -1161,7 +1373,7 @@ export function AdminEpisodesClient({
                     <div>
                       <div className="flex justify-between text-[11px] mb-1">
                         <span className="font-display uppercase tracking-wider text-[#C5A059]">
-                          Part 2: [01:15 — Separating Signal From Panic]
+                          Part 2: [01:15 — Core Analysis]
                         </span>
                         <span className="font-sans text-[#94A3B8]">
                           {countWords(editPart2)} words
@@ -1178,7 +1390,7 @@ export function AdminEpisodesClient({
                     <div>
                       <div className="flex justify-between text-[11px] mb-1">
                         <span className="font-display uppercase tracking-wider text-[#C5A059]">
-                          Part 3: [03:30 — The Forward Posture]
+                          Part 3: [03:30 — Closing]
                         </span>
                         <span className="font-sans text-[#94A3B8]">
                           {countWords(editPart3)} words
@@ -1208,39 +1420,6 @@ export function AdminEpisodesClient({
                       onChange={(e) => setEditRawTranscript(e.target.value)}
                       className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 p-3 font-serif text-sm text-[#F3EFE6] leading-relaxed focus:border-[#C5A059] focus:outline-none"
                     />
-                  </div>
-                )}
-              </div>
-
-              {/* Audio Regeneration Option */}
-              <div className="bg-[#0B0E14] border border-[#8A6D3B]/40 p-3.5 space-y-2.5">
-                <label className="flex items-center gap-2.5 text-xs font-sans text-[#F3EFE6] cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={editRegenerateAudio}
-                    onChange={(e) => setEditRegenerateAudio(e.target.checked)}
-                    className="accent-[#C5A059]"
-                  />
-                  <span>
-                    Re-record MP3 audio from updated transcript on save
-                  </span>
-                </label>
-
-                {editRegenerateAudio && (
-                  <div className="pl-6">
-                    <select
-                      value={editTtsIdx}
-                      onChange={(e) =>
-                        setEditTtsIdx(parseInt(e.target.value, 10) || 0)
-                      }
-                      className="w-full bg-[#111726] border border-[#8A6D3B]/50 px-3 py-1.5 text-xs font-sans text-[#F3EFE6]"
-                    >
-                      {TTS_VOICE_OPTIONS.map((opt, idx) => (
-                        <option key={opt.label} value={idx}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
                   </div>
                 )}
               </div>
@@ -1318,16 +1497,58 @@ export function AdminEpisodesClient({
                       {formatBytes(inspectingEpisode.fileSizeBytes)}
                     </code>
                   </div>
-                  <div className="pt-2 border-t border-[#8A6D3B]/25">
-                    <label className="block font-display text-[10px] uppercase tracking-wider text-[#94A3B8] mb-1">
-                      Published Timestamp (ISO-8601)
-                    </label>
-                    <input
-                      type="text"
-                      value={editPublishedAt}
-                      onChange={(e) => setEditPublishedAt(e.target.value)}
-                      className="w-full bg-[#111726] border border-[#8A6D3B]/40 px-2.5 py-1.5 font-mono text-xs text-[#F3EFE6]"
-                    />
+                  <div className="pt-2 border-t border-[#8A6D3B]/25 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block font-display text-[10px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                        Audio URL / Path
+                      </label>
+                      <input
+                        type="text"
+                        value={editAudioUrl}
+                        onChange={(e) => setEditAudioUrl(e.target.value)}
+                        className="w-full bg-[#111726] border border-[#8A6D3B]/40 px-2.5 py-1.5 font-mono text-xs text-[#F3EFE6]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-display text-[10px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                        Duration (Seconds)
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={editDurationSeconds}
+                        onChange={(e) =>
+                          setEditDurationSeconds(
+                            parseInt(e.target.value, 10) || 1800
+                          )
+                        }
+                        className="w-full bg-[#111726] border border-[#8A6D3B]/40 px-2.5 py-1.5 font-mono text-xs text-[#F3EFE6]"
+                      />
+                    </div>
+                  </div>
+                  <div className="pt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="block font-display text-[10px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                        Artwork URL
+                      </label>
+                      <input
+                        type="text"
+                        value={editArtworkUrl}
+                        onChange={(e) => setEditArtworkUrl(e.target.value)}
+                        className="w-full bg-[#111726] border border-[#8A6D3B]/40 px-2.5 py-1.5 font-mono text-xs text-[#F3EFE6]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-display text-[10px] uppercase tracking-wider text-[#94A3B8] mb-1">
+                        Published Timestamp (ISO-8601)
+                      </label>
+                      <input
+                        type="text"
+                        value={editPublishedAt}
+                        onChange={(e) => setEditPublishedAt(e.target.value)}
+                        className="w-full bg-[#111726] border border-[#8A6D3B]/40 px-2.5 py-1.5 font-mono text-xs text-[#F3EFE6]"
+                      />
+                    </div>
                   </div>
                   <div className="pt-2">
                     <label className="block font-display text-[10px] uppercase tracking-wider text-[#94A3B8] mb-1">
@@ -1377,7 +1598,7 @@ export function AdminEpisodesClient({
                         onChange={(e) => setDeletePurgeAudio(e.target.checked)}
                       />
                       <span>
-                        Also purge MP3 audio file (
+                        Also purge audio file (
                         <code className="font-mono">
                           {inspectingEpisode.r2Key}
                         </code>

@@ -44,6 +44,7 @@ export function PodcastArchiveClient({
   const [seriesFilter, setSeriesFilter] = useState<
     "all" | "weekly_rollup" | "legacy_archive"
   >("all");
+  const [toolFilter, setToolFilter] = useState<string>("all");
   const [expandedTranscriptId, setExpandedTranscriptId] = useState<
     string | null
   >(episodes[0]?.id || null);
@@ -55,9 +56,11 @@ export function PodcastArchiveClient({
     Record<string, boolean>
   >({});
 
-  const filteredEpisodes = episodes.filter((ep) =>
-    seriesFilter === "all" ? true : ep.series === seriesFilter
-  );
+  const filteredEpisodes = episodes.filter((ep) => {
+    if (seriesFilter !== "all" && ep.series !== seriesFilter) return false;
+    if (toolFilter !== "all" && ep.dominantTool !== toolFilter) return false;
+    return true;
+  });
 
   const weeklyCount = episodes.filter(
     (e) => e.series === "weekly_rollup"
@@ -208,35 +211,68 @@ export function PodcastArchiveClient({
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#8A6D3B]/40 pb-4">
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={() => setSeriesFilter("all")}
+            onClick={() => {
+              setSeriesFilter("all");
+              setToolFilter("all");
+            }}
             className={`px-3.5 py-1.5 text-xs font-mono uppercase tracking-wider border transition-colors cursor-pointer ${
-              seriesFilter === "all"
+              seriesFilter === "all" && toolFilter === "all"
                 ? "border-[#C5A059] bg-[#C5A059]/20 text-[#F3EFE6]"
                 : "border-[#8A6D3B]/40 text-[#94A3B8] hover:text-[#F3EFE6]"
             }`}
           >
             All Episodes ({episodes.length})
           </button>
-          <button
-            onClick={() => setSeriesFilter("weekly_rollup")}
-            className={`px-3.5 py-1.5 text-xs font-mono uppercase tracking-wider border transition-colors cursor-pointer ${
-              seriesFilter === "weekly_rollup"
-                ? "border-[#C5A059] bg-[#C5A059]/20 text-[#F3EFE6]"
-                : "border-[#8A6D3B]/40 text-[#94A3B8] hover:text-[#F3EFE6]"
-            }`}
-          >
-            Weekly Ledger Roundups ({weeklyCount})
-          </button>
-          <button
-            onClick={() => setSeriesFilter("legacy_archive")}
-            className={`px-3.5 py-1.5 text-xs font-mono uppercase tracking-wider border transition-colors cursor-pointer ${
-              seriesFilter === "legacy_archive"
-                ? "border-[#C5A059] bg-[#C5A059]/20 text-[#F3EFE6]"
-                : "border-[#8A6D3B]/40 text-[#94A3B8] hover:text-[#F3EFE6]"
-            }`}
-          >
-            Foundational Essays ({foundationalCount})
-          </button>
+          {weeklyCount > 0 && (
+            <button
+              onClick={() => setSeriesFilter("weekly_rollup")}
+              className={`px-3.5 py-1.5 text-xs font-mono uppercase tracking-wider border transition-colors cursor-pointer ${
+                seriesFilter === "weekly_rollup"
+                  ? "border-[#C5A059] bg-[#C5A059]/20 text-[#F3EFE6]"
+                  : "border-[#8A6D3B]/40 text-[#94A3B8] hover:text-[#F3EFE6]"
+              }`}
+            >
+              Weekly Ledger Roundups ({weeklyCount})
+            </button>
+          )}
+          {weeklyCount > 0 && foundationalCount > 0 && (
+            <button
+              onClick={() => setSeriesFilter("legacy_archive")}
+              className={`px-3.5 py-1.5 text-xs font-mono uppercase tracking-wider border transition-colors cursor-pointer ${
+                seriesFilter === "legacy_archive"
+                  ? "border-[#C5A059] bg-[#C5A059]/20 text-[#F3EFE6]"
+                  : "border-[#8A6D3B]/40 text-[#94A3B8] hover:text-[#F3EFE6]"
+              }`}
+            >
+              Foundational Essays ({foundationalCount})
+            </button>
+          )}
+          {[
+            "The Square",
+            "The Plumb",
+            "The Level",
+            "Common Gavel",
+            "24-Inch Gauge",
+            "The Trowel",
+          ].map((tool) => {
+            const count = episodes.filter((e) => e.dominantTool === tool).length;
+            if (count === 0) return null;
+            return (
+              <button
+                key={tool}
+                onClick={() =>
+                  setToolFilter((prev) => (prev === tool ? "all" : tool))
+                }
+                className={`px-3 py-1.5 text-xs font-mono uppercase tracking-wider border transition-colors cursor-pointer ${
+                  toolFilter === tool
+                    ? "border-[#C5A059] bg-[#C5A059]/20 text-[#F3EFE6]"
+                    : "border-[#8A6D3B]/40 text-[#94A3B8] hover:text-[#F3EFE6]"
+                }`}
+              >
+                {tool} ({count})
+              </button>
+            );
+          })}
         </div>
 
         <span className="font-mono text-xs text-[#94A3B8]">

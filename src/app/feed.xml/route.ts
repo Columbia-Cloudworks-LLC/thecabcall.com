@@ -25,7 +25,7 @@ export async function GET() {
   const itemsXml = episodes
     .map((ep) => {
       const pubDate = new Date(ep.publishedAt).toUTCString();
-      const episodeUrl = `${siteUrl}/archive#${ep.slug}`;
+      const episodeUrl = `${siteUrl}/podcast#${ep.slug}`;
       const enclosureUrl = ep.audioUrl.startsWith("http")
         ? ep.audioUrl
         : `${siteUrl}${ep.audioUrl.startsWith("/") ? "" : "/"}${ep.audioUrl}`;

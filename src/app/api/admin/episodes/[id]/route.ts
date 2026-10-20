@@ -90,6 +90,11 @@ export async function PUT(
       };
       episodeNumber?: number;
       publishedAt?: string;
+      audioUrl?: string;
+      artworkUrl?: string | null;
+      artworkWidescreenUrl?: string | null;
+      durationSeconds?: number;
+      fileSizeBytes?: number;
       regenerateAudio?: boolean;
       ttsVoice?: string;
       ttsProvider?: "gemini-tts" | "mpeg-framed";
@@ -112,6 +117,11 @@ export async function PUT(
         transcriptSections: body.transcriptSections,
         episodeNumber: body.episodeNumber,
         publishedAt: body.publishedAt,
+        audioUrl: body.audioUrl,
+        artworkUrl: body.artworkUrl,
+        artworkWidescreenUrl: body.artworkWidescreenUrl,
+        durationSeconds: body.durationSeconds,
+        fileSizeBytes: body.fileSizeBytes,
         regenerateAudio: body.regenerateAudio,
         ttsVoice: body.ttsVoice,
         ttsProvider: body.ttsProvider,

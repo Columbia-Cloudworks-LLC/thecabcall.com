@@ -19,6 +19,7 @@ import {
   listAdminEpisodes,
   RollupEpisodeRecord,
   updateAdminEpisode,
+  uploadEpisodeAudioToR2,
 } from "@/pipeline/rollup";
 import {
   TELEMETRY_ARTICLES_SYNTHESIS_COLUMNS,
@@ -269,6 +270,11 @@ export async function updateAdminEpisodeBridge(
     };
     episodeNumber?: number;
     publishedAt?: string;
+    audioUrl?: string;
+    artworkUrl?: string | null;
+    artworkWidescreenUrl?: string | null;
+    durationSeconds?: number;
+    fileSizeBytes?: number;
     regenerateAudio?: boolean;
     ttsVoice?: string;
     ttsProvider?: "gemini-tts" | "elevenlabs" | "openai-tts" | "mpeg-framed";
@@ -349,6 +355,79 @@ export async function updateAdminEpisodeBridge(
   invalidateEpisodePublicCaches();
 
   return { ...res, episodes };
+}
+
+/**
+ * Uploads an externally produced audio file (MP3, M4A, WAV, AAC, OGG, FLAC) to R2 `cabcall-audio`
+ * via remote Worker or local R2 adapter.
+ */
+export async function uploadEpisodeAudioBridge(
+  options: {
+    filename: string;
+    contentType?: string;
+    bytes: Uint8Array;
+    episodeNumber?: number;
+  },
+  actor?: EpisodeAdminActor
+): Promise<{
+  r2Key: string;
+  audioUrl: string;
+  fileSizeBytes: number;
+  contentType: string;
+  verified: boolean;
+}> {
+  if (shouldUseRemoteWorker()) {
+    const workerUrl = getEffectiveWorkerUrl();
+    const qs = new URLSearchParams({
+      filename: options.filename,
+      ...(options.contentType ? { contentType: options.contentType } : {}),
+      ...(options.episodeNumber
+        ? { episodeNumber: String(options.episodeNumber) }
+        : {}),
+    });
+    const headers = buildAdminHeaders(actor);
+    headers["Content-Type"] = options.contentType || "audio/mpeg";
+    const response = await fetch(
+      `${workerUrl}/api/admin/episodes/upload-audio?${qs.toString()}`,
+      {
+        method: "POST",
+        headers,
+        body: Buffer.from(options.bytes),
+        cache: "no-store",
+      }
+    );
+
+    const data = (await response.json()) as {
+      ok?: boolean;
+      error?: string;
+      r2Key?: string;
+      audioUrl?: string;
+      fileSizeBytes?: number;
+      contentType?: string;
+      verified?: boolean;
+    };
+
+    if (!response.ok || !data.ok || !data.audioUrl || !data.r2Key) {
+      throw new Error(
+        data.error ||
+          `Worker /api/admin/episodes/upload-audio failed (${response.status})`
+      );
+    }
+
+    return {
+      r2Key: data.r2Key,
+      audioUrl: data.audioUrl,
+      fileSizeBytes: data.fileSizeBytes || options.bytes.byteLength,
+      contentType: data.contentType || options.contentType || "audio/mpeg",
+      verified: Boolean(data.verified),
+    };
+  }
+
+  const audioBucket = createLocalR2AudioAdapter();
+  return uploadEpisodeAudioToR2({
+    audioBucket,
+    ...options,
+  });
 }
 
 /**

@@ -150,10 +150,10 @@ export function PersistentAudioPlayer() {
                   : "1.5x"}
               </button>
               <Link
-                href="/archive"
+                href={`/podcast#${activeEpisode.slug}`}
                 className="font-serif text-xs px-2.5 py-1 bg-[#111726] border border-[#8A6D3B]/50 text-[#F3EFE6] hover:border-[#C5A059] hover:text-[#C5A059] transition-colors"
               >
-                Read Full Transcript →
+                Episode Guide &amp; Transcript →
               </Link>
               <button
                 onClick={closeDock}

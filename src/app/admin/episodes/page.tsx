@@ -1,7 +1,11 @@
 import { redirect } from "next/navigation";
 import { AdminEpisodesClient } from "@/components/AdminEpisodesClient";
 import { getAuditLedgerEntries } from "@/lib/audit";
-import { getCurrentAdminSession } from "@/lib/auth";
+import {
+  getCurrentAdminSession,
+  getSessionTokenFromCookies,
+} from "@/lib/auth";
+import { getEffectiveWorkerUrl } from "@/lib/d1-bridge";
 import { getAdminEpisodesAndCandidatesBridge } from "@/lib/episodes";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +15,10 @@ export const metadata = {
 };
 
 export default async function AdminEpisodesPage() {
-  const actor = await getCurrentAdminSession();
+  const [actor, sessionToken] = await Promise.all([
+    getCurrentAdminSession(),
+    getSessionTokenFromCookies(),
+  ]);
   if (!actor) {
     redirect("/admin/login?next=/admin/episodes");
   }
@@ -21,6 +28,8 @@ export default async function AdminEpisodesPage() {
     getAuditLedgerEntries({ targetType: "episode", limit: 25 }),
   ]);
 
+  const workerAudioUploadUrl = `${getEffectiveWorkerUrl()}/api/admin/episodes/upload-audio`;
+
   return (
     <AdminEpisodesClient
       actor={actor}
@@ -28,6 +37,8 @@ export default async function AdminEpisodesPage() {
       candidateIncidents={candidateIncidents}
       initialAuditEntries={auditResult.entries}
       chainIntegrity={auditResult.chainIntegrity}
+      workerAudioUploadUrl={workerAudioUploadUrl}
+      sessionToken={sessionToken}
     />
   );
 }
