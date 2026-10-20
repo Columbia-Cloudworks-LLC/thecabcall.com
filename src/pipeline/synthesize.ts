@@ -3,10 +3,12 @@ import {
   deescalateHeadlineDeterministic,
   deescalateHeadlineWithGemini,
   ensureEditorialPipelineSchema,
+  extractImageFromSourceArticleUrl,
   getPipelineTransformMap,
   HeadlineDeescalationResult,
   ImageSourceType,
   isAlarmistHeadline,
+  resolveContextualPublicDomainImage,
 } from "./editorial";
 import {
   D1DatabaseLike,
@@ -21,9 +23,11 @@ import {
 } from "./jev";
 import {
   buildOrSanitizeArticleDiagnostics,
+  hasSyntheticPlaceholderIdentifier,
   isTemplatedOrMalformedCopy,
   normalizeQuestionSentenceCase,
   sanitizeStringConcatenation,
+  sanitizeSyntheticPlaceholders,
   validateAndNormalizeIncidentSummary,
 } from "../lib/sanitize";
 import { SreFailureModeId, WorkingToolId } from "../lib/taxonomy";
@@ -154,12 +158,12 @@ export const SOCRATIC_SYNTHESIS_RESPONSE_SCHEMA = {
     executive_summary: {
       type: "STRING",
       description:
-        "Exactly 2 plain-English factual sentences summarizing the news event derived directly from the source article. Never mention classifier names, decimal weights, or pipeline jargon.",
+        "Exactly 2 plain-English factual sentences summarizing the news event derived directly from the source article. Never mention classifier names, decimal weights, or pipeline jargon. Never invent, extrapolate, or insert placeholder identifiers, CVE numbers (such as CVE-2026-99999), bill numbers, or statistics not explicitly present verbatim in the source text.",
     },
     socratic_brief: {
       type: "STRING",
       description:
-        "1 concise, unvarnished factual paragraph (2 to 3 plain-English sentences) summarizing the verifiable facts of the news event. Do NOT include paragraphs reciting classifier weights or boilerplate caveats.",
+        "1 concise, unvarnished factual paragraph (2 to 3 plain-English sentences) summarizing the verifiable facts of the news event. Do NOT include paragraphs reciting classifier weights or boilerplate caveats. Never invent, extrapolate, or insert placeholder identifiers, CVE numbers (such as CVE-2026-99999), bill numbers, or statistics not explicitly present verbatim in the source text.",
     },
     proportionality_check: {
       type: "OBJECT",
@@ -269,6 +273,7 @@ HARD GOVERNANCE CONSTRAINTS (NON-NEGOTIABLE):
    - NEVER paste or interpolate the article headline string into "noise_overblown", "structural_signal", or "questions" (e.g. never write "Public commentary around {Headline} focuses on..." or "In {Headline}, which specific check..."). Instead, refer naturally in plain workshop English to "this case", "this decision", "this action", or "this breakdown" and name the specific actors or systems involved.
    - NEVER use corporate compliance legalese like "live operational practice to diverge from the stated legal or institutional charter" or "without triggering an earlier corrective audit". Write in plain, direct workshop English.
    - Do NOT recite dictionary or monitorial definitions of what a Square, Plumb, Level, Gauge, Gavel, or Trowel is.
+   - STRICT ANTI-HALLUCINATION CONSTRAINT: Never invent, extrapolate, or insert placeholder identifiers, CVE numbers (such as CVE-2026-99999), bill numbers, or statistics not explicitly present verbatim in the source text.
    - Zero partisan punditry, zero moralizing conclusions, zero AI clichés ("delve", "testament", "stark reminder", "wake-up call", "underscores").${directiveBlock}`;
 
   const userPrompt = `Synthesize a Post-Incident Review brief for the following source dispatch:
@@ -289,8 +294,8 @@ CLASSIFICATION LENS:
 - SRE Failure Mode: ${sreDisplay}
 
 Return ONLY valid JSON matching the required schema with:
-1. "executive_summary": 2 plain-English factual sentences summarizing what happened in the news event based on the source excerpt. No classifier names or percentages.
-2. "socratic_brief": 1 concise, unvarnished factual paragraph (2 to 3 plain-English sentences) stating the facts of the incident. Do not include a second or third paragraph reciting tool weights or telemetry caveats.
+1. "executive_summary": 2 plain-English factual sentences summarizing what happened in the news event based on the source excerpt. No classifier names or percentages. Never invent, extrapolate, or insert placeholder identifiers, CVE numbers (such as CVE-2026-99999), bill numbers, or statistics not explicitly present verbatim in the source text.
+2. "socratic_brief": 1 concise, unvarnished factual paragraph (2 to 3 plain-English sentences) stating the facts of the incident. Do not include a second or third paragraph reciting tool weights or telemetry caveats. Never invent, extrapolate, or insert placeholder identifiers, CVE numbers (such as CVE-2026-99999), bill numbers, or statistics not explicitly present verbatim in the source text.
 3. "proportionality_check": { "noise_overblown": "...", "structural_signal": "..." } written in plain, direct workshop English referring naturally to "this case", "this decision", "this action", or "this breakdown" (never interpolating the raw headline string or repeating sentences from socratic_brief).
 4. "questions": Exactly 2 direct, plain-spoken Socratic questions in standard sentence case anchored to ${primaryDisplay} and ${secondaryDisplay} that refer naturally to "this case", "this decision", or the specific institutions involved without pasting the headline string.`;
 
@@ -364,6 +369,39 @@ export function validateSynthesizedBriefOutput(
       valid: false,
       reason: "Synthesis output contains banned pipeline jargon or Mad-Libs template patterns",
     };
+  }
+
+  // Reject hallucinated CVE identifiers not present in the source text (or synthetic placeholder CVEs when source had none)
+  const combinedCandidateText = [
+    obj.executive_summary,
+    obj.socratic_brief,
+    rawNoise,
+    rawSignal,
+    ...obj.questions.map((q: unknown) => String(q || "")),
+  ].join(" ");
+  const sanitizedSourceText = `${row.title || ""} ${sanitizeSyntheticPlaceholders(
+    row.raw_excerpt || ""
+  )}`.toUpperCase();
+  const cveMatches = combinedCandidateText.match(/\bCVE-\d{4}-\d{4,7}\b/gi) || [];
+  const sourceHadSyntheticCve = hasSyntheticPlaceholderIdentifier(
+    row.raw_excerpt
+  );
+  for (const cve of cveMatches) {
+    if (hasSyntheticPlaceholderIdentifier(cve) && !sourceHadSyntheticCve) {
+      return {
+        valid: false,
+        reason: `Synthesis output contains fabricated placeholder identifier (${cve}) not present verbatim in source text`,
+      };
+    }
+    if (
+      !hasSyntheticPlaceholderIdentifier(cve) &&
+      !sanitizedSourceText.includes(cve.toUpperCase())
+    ) {
+      return {
+        valid: false,
+        reason: `Synthesis output contains hallucinated CVE identifier (${cve}) not present verbatim in source text`,
+      };
+    }
   }
 
   const secondaryToolKey: JevWorkingToolKey =
@@ -803,26 +841,73 @@ export async function runSynthesizePipeline(options: {
         synthesized_at: new Date().toISOString(),
       });
 
-      const hasExistingImage =
+      const hasRealExistingImage =
         typeof res.row.image_url === "string" &&
-        res.row.image_url.trim().length > 0;
-      const imageUrl = hasExistingImage
-        ? res.row.image_url!
+        res.row.image_url.trim().length > 0 &&
+        res.row.image_source_type !== "none" &&
+        res.row.image_source_type !== "svg_card" &&
+        !res.row.image_url.trim().startsWith("/media/card-d1-");
+
+      let resolvedImageUrl: string | null = hasRealExistingImage
+        ? res.row.image_url!.trim()
+        : null;
+      let resolvedImageSourceType: ImageSourceType = hasRealExistingImage
+        ? (res.row.image_source_type as ImageSourceType) || "rss_extracted"
+        : "none";
+      let resolvedImageAlt: string | null = hasRealExistingImage
+        ? res.row.image_alt || res.row.title
+        : null;
+      let resolvedImageCaption: string | null = hasRealExistingImage
+        ? res.row.image_caption || null
+        : null;
+
+      if (
+        !resolvedImageUrl &&
+        (!options.synthesisOverride || Boolean(options.fetchImpl))
+      ) {
+        const ogExtracted = await extractImageFromSourceArticleUrl(
+          res.row.source_url,
+          res.row.title,
+          options.fetchImpl
+        );
+        if (ogExtracted) {
+          resolvedImageUrl = ogExtracted.imageUrl;
+          resolvedImageAlt = ogExtracted.imageAlt;
+          resolvedImageCaption = ogExtracted.imageCaption;
+          resolvedImageSourceType = "og_scraped";
+        } else {
+          const archival = await resolveContextualPublicDomainImage(
+            res.row.title,
+            res.row.raw_excerpt,
+            undefined,
+            options.fetchImpl
+          );
+          if (archival) {
+            resolvedImageUrl = archival.imageUrl;
+            resolvedImageAlt = archival.imageAlt;
+            resolvedImageCaption = archival.imageCaption;
+            resolvedImageSourceType = "wikimedia_commons";
+          }
+        }
+      }
+
+      const imageUrl = resolvedImageUrl
+        ? resolvedImageUrl
         : autoFallbackCardEnabled
         ? `/media/card-d1-${res.row.id}.svg`
         : null;
-      const imageSourceType: ImageSourceType = hasExistingImage
-        ? (res.row.image_source_type as ImageSourceType) || "rss"
+      const imageSourceType: ImageSourceType = resolvedImageUrl
+        ? resolvedImageSourceType
         : autoFallbackCardEnabled
         ? "svg_card"
         : "none";
-      const imageAlt = hasExistingImage
-        ? res.row.image_alt || res.row.title
+      const imageAlt = resolvedImageUrl
+        ? resolvedImageAlt || res.row.title
         : autoFallbackCardEnabled
         ? `${WORKING_TOOL_DISPLAY_NAMES[res.row.primary_tool]} · ${SRE_FAILURE_DISPLAY_NAMES[res.row.sre_failure_mode]} telemetry blueprint for ${res.row.title}`
         : null;
-      const imageCaption = hasExistingImage
-        ? res.row.image_caption || null
+      const imageCaption = resolvedImageUrl
+        ? resolvedImageCaption
         : autoFallbackCardEnabled
         ? `Blueprint Card · ${WORKING_TOOL_DISPLAY_NAMES[res.row.primary_tool]} / ${SRE_FAILURE_DISPLAY_NAMES[res.row.sre_failure_mode]}`
         : null;

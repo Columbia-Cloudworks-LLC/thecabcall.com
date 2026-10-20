@@ -482,7 +482,7 @@ export function IncidentBriefClient({
                         {formatCraftLedgerEntry(rel.incidentCode)}
                       </span>
                     </div>
-                    <h3 className="font-display text-base text-[#F3EFE6] line-clamp-2">
+                    <h3 className="font-serif font-semibold text-base text-[#F3EFE6] leading-snug normal-case line-clamp-2">
                       {rel.title}
                     </h3>
                     <span className="font-mono text-[11px] text-[#94A3B8] mt-2 block">

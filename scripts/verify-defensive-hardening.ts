@@ -10,9 +10,11 @@ import {
   containsInterpolatedHeadline,
   deduplicateSignalAgainstFacts,
   hasDuplicateSentenceBetweenFactsAndSignal,
+  hasSyntheticPlaceholderIdentifier,
   isTemplatedOrMalformedCopy,
   normalizeCanonicalUrl,
   normalizeStoredQuestionsPayload,
+  sanitizeSyntheticPlaceholders,
   stripUnsafeHtmlAndCdata,
 } from "../src/lib/sanitize.ts";
 import {
@@ -21,9 +23,16 @@ import {
   executeD1FailureModeAggregations,
   executeD1WorkingToolAggregations,
   extractStoredQuestionsPayload,
+  mapD1RowToIncidentArticle,
   paginateAndAggregateIncidentCorpus,
   readLocalD1Snapshot,
 } from "../src/lib/d1-bridge.ts";
+import {
+  deescalateHeadlineDeterministic,
+  extractImageFromSourceArticleUrl,
+  resolveContextualPublicDomainImage,
+  stripLegacyBoilerplateTitleSuffix,
+} from "../src/pipeline/editorial.ts";
 import { INITIAL_INCIDENTS, INITIAL_EPISODES } from "../src/lib/seed-data.ts";
 import {
   CANONICAL_PODCAST_AI_COLOPHON,
@@ -47,6 +56,7 @@ import {
   type D1PreparedStatementLike,
 } from "../src/pipeline/ingest.ts";
 import {
+  buildSystem2Prompt,
   validateSynthesizedBriefOutput,
   runSynthesizePipeline,
   type TelemetryArticleRow,
@@ -68,6 +78,7 @@ import {
 } from "../src/lib/dto.ts";
 import {
   DOMAIN_SECTOR_SPECS,
+  formatFailureModeDisplayLabel,
   getDomainSectorBySlug,
   getFailureModeBySlug,
   getFailureModeHref,
@@ -85,8 +96,10 @@ import {
   NAVIGATION_SCHEMA,
 } from "../src/lib/navigation.ts";
 import {
+  buildWeeklyTrestleboardState,
   getFailureModeHubData,
   getPaginatedArchiveDispatches,
+  getSystemPostureSummary,
   getWorkingToolHubData,
 } from "../src/lib/store.ts";
 import worker, { type ExecutionContextLike } from "../src/worker.ts";
@@ -2014,11 +2027,25 @@ async function runVerificationSuite() {
 
   // Issue #30 + Issue #39: Central Navigation Schema derived from canonical taxonomy
   const serializedNavSchema = JSON.stringify(NAVIGATION_SCHEMA);
-  for (const expectedNavSnippet of [
+  assert.equal(NAVIGATION_SCHEMA[0]?.id, "trestleboard");
+  assert.equal(NAVIGATION_SCHEMA[0]?.href, "/");
+  assert.equal(
+    NAVIGATION_SCHEMA[0]?.items,
+    undefined,
+    "THE TRESTLEBOARD nav item must be a flat direct link to '/' without dropdown items"
+  );
+  for (const removedAnchor of [
     "/#weekly-brief",
     "/#active-dispatches",
-    "/incidents",
     "/#systemic-trends",
+  ]) {
+    assert.equal(
+      serializedNavSchema.includes(removedAnchor),
+      false,
+      `THE TRESTLEBOARD nav item must not include redundant same-page anchor ${removedAnchor}`
+    );
+  }
+  for (const expectedNavSnippet of [
     "/archive",
     "/archive#matrix",
     "/archive?view=sources",
@@ -2520,8 +2547,306 @@ async function runVerificationSuite() {
   console.log(
     "  ✓ Epic #44 (Issues #39–#43) Canonical Taxonomy Navigation, /tools/[slug] & /failures/[slug] Hubs, Streamlined /rubric Codex, and 1,000-Item Archive Pagination verified."
   );
+
+  // -------------------------------------------------------------------------
+  // 16. OBJECTIVE 16: HOMEPAGE BROADSHEET REFACTOR, TAXONOMY UNIFICATION & ANTI-HALLUCINATION GUARDRAILS
+  // -------------------------------------------------------------------------
   console.log(
-    "\n=== ALL 15 DEFENSIVE HARDENING, CRAFT PROSE, KRUG USABILITY, MASTHEAD, PODCAST ARCHIVE, ADMIN STUDY & EPIC #44 IA SCALE OBJECTIVES PASSED (100%) ==="
+    "\n[16/16] Verifying Objective 16: Weekly Brief Synthesis Deduplication, Taxonomy Unification, Pure Typographic Card Grid & Anti-Hallucination Guardrails..."
+  );
+
+  // 1. Weekly Brief Hero Component & Synthesis Generator
+  const weeklyState = buildWeeklyTrestleboardState(
+    INITIAL_INCIDENTS,
+    getSystemPostureSummary(),
+    INITIAL_EPISODES[0]
+  );
+  for (const anchor of weeklyState.anchorIncidents) {
+    assert.equal(
+      weeklyState.heroOpeningProse.includes(anchor.title),
+      false,
+      `Weekly Brief heroOpeningProse must not duplicate anchor headline: ${anchor.title}`
+    );
+  }
+  assert.equal(
+    weeklyState.heroOpeningProse.includes("Configuration Drift"),
+    false,
+    "Weekly Brief heroOpeningProse must use canonical display label ('Drifting Off-Square') instead of raw 'Configuration Drift'"
+  );
+  assert.equal(
+    weeklyState.podcastDescription.includes("Five-minute Friday synthesis"),
+    false,
+    "Weekly Brief podcastDescription must not hardcode 'Five-minute Friday synthesis'"
+  );
+  assert.ok(
+    weeklyState.podcastDescription.includes("Friday audio synthesis"),
+    "Weekly Brief podcastDescription must use duration-agnostic 'Friday audio synthesis' phrasing"
+  );
+  assert.equal(
+    formatFailureModeDisplayLabel("Configuration Drift"),
+    "Drifting Off-Square"
+  );
+
+  const trestleboardClientSource = fs.readFileSync(
+    path.join(process.cwd(), "src/components/TrestleboardClient.tsx"),
+    "utf8"
+  );
+  assert.equal(
+    trestleboardClientSource.includes("(5 MIN)"),
+    false,
+    "TrestleboardClient.tsx must not hardcode '(5 MIN)' in the Weekly Brief audio header"
+  );
+  assert.ok(
+    trestleboardClientSource.includes("({weeklyState.durationFormatted})") &&
+      trestleboardClientSource.includes("ACTIVE DISPATCHES // THE TRESTLEBOARD") &&
+      trestleboardClientSource.includes("verified incident"),
+    "TrestleboardClient.tsx must display dynamic ({weeklyState.durationFormatted}) and the ACTIVE DISPATCHES // THE TRESTLEBOARD section header with live count"
+  );
+
+  // 2. Hero Visual Banner Container, SourceOutletBadge & Headline Neutralization Guardrails
+  const incidentCardSource = fs.readFileSync(
+    path.join(process.cwd(), "src/components/IncidentCard.tsx"),
+    "utf8"
+  );
+  assert.ok(
+    incidentCardSource.includes("<img") &&
+      incidentCardSource.includes("SourceOutletBadge") &&
+      incidentCardSource.includes("h-48") &&
+      incidentCardSource.includes("Archival Photo"),
+    "IncidentCard.tsx must render the h-48 hero visual banner container with SourceOutletBadge and Archival Photo indicator"
+  );
+  assert.ok(
+    incidentCardSource.includes("font-serif font-semibold") &&
+      incidentCardSource.includes("normal-case"),
+    "IncidentCard.tsx must render dispatch headlines in mixed-case font-serif font-semibold normal-case"
+  );
+  assert.equal(
+    incidentCardSource.includes("[{incident.primaryTool}]") ||
+      incidentCardSource.includes("[{shortFailureLabel}]"),
+    false,
+    "IncidentCard.tsx must not wrap footer taxonomy pills in literal square brackets"
+  );
+
+  // Verify Headline Neutralization: no ": Operational & Governance Assessment" suffix
+  const brickbatDeesc = deescalateHeadlineDeterministic(
+    "Brickbat: Sticky Fingers",
+    "A former postal worker in Georgia pleaded guilty to stealing checks and money orders from the mail over a two-year period.",
+    true
+  );
+  assert.equal(
+    brickbatDeesc.neutralTitle.includes("Operational & Governance Assessment"),
+    false,
+    "deescalateHeadlineDeterministic must never append ': Operational & Governance Assessment'"
+  );
+  assert.equal(
+    brickbatDeesc.changed,
+    true,
+    "deescalateHeadlineDeterministic must construct a factual headline from excerpt when stripping 'Brickbat:' leaves < 4 words"
+  );
+  assert.ok(
+    brickbatDeesc.neutralTitle.includes("Former Postal Worker"),
+    `Expected factual headline from excerpt, got: ${brickbatDeesc.neutralTitle}`
+  );
+
+  const emptyExcerptUnchanged = deescalateHeadlineDeterministic(
+    "Calm Factual Headline About Municipal Water Systems",
+    "",
+    true
+  );
+  assert.equal(
+    emptyExcerptUnchanged.changed,
+    false,
+    "When excerpt is empty and no alarmist regex matched, deescalateHeadlineDeterministic must return changed=false"
+  );
+  assert.equal(
+    emptyExcerptUnchanged.neutralTitle,
+    "Calm Factual Headline About Municipal Water Systems"
+  );
+
+  // Verify existing DB read-time cleanup of ": Operational & Governance Assessment"
+  assert.equal(
+    stripLegacyBoilerplateTitleSuffix(
+      "Brickbat: Sticky Fingers: Operational & Governance Assessment"
+    ),
+    "Brickbat: Sticky Fingers"
+  );
+  const cleanedLegacyMapped = mapD1RowToIncidentArticle({
+    id: 777,
+    url_hash: "legacy-suffix-hash",
+    source_feed: "Reason Magazine",
+    title: "Brickbat: Sticky Fingers: Operational & Governance Assessment",
+    original_title: "Brickbat: Sticky Fingers",
+    title_rewritten: 1,
+    title_rewrite_reason: "Reframed headline into clinical operational assessment format",
+    source_url: "https://reason.com/2026/10/19/brickbat-sticky-fingers/",
+    raw_excerpt:
+      "A former postal worker in Georgia pleaded guilty to stealing checks and money orders from the mail over a two-year period. Investigators recovered hundreds of stolen envelopes during an audit.",
+    published_at: "2026-10-19T12:00:00Z",
+    ingested_at: "2026-10-19T12:05:00Z",
+    is_systemic_prob: 0.85,
+    jev_confidence: 0.88,
+    primary_tool: "plumb",
+    secondary_tool: "square",
+    sre_failure_mode: "configuration_drift",
+    jev_raw_json: "{}",
+    socratic_brief:
+      "A former postal worker in Georgia pleaded guilty to stealing checks and money orders from the mail over a two-year period. Investigators recovered hundreds of stolen envelopes during an internal postal audit.",
+    questions_json: JSON.stringify({
+      executive_summary:
+        "A former postal worker in Georgia pleaded guilty to stealing checks and money orders from the mail over a two-year period. Investigators recovered hundreds of stolen envelopes during an internal postal audit.",
+      proportionality_check: {
+        noise_overblown:
+          "Treating mail theft as an isolated personnel lapse overlooks physical custody controls at sorting facilities.",
+        structural_signal:
+          " Custody handoffs lacked dual-verification logging across regional sorting floors.",
+      },
+      questions: [
+        "Where do physical custody handoffs rely on unverified single-operator access?",
+        "How quickly do exception audits detect missing custody scans at regional sorting hubs?",
+      ],
+    }),
+    status: "synthesized",
+  });
+  assert.ok(cleanedLegacyMapped, "mapD1RowToIncidentArticle must map valid row");
+  assert.equal(
+    cleanedLegacyMapped.title,
+    "Brickbat: Sticky Fingers",
+    "mapD1RowToIncidentArticle must strip trailing ': Operational & Governance Assessment' on read"
+  );
+  assert.equal(
+    cleanedLegacyMapped.titleRewritten,
+    false,
+    "mapD1RowToIncidentArticle must set titleRewritten=false when stripping legacy suffix makes title === original_title"
+  );
+
+  // Verify OpenGraph generic logo filtering & Wikimedia Commons archival waterfall
+  const rejectedLogoOg = await extractImageFromSourceArticleUrl(
+    "https://reason.com/2026/10/19/sample",
+    "Sample Title",
+    async () =>
+      new Response(
+        `<html><head><meta property="og:image" content="https://reason.com/assets/reason-default-logo.png" /></head></html>`,
+        { status: 200 }
+      )
+  );
+  assert.equal(
+    rejectedLogoOg,
+    null,
+    "extractImageFromSourceArticleUrl must reject generic publisher default/logo og:image URLs"
+  );
+
+  const validArticleOg = await extractImageFromSourceArticleUrl(
+    "https://reason.com/2026/10/19/sample",
+    "Sample Title",
+    async () =>
+      new Response(
+        `<html><head><meta property="og:image" content="https://d2eehagpk5cl65.cloudfront.net/img/q60/uploads/2026/10/courthouse-photo-1200x630.jpg" /></head></html>`,
+        { status: 200 }
+      )
+  );
+  assert.equal(validArticleOg?.imageSourceType, "og_scraped");
+
+  const resolvedWikimedia = await resolveContextualPublicDomainImage(
+    "Supreme Court Reviews Federal Reserve Administrative Subpoena Authority",
+    "The Supreme Court heard oral arguments Tuesday regarding Federal Reserve oversight.",
+    "Public Policy & Governance",
+    async (input) => {
+      const url = String(input);
+      if (url.includes("en.wikipedia.org")) {
+        return new Response(
+          JSON.stringify({
+            query: {
+              pages: {
+                "123": {
+                  pageid: 123,
+                  title: "Supreme Court of the United States",
+                  thumbnail: {
+                    source:
+                      "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a2/US_Supreme_Court_Building.jpg/960px-US_Supreme_Court_Building.jpg",
+                    width: 960,
+                    height: 640,
+                  },
+                  terms: {
+                    description: ["highest court in the United States"],
+                  },
+                },
+              },
+            },
+          }),
+          { status: 200 }
+        );
+      }
+      return new Response("{}", { status: 404 });
+    }
+  );
+  assert.equal(resolvedWikimedia?.imageSourceType, "wikimedia_commons");
+  assert.ok(
+    resolvedWikimedia?.imageUrl.includes("US_Supreme_Court_Building.jpg"),
+    "resolveContextualPublicDomainImage must resolve landscape Wikipedia PageImages"
+  );
+
+  // 3. Anti-Hallucination Prompt Guardrails & Synthetic CVE Sanitization
+  const antiHallucinationRow: TelemetryArticleRow = {
+    id: 999,
+    url_hash: "sample-hash",
+    source_feed: "The Register",
+    title: "Linux KVM guest-host escape rated critical",
+    source_url: "https://example.com/kvm",
+    raw_excerpt:
+      "A critical guest-host escape flaw in Linux KVM allows malformed IPv4 packets to corrupt host memory.",
+    published_at: "2026-10-19T00:00:00.000Z",
+    ingested_at: "2026-10-19T00:05:00.000Z",
+    is_systemic_prob: 0.85,
+    jev_confidence: 0.88,
+    primary_tool: "square",
+    secondary_tool: "common_gavel",
+    sre_failure_mode: "untested_failover",
+    jev_raw_json: "{}",
+    socratic_brief: null,
+    questions_json: null,
+    status: "triaged",
+  };
+  const promptPair = buildSystem2Prompt(antiHallucinationRow);
+  assert.ok(
+    promptPair.systemInstruction.includes(
+      "Never invent, extrapolate, or insert placeholder identifiers, CVE numbers (such as CVE-2026-99999), bill numbers, or statistics not explicitly present verbatim in the source text."
+    ),
+    "buildSystem2Prompt must enforce the strict negative anti-hallucination constraint"
+  );
+
+  assert.equal(hasSyntheticPlaceholderIdentifier("Cataloged as CVE-2026-99999."), true);
+  assert.equal(
+    sanitizeSyntheticPlaceholders("The flaw, cataloged as CVE-2026-99999 with a 9.3 severity rating, stems from KVM."),
+    "The flaw, identified as a critical vulnerability in the Linux Kernel-based Virtual Machine with a 9.3 severity rating, stems from KVM."
+  );
+
+  const hallucinatedValidation = validateSynthesizedBriefOutput(antiHallucinationRow, {
+    executive_summary:
+      "Security researcher discovered a flaw in Linux KVM. The flaw, cataloged as CVE-2026-99999, allows guest-host escape.",
+    socratic_brief:
+      "A flaw in the Linux KVM hypervisor networking subsystem allows a guest virtual machine to corrupt host memory by supplying crafted IPv4 packets. This breaks multi-tenant isolation.",
+    proportionality_check: {
+      noise_overblown:
+        "Commentary treating this breakdown as an isolated coding oversight misses the boundary design.",
+      structural_signal:
+        "In this case, checksum metadata crosses a trust boundary without re-verification.",
+    },
+    questions: [
+      "Where does our hypervisor trust guest-supplied offsets after initial validation?",
+      "Which isolation boundary lacks an independent verification gate?",
+    ],
+  });
+  assert.equal(
+    hallucinatedValidation.valid,
+    false,
+    "validateSynthesizedBriefOutput must reject summaries containing fabricated CVE-2026-99999"
+  );
+
+  console.log(
+    "  ✓ Objective 16 Weekly Brief Synthesis Deduplication, Taxonomy Unification, Pure Typographic Card Grid & Anti-Hallucination Guardrails verified."
+  );
+  console.log(
+    "\n=== ALL 16 DEFENSIVE HARDENING, CRAFT PROSE, KRUG USABILITY, MASTHEAD, PODCAST ARCHIVE, ADMIN STUDY, EPIC #44 IA SCALE & BROADSHEET REFACTOR OBJECTIVES PASSED (100%) ==="
   );
 }
 

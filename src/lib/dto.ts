@@ -2,7 +2,9 @@ import {
   containsInterpolatedHeadline,
   deduplicateSignalAgainstFacts,
   hasDuplicateSentenceBetweenFactsAndSignal,
+  hasSyntheticPlaceholderIdentifier,
   isTemplatedOrMalformedCopy,
+  sanitizeSyntheticPlaceholders,
 } from "./sanitize";
 import {
   DEFAULT_CRAFT_FAILURE_MODE,
@@ -27,6 +29,7 @@ import {
   EpisodeSourcePage,
   EpisodeTranscriptSections,
   IncidentArticle,
+  IncidentImageSourceType,
   PodcastEpisode,
 } from "./types";
 
@@ -63,17 +66,7 @@ export interface PublicIncidentDto {
   imageUrl?: string;
   imageAlt?: string;
   imageCaption?: string;
-  imageSourceType?:
-    | "rss"
-    | "og"
-    | "upload"
-    | "svg_card"
-    | "none"
-    | "rss_extracted"
-    | "r2_upload"
-    | "external_url"
-    | "generated_card"
-    | null;
+  imageSourceType?: IncidentImageSourceType;
   isPinned?: boolean;
 }
 
@@ -138,7 +131,7 @@ const FORBIDDEN_PUBLIC_TELEMETRY_TEXT =
 function sanitizeEditorialText(text: string | undefined | null): string {
   if (!text || typeof text !== "string") return "";
   return stripRawFailureShortCodes(
-    text
+    sanitizeSyntheticPlaceholders(text)
       .replace(/\bjev-1\.14\.0\b/gi, "")
       .replace(/\s*\(\d+(?:\.\d+)?%\)/g, "")
   )
@@ -678,6 +671,11 @@ export function assertZeroTelemetryBleed(payload: unknown): {
       if (isTemplatedOrMalformedCopy(node)) {
         violations.push(
           `${pathPrefix}: contains fallback template or malformed copy`
+        );
+      }
+      if (hasSyntheticPlaceholderIdentifier(node)) {
+        violations.push(
+          `${pathPrefix}: contains synthetic placeholder CVE identifier`
         );
       }
       return;

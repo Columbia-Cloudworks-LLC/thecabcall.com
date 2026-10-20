@@ -346,6 +346,8 @@ export async function mutateAdminIncidentBridge(
   if (action === "attach_image") {
     const mode = payload.generateSvgCard
       ? "generated_card"
+      : payload.imageSourceType === "wikimedia_commons"
+      ? "wikimedia_commons"
       : payload.extractFromSource
       ? "rss_extracted"
       : !payload.imageUrl || payload.imageSourceType === "none"

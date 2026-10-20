@@ -980,6 +980,19 @@ export function getSreFailureModeSpec(
 }
 
 /**
+ * Returns the canonical plain-English Craft display label for any Failure Mode
+ * (e.g., "Drifting Off-Square" for "Configuration Drift") so badges, titles,
+ * and narrative synthesis prose remain 100% unified without taxonomy split-brain.
+ */
+export function formatFailureModeDisplayLabel(
+  mode: SreFailureModeId | string | null | undefined
+): string {
+  const mapped = mapFailureModeToCraftLexicon(mode);
+  const spec = getSreFailureModeSpec(mapped);
+  return SHORT_FAILURE_LABELS[mapped] || spec.craftShortLabel || mapped;
+}
+
+/**
  * Deterministic lookup of a Working Tool specification by its canonical URL slug,
  * D1 enum key, or display name. Returns `null` if unrecognized (used for `notFound()` in `/tools/[slug]`).
  */

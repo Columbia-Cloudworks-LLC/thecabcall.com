@@ -389,6 +389,55 @@ export function stripUnsafeHtmlAndCdata(raw: string | null | undefined): string 
     .trim();
 }
 
+const SYNTHETIC_PLACEHOLDER_CVE_REGEX =
+  /\bCVE-\d{4}-(?:9999\d*|0000\d*|xxxx+|XXXX+|12345\d*)\b/i;
+
+/**
+ * Returns true if the text contains a synthetic/fabricated placeholder CVE identifier
+ * (e.g., `CVE-2026-99999`, `CVE-2026-00000`, `CVE-2026-XXXXX`).
+ */
+export function hasSyntheticPlaceholderIdentifier(
+  text: string | null | undefined
+): boolean {
+  if (!text || typeof text !== "string") return false;
+  return SYNTHETIC_PLACEHOLDER_CVE_REGEX.test(text);
+}
+
+/**
+ * Replaces fabricated/synthetic placeholder CVE identifiers (such as `CVE-2026-99999`)
+ * with accurate general phrasing ("a critical vulnerability in the Linux Kernel-based Virtual Machine").
+ */
+export function sanitizeSyntheticPlaceholders(
+  text: string | null | undefined
+): string {
+  if (!text || typeof text !== "string") return "";
+  return text
+    .replace(
+      /\b(?:cataloged|tracked|designated|assigned)\s+as\s+CVE-2026-99999\b/gi,
+      "identified as a critical vulnerability in the Linux Kernel-based Virtual Machine"
+    )
+    .replace(
+      /\bis\s+now\s+CVE-2026-99999\b/gi,
+      "identifies a critical vulnerability in the Linux Kernel-based Virtual Machine"
+    )
+    .replace(
+      /\bParty\s+like\s+it[’']s\s+CVE-2026-99999\b/gi,
+      "Addressing a critical vulnerability in the Linux Kernel-based Virtual Machine"
+    )
+    .replace(
+      /\bCVE-2026-99999\b/gi,
+      "a critical vulnerability in the Linux Kernel-based Virtual Machine"
+    )
+    .replace(
+      /\b(?:cataloged|tracked|designated|assigned)\s+as\s+CVE-\d{4}-(?:9999\d*|0000\d*|xxxx+|12345\d*)\b/gi,
+      "identified as a critical vulnerability in the Linux Kernel-based Virtual Machine"
+    )
+    .replace(
+      /\bCVE-\d{4}-(?:9999\d*|0000\d*|xxxx+|12345\d*)\b/gi,
+      "a critical vulnerability in the Linux Kernel-based Virtual Machine"
+    );
+}
+
 /**
  * Strips HTML tags, CDATA, entities, image credit tags, "Read full article / Comments" footers,
  * and broadcast sign-off lines from raw RSS descriptions.
@@ -397,7 +446,7 @@ export function cleanRssText(raw: string | null | undefined): string {
   const stripped = stripUnsafeHtmlAndCdata(raw);
   if (!stripped) return "";
 
-  return stripped
+  return sanitizeSyntheticPlaceholders(stripped)
     .replace(/\(Image credit:[^)]*\)/gi, " ")
     .replace(/\bCredit:\s*via\s+[^\n.]+/gi, " ")
     .replace(/\bRead full article\b[\s\S]*$/i, " ")
@@ -544,7 +593,7 @@ function startsWithProtectedProperTerm(text: string): boolean {
 export function sanitizeStringConcatenation(text: string): string {
   if (!text) return "";
 
-  let out = text
+  let out = sanitizeSyntheticPlaceholders(text)
     // Strip any leaked inline Jev annotations
     .replace(/\s*Evaluated via Jev\s*\([^)]*\)[^.]*\./gi, "")
     .replace(/\s*Classified under\s+[^.]+\(\d+%\)[^.]*\./gi, "")

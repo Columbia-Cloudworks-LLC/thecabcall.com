@@ -22,7 +22,12 @@ import {
   sanitizeEpisodeSummaryDefensive,
   stripAiDisclaimers,
 } from "../lib/episode-metadata";
-import { validateAndNormalizeIncidentSummary } from "../lib/sanitize";
+import {
+  hasSyntheticPlaceholderIdentifier,
+  sanitizeSyntheticPlaceholders,
+  validateAndNormalizeIncidentSummary,
+} from "../lib/sanitize";
+import { formatFailureModeDisplayLabel } from "../lib/taxonomy";
 import { EpisodeExternalSource, EpisodeSourcePage } from "../lib/types";
 
 export interface R2ObjectMetaLike {
@@ -339,7 +344,7 @@ export const ROLLUP_RESPONSE_SCHEMA = {
     summary: {
       type: "STRING",
       description:
-        "2-sentence show notes summary of this week's 5-minute CAB Weekly Brief leading with the dominant Working Tool, primary Failure Mode, and the 3 anchor incidents.",
+        "2-sentence show notes summary of this week's CAB Weekly Brief leading with the dominant Working Tool, primary Failure Mode, and the 3 anchor incidents.",
     },
     weekly_telemetry: {
       type: "STRING",
@@ -540,6 +545,30 @@ export async function ensureBaselineEpisodesSeeded(
       let quarantinedCount = 0;
 
       for (const row of allArticles) {
+        if (
+          hasSyntheticPlaceholderIdentifier(row.raw_excerpt) ||
+          hasSyntheticPlaceholderIdentifier(row.socratic_brief) ||
+          hasSyntheticPlaceholderIdentifier(row.questions_json)
+        ) {
+          const cleanRaw = sanitizeSyntheticPlaceholders(row.raw_excerpt);
+          const cleanBrief = row.socratic_brief
+            ? sanitizeSyntheticPlaceholders(row.socratic_brief)
+            : null;
+          const cleanQ = row.questions_json
+            ? sanitizeSyntheticPlaceholders(row.questions_json)
+            : null;
+          row.raw_excerpt = cleanRaw;
+          row.socratic_brief = cleanBrief;
+          row.questions_json = cleanQ;
+          batchUpdates.push(
+            db
+              .prepare(
+                "UPDATE telemetry_articles SET raw_excerpt = ?, socratic_brief = ?, questions_json = ? WHERE id = ?"
+              )
+              .bind(cleanRaw, cleanBrief, cleanQ, row.id)
+          );
+        }
+
         const validation = validateAndNormalizeIncidentSummary({
           id: row.id,
           title: row.title,
@@ -1010,15 +1039,19 @@ function buildDeterministicRollupScript(
     ? ` Editorial Focus Directive for this docket: ${editorialFocusNote.trim()}.`
     : "";
 
-  const weekly_telemetry = `Welcome to the Friday Change Advisory Board Weekly Brief, Episode ${episodeNumber}. ${agg.dominantToolDisplay} leads this week's Trestleboard across primary classifications, with ${agg.topSreFailureDisplay} emerging as the primary operational failure mode across ${agg.triagedOrSynthesizedCount} active dispatches.${focusClause} Three anchor incidents set our post-incident docket today: first, from ${inc1?.source_feed || "WSJ US Business"}, "${inc1?.title || "Institutional Capacity & Policy Drift"}", examined under ${WORKING_TOOL_DISPLAY_NAMES[inc1?.primary_tool || "square"]}; second, from ${inc2?.source_feed || "NYT HomePage"}, "${inc2?.title || "Cross-Silo Coordination Strain"}", evaluated under ${WORKING_TOOL_DISPLAY_NAMES[inc2?.primary_tool || "level"]}; and third, "${inc3?.title || "Regulatory Execution Divergence"}", where ${SRE_FAILURE_DISPLAY_NAMES[inc3?.sre_failure_mode || "configuration_drift"]} exposed the gap between nominal policy and live operational state.`;
+  const failureCraftLabel = formatFailureModeDisplayLabel(
+    agg.topSreFailureDisplay
+  );
+
+  const weekly_telemetry = `Welcome to the Friday Change Advisory Board Weekly Brief, Episode ${episodeNumber}. ${agg.dominantToolDisplay} leads this week's Trestleboard across primary classifications, with ${failureCraftLabel} emerging as the primary operational failure mode across ${agg.triagedOrSynthesizedCount} active dispatches.${focusClause} Three anchor incidents set our post-incident docket today: first, from ${inc1?.source_feed || "WSJ US Business"}, "${inc1?.title || "Institutional Capacity & Policy Drift"}", examined under ${WORKING_TOOL_DISPLAY_NAMES[inc1?.primary_tool || "square"]}; second, from ${inc2?.source_feed || "NYT HomePage"}, "${inc2?.title || "Cross-Silo Coordination Strain"}", evaluated under ${WORKING_TOOL_DISPLAY_NAMES[inc2?.primary_tool || "level"]}; and third, "${inc3?.title || "Regulatory Execution Divergence"}", where ${formatFailureModeDisplayLabel(SRE_FAILURE_DISPLAY_NAMES[inc3?.sre_failure_mode || "configuration_drift"])} exposed the gap between nominal policy and live operational state.`;
 
   const separating_signal_from_panic = `The 24-hour commentary cycle wants you to read each of these events as a morality play or an unprecedented institutional collapse. When we apply the Proportionality Check, a far more actionable systems pattern comes into focus. Take "${inc1?.title || "our lead dispatch"}" first. ${prop1?.noise_overblown || "Public commentary immediately fixated on headline optics and individual blame."} Yet the structural signal underneath is straightforward: ${prop1?.structural_signal || "when an institution defers structural reconciliation, live execution inevitably drifts from its chartered specification."} We see the exact same signal-to-noise inversion in "${inc2?.title || "our second incident"}". ${prop2?.noise_overblown || "Partisan observers treated the disruption as a sudden shock."} In reality, ${prop2?.structural_signal || "operational telemetry points directly to capacity exhaustion and asymmetric risk allocation that accumulated quietly across multiple quarters."} And in "${inc3?.title || "our third triaged event"}", the friction between ${WORKING_TOOL_DISPLAY_NAMES[inc3?.primary_tool || "trowel"]} and ${WORKING_TOOL_DISPLAY_NAMES[inc3?.secondary_tool || "common_gavel"]} demonstrates how quickly cross-group coordination fractures when upstream safeguards go untested in production. None of these incidents have completed a verified post-mortem, which means any sweeping verdict right now is premature jitter rather than verified engineering truth.`;
 
   const forward_posture = `As we set the trestleboard for the coming seven days, here is how to put the tools to work without waiting for the headlines to settle. First, when tracking the fallout around "${inc1?.title || "this week's policy and fiscal dispatches"}", bring ${agg.dominantToolDisplay} directly to the primary filings: watch whether leadership reconciles the live operational table with the written mandate, or merely issues another round of press assurances. Second, apply Common Gavel to every congressional or corporate hearing on "${inc2?.title || "active institutional disputes"}"—strip away the defensive rhetoric and ask whether the people who architected the constraint are sharing the same horizontal plane of accountability on The Level as the citizens and workers absorbing the load. Finally, keep the 24-Inch Gauge on your own cognitive error budget this weekend: refuse to spend high-priority attention on outraged speculation while the core post-mortem telemetry is still being collected. Until next Friday, keep your telemetry clean and your horizons level.`;
 
   return {
-    title: `CAB Weekly Brief #${episodeNumber}: ${agg.dominantToolDisplay}, ${agg.topSreFailureDisplay}, and This Week's Trestleboard`,
-    summary: `Friday 5-minute Change Advisory Board synthesis led by ${agg.dominantToolDisplay} and ${agg.topSreFailureDisplay} across ${agg.triagedOrSynthesizedCount} active dispatches on the Trestleboard.`,
+    title: `CAB Weekly Brief #${episodeNumber}: ${agg.dominantToolDisplay}, ${failureCraftLabel}, and This Week's Trestleboard`,
+    summary: `Friday audio synthesis led by ${agg.dominantToolDisplay} and ${failureCraftLabel} across ${agg.triagedOrSynthesizedCount} active dispatches on the Trestleboard.`,
     weekly_telemetry,
     separating_signal_from_panic,
     forward_posture,

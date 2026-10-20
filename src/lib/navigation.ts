@@ -39,29 +39,6 @@ export const NAVIGATION_SCHEMA: NavItemConfig[] = [
     id: "trestleboard",
     label: "The Trestleboard",
     href: "/",
-    layout: "single",
-    items: [
-      {
-        label: "Current Weekly Brief",
-        href: "/#weekly-brief",
-        description: "This week's pattern retrospective & Friday 5-minute audio roll-up",
-      },
-      {
-        label: "Active Dispatches",
-        href: "/#active-dispatches",
-        description: "Filter verified Craftsman's Briefs by Working Tool & Failure Mode",
-      },
-      {
-        label: "Incident Ledger",
-        href: "/incidents",
-        description: "Browse the live operational case ledger on the Trestleboard",
-      },
-      {
-        label: "Systemic Trends",
-        href: "/#systemic-trends",
-        description: "Lead post-mortems and recurring structural fault lines",
-      },
-    ],
   },
   {
     id: "archive",

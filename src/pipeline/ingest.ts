@@ -6,7 +6,9 @@ import {
 import {
   ensureEditorialPipelineSchema,
   extractImageFromRssBlock,
+  extractImageFromSourceArticleUrl,
   getPipelineTransformMap,
+  resolveContextualPublicDomainImage,
 } from "./editorial";
 import {
   buildDroppedByFilterJevResult,
@@ -3085,6 +3087,46 @@ export async function runD1IngestPipeline(options: {
       triagedCount++;
     }
 
+    let resolvedTriagedImageUrl: string | null = item.extractedImageUrl || null;
+    let resolvedTriagedImageAlt: string | null = item.extractedImageAlt || null;
+    let resolvedTriagedImageCaption: string | null =
+      item.extractedImageCaption || null;
+    let resolvedTriagedImageSourceType: string | null = item.extractedImageUrl
+      ? "rss_extracted"
+      : null;
+
+    if (
+      finalStatus === "triaged" &&
+      autoExtractRssImages &&
+      !resolvedTriagedImageUrl &&
+      (!options.customArticle || Boolean(options.fetchOptions?.fetchImpl))
+    ) {
+      const ogExtracted = await extractImageFromSourceArticleUrl(
+        item.sourceUrl,
+        item.title,
+        options.fetchOptions?.fetchImpl
+      );
+      if (ogExtracted) {
+        resolvedTriagedImageUrl = ogExtracted.imageUrl;
+        resolvedTriagedImageAlt = ogExtracted.imageAlt;
+        resolvedTriagedImageCaption = ogExtracted.imageCaption;
+        resolvedTriagedImageSourceType = "og_scraped";
+      } else {
+        const archival = await resolveContextualPublicDomainImage(
+          item.title,
+          item.rawExcerpt,
+          undefined,
+          options.fetchOptions?.fetchImpl
+        );
+        if (archival) {
+          resolvedTriagedImageUrl = archival.imageUrl;
+          resolvedTriagedImageAlt = archival.imageAlt;
+          resolvedTriagedImageCaption = archival.imageCaption;
+          resolvedTriagedImageSourceType = "wikimedia_commons";
+        }
+      }
+    }
+
     classificationStatements.push(
       options.db
         .prepare(
@@ -3095,7 +3137,11 @@ export async function runD1IngestPipeline(options: {
                secondary_tool = ?,
                sre_failure_mode = ?,
                jev_raw_json = ?,
-               status = ?
+               status = ?,
+               image_url = COALESCE(image_url, ?),
+               image_alt = COALESCE(image_alt, ?),
+               image_caption = COALESCE(image_caption, ?),
+               image_source_type = COALESCE(image_source_type, ?)
            WHERE url_hash = ?`
         )
         .bind(
@@ -3106,6 +3152,10 @@ export async function runD1IngestPipeline(options: {
           jevResult.sreFailureMode,
           jevResult.rawJson,
           finalStatus,
+          resolvedTriagedImageUrl,
+          resolvedTriagedImageAlt,
+          resolvedTriagedImageCaption,
+          resolvedTriagedImageSourceType,
           item.urlHash
         )
     );

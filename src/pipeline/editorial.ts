@@ -22,6 +22,8 @@ import {
 
 export type ImageSourceType =
   | "rss_extracted"
+  | "og_scraped"
+  | "wikimedia_commons"
   | "r2_upload"
   | "external_url"
   | "generated_card"
@@ -595,12 +597,181 @@ const KNOWN_ACRONYMS = new Set([
 const ALARMIST_BUZZWORD_REGEX =
   /\b(shocking|bombshell|catastrophic|meltdown|chaos|panic|slams|slammed|blasts|blasted|destroys|destroyed|nightmare|disaster|apocalyptic|bloodbath|freaking out|sparks outrage|erupts|explodes|terrifying|horrifying|unbelievable|you won't believe|breaking:|urgent:|exclusive:|must-see|devastating|total collapse|brink of collapse|warns of doom|chaos ensues|gutted|obliterated|torches|rips|wrecked|shatters|plummeting|skyrocketing|crisis mode|full-blown crisis)\b/i;
 
+const RECURRING_COLUMN_PREFIX_REGEX =
+  /^(?:brickbat|opinion|editorial|commentary|review|perspective|analysis|dispatch)\s*[:\-—]\s*/i;
+
+const LEGACY_BOILERPLATE_SUFFIX_REGEX =
+  /\s*:\s*Operational\s*&\s*Governance\s*Assessment\s*$/i;
+
 /**
- * Detects whether a raw source headline contains alarmist, clickbait, or sensationalist markers.
+ * Strips legacy ": Operational & Governance Assessment" suffix from stored titles on read.
+ */
+export function stripLegacyBoilerplateTitleSuffix(title: string): string {
+  if (!title || typeof title !== "string") return "";
+  return title.replace(LEGACY_BOILERPLATE_SUFFIX_REGEX, "").trim();
+}
+
+function countHeadlineWords(text: string): number {
+  const cleaned = (text || "").trim();
+  if (!cleaned) return 0;
+  return cleaned.split(/\s+/).filter(Boolean).length;
+}
+
+const TITLE_CASE_MINOR_WORDS = new Set([
+  "a",
+  "an",
+  "the",
+  "and",
+  "but",
+  "or",
+  "nor",
+  "for",
+  "so",
+  "yet",
+  "at",
+  "by",
+  "in",
+  "of",
+  "on",
+  "to",
+  "up",
+  "as",
+  "via",
+  "vs",
+  "vs.",
+  "into",
+  "over",
+  "with",
+  "from",
+]);
+
+function toBroadsheetTitleCase(rawClause: string): string {
+  const words = rawClause.trim().split(/\s+/).filter(Boolean);
+  return words
+    .map((word, index) => {
+      const bare = word.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "");
+      if (!bare) return word;
+      const upperBare = bare.toUpperCase();
+      if (KNOWN_ACRONYMS.has(upperBare) || /^U\.S\.?$/i.test(bare)) {
+        return word.replace(bare, upperBare);
+      }
+      const lowerBare = bare.toLowerCase();
+      if (
+        index > 0 &&
+        index < words.length - 1 &&
+        TITLE_CASE_MINOR_WORDS.has(lowerBare)
+      ) {
+        return word.replace(bare, lowerBare);
+      }
+      // Preserve internal capitalization on mixed-case proper nouns like McDonald's or iPhone
+      if (/[a-z].*[A-Z]/.test(bare)) {
+        return word;
+      }
+      const titled =
+        bare.charAt(0).toUpperCase() + bare.slice(1).toLowerCase();
+      return word.replace(bare, titled);
+    })
+    .join(" ");
+}
+
+/**
+ * Constructs a clean, factual headline in Title Case from the lead sentence of an article excerpt
+ * when the original headline is an idiomatic stub (e.g., "Brickbat: Sticky Fingers") or requires
+ * deterministic neutralization without any matching replacement rule.
+ */
+export function buildFactualHeadlineFromExcerpt(excerpt: string): string | null {
+  if (!excerpt || typeof excerpt !== "string") return null;
+  const cleaned = stripHtmlAndCdata(excerpt)
+    .replace(/\s+/g, " ")
+    .replace(/^[A-Z\s,]{2,28}(?:\([A-Z]{2,10}\))?\s*[—\-–:]\s*/, "")
+    .trim();
+  if (cleaned.length < 20) return null;
+
+  // Protect common abbreviations before splitting the first sentence
+  const protectedText = cleaned.replace(
+    /\b(U\.S|U\.K|Dr|Mr|Mrs|Ms|St|Gov|Rep|Sen|Gen|Col|Lt|Inc|Corp|Co|Ltd|vs|No|Dept|Assn)\./gi,
+    "$1__DOT__"
+  );
+  const firstSentenceRaw = (protectedText.split(/(?<=[.!?])\s+/)[0] || "")
+    .replace(/__DOT__/g, ".")
+    .replace(/[.!?]+$/, "")
+    .trim();
+
+  if (!firstSentenceRaw) return null;
+
+  // Split on semicolon, em-dash, or colon first if the leading clause is substantial
+  let candidateClause = firstSentenceRaw;
+  const primaryDelimiterSplit = firstSentenceRaw.split(/\s*(?:;|—|–|\s-\s)\s*/);
+  if (
+    primaryDelimiterSplit[0] &&
+    countHeadlineWords(primaryDelimiterSplit[0]) >= 5
+  ) {
+    candidateClause = primaryDelimiterSplit[0].trim();
+  } else {
+    // Check if splitting at the first comma yields a substantive 6..14 word clause
+    const commaParts = firstSentenceRaw.split(/,\s+/);
+    if (
+      commaParts.length > 1 &&
+      commaParts[0] &&
+      countHeadlineWords(commaParts[0]) >= 6 &&
+      countHeadlineWords(commaParts[0]) <= 14
+    ) {
+      candidateClause = commaParts[0].trim();
+    }
+  }
+
+  let words = candidateClause
+    .replace(/^["'“”‘’]+|["'“”‘’]+$/g, "")
+    .split(/\s+/)
+    .filter(Boolean);
+
+  // Strip leading articles ("A ", "An ", "The ") for tighter headline style
+  if (words.length > 5 && /^(?:a|an|the)$/i.test(words[0] || "")) {
+    words = words.slice(1);
+  }
+
+  if (words.length > 15) {
+    words = words.slice(0, 15);
+  }
+
+  // Strip trailing dangling prepositions, conjunctions, or articles
+  while (
+    words.length > 4 &&
+    /^(?:a|an|the|and|or|but|nor|for|so|yet|of|in|on|at|to|by|for|with|from|into|over|under|after|before|while|when|where|that|which|who|whom|whose|as|is|was|were|are|be|been|has|have|had)$/i.test(
+      (words[words.length - 1] || "").replace(/[^A-Za-z]/g, "")
+    )
+  ) {
+    words.pop();
+  }
+
+  const joined = words
+    .join(" ")
+    .replace(/[,;:\-—.!?]+$/, "")
+    .trim();
+
+  if (countHeadlineWords(joined) < 4 || joined.length < 15) {
+    return null;
+  }
+
+  return toBroadsheetTitleCase(joined);
+}
+
+/**
+ * Detects whether a raw source headline contains alarmist, clickbait, or sensationalist markers,
+ * or is a recurring idiomatic column stub (such as "Brickbat: ...").
  */
 export function isAlarmistHeadline(title: string): boolean {
   if (!title || typeof title !== "string") return false;
   const trimmed = title.trim();
+  if (/^brickbat\s*[:\-—]/i.test(trimmed)) {
+    return true;
+  }
+  if (RECURRING_COLUMN_PREFIX_REGEX.test(trimmed)) {
+    const remainder = trimmed.replace(RECURRING_COLUMN_PREFIX_REGEX, "").trim();
+    if (countHeadlineWords(remainder) < 4) {
+      return true;
+    }
+  }
   if (ALARMIST_BUZZWORD_REGEX.test(trimmed)) {
     return true;
   }
@@ -617,6 +788,7 @@ export function isAlarmistHeadline(title: string): boolean {
 }
 
 const ALARMIST_REPLACEMENTS: Array<[RegExp, string, string]> = [
+  [RECURRING_COLUMN_PREFIX_REGEX, "", "Removed recurring editorial column prefix"],
   [/^(?:breaking|urgent|shocking|bombshell|exclusive|alert|watch|live updates|developing)\s*[:\-—]\s*/i, "", "Removed urgent/clickbait prefix"],
   [/\b(?:slams|slammed|blasts|blasted|rips|torches|shreds)\b/gi, "challenges", "Replaced combative verb with neutral operational verb"],
   [/\b(?:destroys|destroyed|obliterates|obliterated|gutted|wrecked)\b/gi, "impacts", "Replaced hyperbolic impact verb"],
@@ -653,7 +825,7 @@ export function deescalateHeadlineDeterministic(
   _excerpt = "",
   forceRewrite = false
 ): HeadlineDeescalationResult {
-  const originalTitle = (title || "").trim();
+  const originalTitle = stripLegacyBoilerplateTitleSuffix(title || "");
   const wasAlarmist = isAlarmistHeadline(originalTitle);
   let working = originalTitle;
   const appliedNotes: string[] = [];
@@ -686,27 +858,33 @@ export function deescalateHeadlineDeterministic(
     working = working.charAt(0).toUpperCase() + working.slice(1);
   }
 
-  // If forceRewrite is requested (e.g. Admin clicked "De-Escalate Headline" on a headline)
-  // and no rule pattern matched yet, perform a clinical operational normalization
-  if (forceRewrite && working === originalTitle) {
-    // Strip rhetorical question or quotes and frame as operational review
-    const strippedQuotes = working.replace(/["'“”‘’]/g, "").replace(/\?+$/, "").trim();
-    if (!/review|assessment|dispatch|audit|posture/i.test(strippedQuotes)) {
-      working = `${strippedQuotes}: Operational & Governance Assessment`;
-    } else {
-      working = strippedQuotes;
+  const isTooShortOrIdiomatic = countHeadlineWords(working) < 4;
+
+  // If stripped title is too short/idiomatic (e.g. "Sticky Fingers" after stripping "Brickbat:")
+  // or if forceRewrite is true and no regex replacement altered the headline, construct a clean
+  // factual headline from the first sentence of `_excerpt` rather than appending boilerplate.
+  if (isTooShortOrIdiomatic || (forceRewrite && working === originalTitle)) {
+    const excerptHeadline = buildFactualHeadlineFromExcerpt(_excerpt);
+    if (excerptHeadline && excerptHeadline !== originalTitle) {
+      working = excerptHeadline;
+      appliedNotes.push(
+        "Constructed factual headline from source dispatch lead sentence"
+      );
+    } else if (isTooShortOrIdiomatic) {
+      // Do not replace with a 1-3 word stub if we have no excerpt to build a full factual headline
+      working = originalTitle;
+      appliedNotes.length = 0;
     }
-    appliedNotes.push(
-      "Reframed headline into clinical operational assessment format"
-    );
   }
 
-  const changed = working !== originalTitle && working.length >= 10;
+  const changed =
+    working !== originalTitle &&
+    working.length >= 10 &&
+    countHeadlineWords(working) >= 4;
   const neutralTitle = changed ? working : originalTitle;
-  const rationale =
-    appliedNotes.length > 0
-      ? `${appliedNotes.join("; ")}. Original headline preserved in audit_ledger.`
-      : "Headline already meets calm, operational Craft editorial standards.";
+  const rationale = changed
+    ? `${appliedNotes.join("; ")}. Original headline preserved in audit_ledger.`
+    : "Headline already meets calm, operational Craft editorial standards.";
 
   return {
     originalTitle,
@@ -731,7 +909,7 @@ export async function deescalateHeadlineWithGemini(
     forceRewrite?: boolean;
   }
 ): Promise<HeadlineDeescalationResult> {
-  const originalTitle = (title || "").trim();
+  const originalTitle = stripLegacyBoilerplateTitleSuffix(title || "");
   const wasAlarmist = isAlarmistHeadline(originalTitle);
   const deterministic = deescalateHeadlineDeterministic(
     originalTitle,
@@ -759,8 +937,8 @@ Your task is to rewrite sensationalized, clickbait, partisan, or emotionally cha
 
 RULES:
 1. Preserve the specific institutional actors, systems, and verifiable facts from the source headline and excerpt.
-2. Strip all sensational adjectives ("shocking", "bombshell", "catastrophic", "meltdown", "slams", "blasts", "chaos", "nightmare"), ALL-CAPS shouting, exclamation marks, and clickbait hooks.
-3. Never include internal classifier names ("Jev", "jev-1.14.0") or raw failure shortCodes ("CFG-DRIFT").
+2. Strip all sensational adjectives ("shocking", "bombshell", "catastrophic", "meltdown", "slams", "blasts", "chaos", "nightmare"), recurring column prefixes ("Brickbat:", "Opinion:", "Commentary:"), ALL-CAPS shouting, exclamation marks, and clickbait hooks.
+3. Never include internal classifier names ("Jev", "jev-1.14.0"), raw failure shortCodes ("CFG-DRIFT"), or boilerplate suffixes like ": Operational & Governance Assessment".
 4. Keep the rewritten title between 8 and 16 words in standard headline case.
 5. Provide a 1-sentence rationale explaining what alarmist or rhetorical framing was neutralized for public audit disclosure.`;
 
@@ -812,12 +990,17 @@ Return JSON with "neutralTitle" and "rationale".`;
       neutralTitle?: string;
       rationale?: string;
     };
-    const candidateTitle = (parsed?.neutralTitle || "").trim();
+    const candidateTitle = stripLegacyBoilerplateTitleSuffix(
+      (parsed?.neutralTitle || "")
+        .replace(RECURRING_COLUMN_PREFIX_REGEX, "")
+        .trim()
+    );
     const candidateRationale = (parsed?.rationale || "").trim();
 
     if (
       candidateTitle.length < 10 ||
       candidateTitle.length > 160 ||
+      countHeadlineWords(candidateTitle) < 4 ||
       /\bjev-1\.14\.0\b/i.test(candidateTitle)
     ) {
       return deterministic;
@@ -841,6 +1024,18 @@ Return JSON with "neutralTitle" and "rationale".`;
   }
 }
 
+const GENERIC_PUBLISHER_CARD_REGEX =
+  /default|logo|avatar|placeholder|brand|site-icon|favicon|og-default|masthead|wordmark|apple-touch-icon|blank|1x1|pixel|spacer\.gif/i;
+
+export function isGenericPublisherImage(url: string): boolean {
+  if (!url || typeof url !== "string") return true;
+  const trimmed = url.trim();
+  if (!/^https?:\/\//i.test(trimmed)) return true;
+  if (/\.svg(\?|$)/i.test(trimmed)) return true;
+  if (GENERIC_PUBLISHER_CARD_REGEX.test(trimmed)) return true;
+  return false;
+}
+
 /**
  * Extracts `<media:content>`, `<media:thumbnail>`, `<enclosure type="image/*">`, or `<img>` URLs
  * from a raw RSS `<item>` or Atom `<entry>` XML block.
@@ -858,7 +1053,7 @@ export function extractImageFromRssBlock(
   const isTrackingPixel = (u: string): boolean =>
     /1x1|pixel|spacer\.gif|feedburner|doubleclick|analytics|beacon|stat\.|\bads?\b/i.test(
       u
-    );
+    ) || isGenericPublisherImage(u);
 
   // 1. <media:content url="..." medium="image" | type="image/..." />
   const mediaContentRegex = /<media:content\b([^>]*)\/?>/gi;
@@ -874,7 +1069,7 @@ export function extractImageFromRssBlock(
       !isTrackingPixel(candidateUrl) &&
       (!typeMatch ||
         /image/i.test(typeMatch[1]) ||
-        /\.(jpg|jpeg|png|webp|gif|svg)(\?|$)/i.test(candidateUrl))
+        /\.(jpg|jpeg|png|webp|gif)(\?|$)/i.test(candidateUrl))
     ) {
       const mediaTitleMatch = blockXml.match(
         /<media:(?:title|description)[^>]*>([\s\S]*?)<\/media:(?:title|description)>/i
@@ -951,7 +1146,7 @@ export function extractImageFromRssBlock(
 
 /**
  * Attempts to extract an OpenGraph (`og:image`) or Twitter Card (`twitter:image`) image
- * from an article's source URL when an Admin triggers "Extract from Source RSS / URL".
+ * from an article's source URL, filtering out generic publisher logos, default social cards, and SVGs.
  */
 export async function extractImageFromSourceArticleUrl(
   sourceUrl: string,
@@ -961,6 +1156,7 @@ export async function extractImageFromSourceArticleUrl(
   imageUrl: string;
   imageAlt: string;
   imageCaption: string;
+  imageSourceType: "og_scraped";
 } | null> {
   if (!sourceUrl || !/^https?:\/\//i.test(sourceUrl)) return null;
   const fetchFn = fetchImpl ?? fetch;
@@ -979,22 +1175,28 @@ export async function extractImageFromSourceArticleUrl(
     if (!res.ok) return null;
     const html = (await res.text()).slice(0, 120_000);
 
-    const ogMatch =
-      html.match(
-        /<meta[^>]+property=["']og:image["'][^>]+content=["'](https?:\/\/[^"']+)["']/i
-      ) ||
-      html.match(
-        /<meta[^>]+content=["'](https?:\/\/[^"']+)["'][^>]+property=["']og:image["']/i
-      ) ||
-      html.match(
-        /<meta[^>]+name=["']twitter:image(?::src)?["'][^>]+content=["'](https?:\/\/[^"']+)["']/i
-      ) ||
-      html.match(
-        /<meta[^>]+content=["'](https?:\/\/[^"']+)["'][^>]+name=["']twitter:image(?::src)?["']/i
-      );
+    const candidatePatterns = [
+      /<meta[^>]+property=["']og:image(?::secure_url|:url)?["'][^>]+content=["'](https?:\/\/[^"']+)["']/gi,
+      /<meta[^>]+content=["'](https?:\/\/[^"']+)["'][^>]+property=["']og:image(?::secure_url|:url)?["']/gi,
+      /<meta[^>]+name=["']twitter:image(?::src)?["'][^>]+content=["'](https?:\/\/[^"']+)["']/gi,
+      /<meta[^>]+content=["'](https?:\/\/[^"']+)["'][^>]+name=["']twitter:image(?::src)?["']/gi,
+    ];
 
-    if (!ogMatch?.[1]) return null;
-    const imageUrl = ogMatch[1].trim().replace(/&amp;/g, "&");
+    let selectedImageUrl: string | null = null;
+    for (const pattern of candidatePatterns) {
+      let m: RegExpExecArray | null;
+      while ((m = pattern.exec(html)) !== null) {
+        const rawCandidate = (m[1] || "").trim().replace(/&amp;/g, "&");
+        if (rawCandidate && !isGenericPublisherImage(rawCandidate)) {
+          selectedImageUrl = rawCandidate;
+          break;
+        }
+      }
+      if (selectedImageUrl) break;
+    }
+
+    if (!selectedImageUrl) return null;
+
     const altMatch =
       html.match(
         /<meta[^>]+(?:property=["']og:image:alt["']|name=["']twitter:image:alt["'])[^>]+content=["']([^"']+)["']/i
@@ -1007,15 +1209,395 @@ export async function extractImageFromSourceArticleUrl(
       : fallbackTitle;
 
     return {
-      imageUrl,
+      imageUrl: selectedImageUrl,
       imageAlt: alt || fallbackTitle,
       imageCaption: "Extracted from primary source dispatch metadata",
+      imageSourceType: "og_scraped",
     };
   } catch {
     return null;
   } finally {
     clearTimeout(timer);
   }
+}
+
+const ENTITY_STOP_WORDS = new Set([
+  "The",
+  "A",
+  "An",
+  "In",
+  "On",
+  "At",
+  "By",
+  "For",
+  "With",
+  "From",
+  "Into",
+  "Over",
+  "Under",
+  "After",
+  "Before",
+  "During",
+  "While",
+  "When",
+  "Where",
+  "Why",
+  "How",
+  "What",
+  "Who",
+  "This",
+  "That",
+  "These",
+  "Those",
+  "Their",
+  "There",
+  "Here",
+  "Brickbat",
+  "Opinion",
+  "Editorial",
+  "Commentary",
+  "Review",
+  "Perspective",
+  "Analysis",
+  "Dispatch",
+  "Report",
+  "Study",
+  "Update",
+  "Breaking",
+  "Urgent",
+  "Exclusive",
+  "Former",
+  "New",
+  "First",
+  "Last",
+  "More",
+  "Most",
+  "Some",
+  "Many",
+  "Several",
+  "Every",
+  "Each",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+]);
+
+const INSTITUTIONAL_ACRONYM_MAP: Record<string, string> = {
+  SCOTUS: "Supreme Court of the United States",
+  DOJ: "United States Department of Justice",
+  FBI: "Federal Bureau of Investigation",
+  CIA: "Central Intelligence Agency",
+  NSA: "National Security Agency",
+  DHS: "United States Department of Homeland Security",
+  DOD: "Pentagon",
+  PENTAGON: "Pentagon",
+  FCC: "Federal Communications Commission",
+  FTC: "Federal Trade Commission",
+  SEC: "U.S. Securities and Exchange Commission",
+  FDA: "Food and Drug Administration",
+  EPA: "United States Environmental Protection Agency",
+  IRS: "Internal Revenue Service",
+  USPS: "United States Postal Service",
+  FAA: "Federal Aviation Administration",
+  CISA: "Cybersecurity and Infrastructure Security Agency",
+  GAO: "Government Accountability Office",
+  FERC: "Federal Energy Regulatory Commission",
+  NERC: "North American Electric Reliability Corporation",
+  CFPB: "Consumer Financial Protection Bureau",
+  NLRB: "National Labor Relations Board",
+  OSHA: "Occupational Safety and Health Administration",
+  FDIC: "Federal Deposit Insurance Corporation",
+  FEMA: "Federal Emergency Management Agency",
+  NATO: "NATO",
+};
+
+/**
+ * Extracts 2–3 concrete institutional or named-entity search queries from an article's
+ * headline and lead excerpt for Wikipedia / Wikimedia Commons archival photo resolution.
+ */
+export function extractInstitutionalSearchQueries(
+  title: string,
+  excerpt: string,
+  domainSector?: string
+): string[] {
+  const queries: string[] = [];
+  const addQuery = (q: string) => {
+    const cleaned = q
+      .replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (
+      cleaned.length >= 4 &&
+      !ENTITY_STOP_WORDS.has(cleaned) &&
+      !queries.some((existing) => existing.toLowerCase() === cleaned.toLowerCase())
+    ) {
+      queries.push(cleaned);
+    }
+  };
+
+  const combinedText = `${stripLegacyBoilerplateTitleSuffix(title || "").replace(
+    RECURRING_COLUMN_PREFIX_REGEX,
+    ""
+  )}. ${stripHtmlAndCdata(excerpt || "").slice(0, 500)}`;
+
+  // 1. Check for known institutional acronyms or well-known federal/civic bodies
+  for (const [acronym, canonicalEntity] of Object.entries(
+    INSTITUTIONAL_ACRONYM_MAP
+  )) {
+    const regex = new RegExp(`\\b${acronym}\\b`, "i");
+    if (
+      acronym.length >= 4
+        ? regex.test(combinedText)
+        : new RegExp(`\\b${acronym}\\b`).test(combinedText)
+    ) {
+      addQuery(canonicalEntity);
+      if (queries.length >= 3) return queries.slice(0, 3);
+    }
+  }
+
+  // 2. Multi-word capitalized proper noun phrases (e.g., "Fairfax County Police", "Supreme Court", "Federal Reserve")
+  const multiWordEntityRegex =
+    /\b([A-Z][a-zA-Z0-9.'-]+(?:\s+(?:of|the|and|for|in|on|[A-Z][a-zA-Z0-9.'-]+)){1,4})\b/g;
+  let match: RegExpExecArray | null;
+  while ((match = multiWordEntityRegex.exec(combinedText)) !== null) {
+    const rawPhrase = (match[1] || "").trim();
+    const tokens = rawPhrase.split(/\s+/);
+    // Strip leading stop words from the phrase
+    while (tokens.length > 0 && ENTITY_STOP_WORDS.has(tokens[0] || "")) {
+      tokens.shift();
+    }
+    // Strip trailing lowercase connector words
+    while (
+      tokens.length > 0 &&
+      /^(?:of|the|and|for|in|on|at|to|by|with|from)$/i.test(
+        tokens[tokens.length - 1] || ""
+      )
+    ) {
+      tokens.pop();
+    }
+    if (tokens.length >= 2) {
+      addQuery(tokens.join(" "));
+      if (queries.length >= 3) return queries.slice(0, 3);
+    }
+  }
+
+  // 3. Single capitalized proper nouns (5+ chars) in the excerpt or headline
+  const singleProperRegex = /\b([A-Z][a-z]{4,18})\b/g;
+  while ((match = singleProperRegex.exec(combinedText)) !== null) {
+    const word = match[1] || "";
+    if (!ENTITY_STOP_WORDS.has(word)) {
+      addQuery(word);
+      if (queries.length >= 3) return queries.slice(0, 3);
+    }
+  }
+
+  // 4. Institutional domain sector fallback
+  const sectorFallbacks: Record<string, string> = {
+    "Public Policy & Governance": "United States Capitol",
+    "Economics & Markets": "Marriner S. Eccles Federal Reserve Board Building",
+    "Technology & Cyber": "Data center",
+    "Infrastructure & Supply Chain": "Container ship",
+    "Institutional Leadership": "Library of Congress",
+  };
+  if (domainSector && sectorFallbacks[domainSector]) {
+    addQuery(sectorFallbacks[domainSector]);
+  } else {
+    addQuery("United States Capitol");
+  }
+
+  return queries.slice(0, 3);
+}
+
+function isDisallowedWikimediaAssetUrl(url: string): boolean {
+  if (!url || typeof url !== "string") return true;
+  if (/\.svg(\?|$)|\.gif(\?|$)|\.tif(\?|$)|\.tiff(\?|$)|\.pdf(\?|$)|\.djvu(\?|$)|\.ogg(\?|$)|\.ogv(\?|$)|\.webm(\?|$)/i.test(url)) {
+    return true;
+  }
+  if (
+    /logo|seal_of|coat_of_arms|flag_of|emblem|icon|stub|locator_map|location_map|signature|autograph|wordmark|question_book|ambox|padlock|crystal_clear|nuvola|gnome-|tango-|commons-logo|wikimedia-logo/i.test(
+      url
+    )
+  ) {
+    return true;
+  }
+  return false;
+}
+
+const PERMISSIVE_WIKIMEDIA_LICENSE_REGEX =
+  /^(?:Public\s*domain|PD|CC0|USGov|PD-USGov|CC[\s-]BY(?:[\s-]SA)?)/i;
+
+/**
+ * Resolves a contextually relevant, landscape public-domain or permissive Creative Commons
+ * photograph via:
+ *   Step A: Wikipedia PageImages API
+ *   Step B: Wikimedia Commons Search API with explicit license verification
+ */
+export async function resolveContextualPublicDomainImage(
+  title: string,
+  excerpt: string,
+  domainSector?: string,
+  fetchImpl?: typeof fetch
+): Promise<{
+  imageUrl: string;
+  imageAlt: string;
+  imageCaption: string;
+  imageSourceType: "wikimedia_commons";
+} | null> {
+  const fetchFn = fetchImpl ?? fetch;
+  const queries = extractInstitutionalSearchQueries(title, excerpt, domainSector);
+  if (queries.length === 0) return null;
+
+  const headers = {
+    "User-Agent":
+      "TheCABCall-Editorial/1.0 (https://thecabcall.com; archival-media-resolver)",
+    Accept: "application/json",
+  };
+
+  // Step A: Wikipedia PageImages API
+  for (const entity of queries) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    try {
+      const wpUrl = `https://en.wikipedia.org/w/api.php?action=query&prop=pageimages|pageterms&piprop=original|thumbnail&pithumbsize=960&redirects=1&format=json&origin=*&titles=${encodeURIComponent(
+        entity
+      )}`;
+      const res = await fetchFn(wpUrl, { headers, signal: controller.signal });
+      if (res.ok) {
+        const data: any = await res.json();
+        const pages = data?.query?.pages
+          ? Object.values<any>(data.query.pages)
+          : [];
+        for (const page of pages) {
+          if (!page || page.missing !== undefined) continue;
+          const thumb = page.thumbnail;
+          const orig = page.original;
+          const candidateSource: string = thumb?.source || orig?.source || "";
+          const width = Number(thumb?.width || orig?.width || 0);
+          const height = Number(thumb?.height || orig?.height || 0);
+
+          if (
+            candidateSource &&
+            !isDisallowedWikimediaAssetUrl(candidateSource) &&
+            width >= 500 &&
+            height > 0 &&
+            width >= height
+          ) {
+            const pageTitle = (page.title || entity).trim();
+            const desc =
+              page?.terms?.description?.[0] ||
+              `${pageTitle} archival reference photograph`;
+            return {
+              imageUrl: candidateSource,
+              imageAlt: `${pageTitle} — ${desc}`,
+              imageCaption: `Archival reference via Wikimedia Commons (Public Domain / CC) — ${pageTitle}`,
+              imageSourceType: "wikimedia_commons",
+            };
+          }
+        }
+      }
+    } catch {
+      // Continue to next query or Step B
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // Step B: Wikimedia Commons Search API with License Verification
+  for (const query of queries) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5500);
+    try {
+      const commonsUrl = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(
+        `${query} filetype:bitmap`
+      )}&gsrnamespace=6&gsrlimit=5&prop=imageinfo&iiprop=url|dimensions|extmetadata&iiurlwidth=960&format=json&origin=*`;
+      const res = await fetchFn(commonsUrl, {
+        headers,
+        signal: controller.signal,
+      });
+      if (!res.ok) continue;
+
+      const data: any = await res.json();
+      const pages = data?.query?.pages
+        ? Object.values<any>(data.query.pages)
+        : [];
+      for (const page of pages) {
+        const info = page?.imageinfo?.[0];
+        if (!info) continue;
+
+        const candidateUrl: string = info.thumburl || info.url || "";
+        const width = Number(info.thumbwidth || info.width || 0);
+        const height = Number(info.thumbheight || info.height || 0);
+
+        if (
+          !candidateUrl ||
+          isDisallowedWikimediaAssetUrl(candidateUrl) ||
+          width < 500 ||
+          height <= 0 ||
+          height > width
+        ) {
+          continue;
+        }
+
+        const ext = info.extmetadata || {};
+        const licenseShort = String(
+          ext?.LicenseShortName?.value || ""
+        ).trim();
+        if (!PERMISSIVE_WIKIMEDIA_LICENSE_REGEX.test(licenseShort)) {
+          continue;
+        }
+
+        const rawArtist = String(
+          ext?.Artist?.value || ext?.Credit?.value || "Wikimedia Commons"
+        );
+        const artistOrSource =
+          stripHtmlAndCdata(rawArtist)
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 90) || "Wikimedia Commons";
+        const rawDesc = String(
+          ext?.ObjectName?.value ||
+            ext?.ImageDescription?.value ||
+            page?.title?.replace(/^File:/i, "") ||
+            query
+        );
+        const cleanAlt =
+          stripHtmlAndCdata(rawDesc)
+            .replace(/\.[a-z0-9]{3,4}$/i, "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 160) || `${query} — archival reference`;
+
+        return {
+          imageUrl: candidateUrl,
+          imageAlt: cleanAlt,
+          imageCaption: `Archival reference via Wikimedia Commons (${licenseShort}) — ${artistOrSource}`,
+          imageSourceType: "wikimedia_commons",
+        };
+      }
+    } catch {
+      // Continue to next query
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  return null;
 }
 
 function escapeXmlText(raw: string): string {
@@ -1320,7 +1902,15 @@ export function mapAdminIncidentRowToRecord(
   const isLeadPostMortem = storedPayload.isLeadPostMortem;
   const leadPostMortemAnalysis = storedPayload.leadPostMortemAnalysis;
 
-  const slugBase = (row.title || "incident")
+  const cleanedRowTitle = stripLegacyBoilerplateTitleSuffix(row.title || "");
+  const cleanedOriginalTitle = stripLegacyBoilerplateTitleSuffix(
+    row.original_title || row.title || ""
+  );
+  const effectiveTitleRewritten =
+    Number(row.title_rewritten || 0) === 1 &&
+    cleanedRowTitle !== cleanedOriginalTitle;
+
+  const slugBase = (cleanedRowTitle || "incident")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
@@ -1333,10 +1923,12 @@ export function mapAdminIncidentRowToRecord(
     slug: `${slugBase || "incident"}-d1-${row.id}`,
     urlHash: row.url_hash,
     sourceFeed: row.source_feed,
-    title: row.title,
-    originalTitle: (row.original_title || row.title || "").trim(),
-    titleRewritten: Number(row.title_rewritten || 0) === 1,
-    titleRewriteReason: row.title_rewrite_reason || null,
+    title: cleanedRowTitle,
+    originalTitle: cleanedOriginalTitle,
+    titleRewritten: effectiveTitleRewritten,
+    titleRewriteReason: effectiveTitleRewritten
+      ? row.title_rewrite_reason || null
+      : null,
     sourceUrl: row.source_url,
     rawExcerpt: row.raw_excerpt,
     publishedAt: row.published_at,
@@ -1578,7 +2170,7 @@ export async function rewriteIncidentTitle(
       }
     );
     nextTitle = deescalation.neutralTitle;
-    nextRewritten = nextTitle !== preservedOriginalTitle ? 1 : 1;
+    nextRewritten = nextTitle !== preservedOriginalTitle ? 1 : 0;
     nextRewriteReason =
       input.reason?.trim() ||
       deescalation.rationale ||
@@ -1645,6 +2237,7 @@ export async function attachIncidentImage(
       | "external_url"
       | "r2_upload"
       | "rss_extracted"
+      | "wikimedia_commons"
       | "generated_card"
       | "remove";
     imageUrl?: string | null;
@@ -1727,21 +2320,20 @@ export async function attachIncidentImage(
       `Craft Diagnostic Blueprint Card: ${existingRecord.primaryTool} • ${existingRecord.sreFailureMode} (${existingRecord.incidentCode})`;
     nextSourceType = "generated_card";
     defaultAuditReason = `Attached generated Working Tool SVG telemetry card (${nextImageUrl}) to incident #${existing.id}`;
-  } else if (input.mode === "rss_extracted") {
-    const extracted = await extractImageFromSourceArticleUrl(
-      existing.source_url,
-      existing.title,
+  } else if (input.mode === "wikimedia_commons") {
+    const archival = await resolveContextualPublicDomainImage(
+      existingRecord.title,
+      existing.raw_excerpt,
+      existingRecord.domainSector,
       input.fetchImpl
     );
-
-    if (extracted) {
-      nextImageUrl = extracted.imageUrl;
-      nextImageAlt = input.imageAlt?.trim() || extracted.imageAlt;
-      nextImageCaption = input.imageCaption?.trim() || extracted.imageCaption;
-      nextSourceType = "rss_extracted";
-      defaultAuditReason = `Extracted source dispatch image (${nextImageUrl}) for incident #${existing.id}`;
+    if (archival) {
+      nextImageUrl = archival.imageUrl;
+      nextImageAlt = input.imageAlt?.trim() || archival.imageAlt;
+      nextImageCaption = input.imageCaption?.trim() || archival.imageCaption;
+      nextSourceType = "wikimedia_commons";
+      defaultAuditReason = `Resolved Wikimedia Commons archival photograph (${nextImageUrl}) for incident #${existing.id}`;
     } else {
-      // Fallback to generated blueprint card if upstream article has no og:image or blocks crawlers
       const cardFilename = `card-d1-${existing.id}.svg`;
       nextImageUrl = `/media/${cardFilename}`;
       nextImageAlt =
@@ -1749,9 +2341,49 @@ export async function attachIncidentImage(
         `${existingRecord.primaryTool} — Structural Inspection Card for ${existingRecord.title}`;
       nextImageCaption =
         input.imageCaption?.trim() ||
-        `Source dispatch had no OpenGraph image; attached ${existingRecord.primaryTool} blueprint card`;
+        `No qualifying Wikimedia Commons photograph found; attached ${existingRecord.primaryTool} blueprint card`;
       nextSourceType = "generated_card";
-      defaultAuditReason = `Source URL had no extractable og:image; attached fallback telemetry card (${nextImageUrl}) to incident #${existing.id}`;
+      defaultAuditReason = `No Wikimedia Commons photograph matched; attached fallback telemetry card (${nextImageUrl}) to incident #${existing.id}`;
+    }
+  } else if (input.mode === "rss_extracted") {
+    const extracted = await extractImageFromSourceArticleUrl(
+      existing.source_url,
+      existingRecord.title,
+      input.fetchImpl
+    );
+
+    if (extracted) {
+      nextImageUrl = extracted.imageUrl;
+      nextImageAlt = input.imageAlt?.trim() || extracted.imageAlt;
+      nextImageCaption = input.imageCaption?.trim() || extracted.imageCaption;
+      nextSourceType = "og_scraped";
+      defaultAuditReason = `Extracted source dispatch image (${nextImageUrl}) for incident #${existing.id}`;
+    } else {
+      const archival = await resolveContextualPublicDomainImage(
+        existingRecord.title,
+        existing.raw_excerpt,
+        existingRecord.domainSector,
+        input.fetchImpl
+      );
+      if (archival) {
+        nextImageUrl = archival.imageUrl;
+        nextImageAlt = input.imageAlt?.trim() || archival.imageAlt;
+        nextImageCaption = input.imageCaption?.trim() || archival.imageCaption;
+        nextSourceType = "wikimedia_commons";
+        defaultAuditReason = `Source URL had no og:image; resolved Wikimedia Commons archival image (${nextImageUrl}) for incident #${existing.id}`;
+      } else {
+        // Fallback to generated blueprint card if upstream article has no og:image or blocks crawlers
+        const cardFilename = `card-d1-${existing.id}.svg`;
+        nextImageUrl = `/media/${cardFilename}`;
+        nextImageAlt =
+          input.imageAlt?.trim() ||
+          `${existingRecord.primaryTool} — Structural Inspection Card for ${existingRecord.title}`;
+        nextImageCaption =
+          input.imageCaption?.trim() ||
+          `Source dispatch had no OpenGraph image; attached ${existingRecord.primaryTool} blueprint card`;
+        nextSourceType = "generated_card";
+        defaultAuditReason = `Source URL had no extractable og:image; attached fallback telemetry card (${nextImageUrl}) to incident #${existing.id}`;
+      }
     }
   } else {
     // external_url or r2_upload

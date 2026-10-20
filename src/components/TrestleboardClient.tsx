@@ -3,6 +3,8 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import {
+  formatFailureModeDisplayLabel,
+  SHORT_FAILURE_LABELS,
   SreFailureModeId,
   WorkingToolId,
 } from "@/lib/taxonomy";
@@ -66,17 +68,6 @@ const FAILURE_MODE_OPTIONS: { value: SreFailureModeId; label: string }[] = [
     label: "Deferred Maintenance (Institutional Debt)",
   },
 ];
-
-const SHORT_FAILURE_LABELS: Record<SreFailureModeId, string> = {
-  "Configuration Drift": "Drifting Off-Square",
-  "Cascading Failure": "Chain-Reaction Breakdown",
-  "Alert Fatigue & Signal Loss": "Crying Wolf / Drowning in Noise",
-  "Single Point of Failure (SPOF) / Untested Failover":
-    "One Weak Link / Untested Backup",
-  "Blame Culture vs. Root-Cause Isolation": "Scapegoating vs. Fixing the Trap",
-  "Technical & Institutional Debt": "Deferred Maintenance",
-  "Structural Friction": "Structural Friction",
-};
 
 function formatLeadDateline(isoDate: string): string {
   const date = new Date(isoDate);
@@ -182,7 +173,7 @@ export function TrestleboardClient({
                 WEEK OF {formatLeadDateline(weeklyState.publishedAt)} // WEEKLY SYSTEMS RETROSPECTIVE
               </div>
 
-              <h2 className="font-display italic text-2xl sm:text-3xl lg:text-[32px] text-[#F3EFE6] leading-tight">
+              <h2 className="font-serif font-semibold italic text-2xl sm:text-3xl lg:text-[32px] text-[#F3EFE6] leading-tight normal-case">
                 {weeklyState.heroTitle}
               </h2>
 
@@ -207,8 +198,7 @@ export function TrestleboardClient({
                   className="px-2.5 py-1 bg-[#0B0E14] border border-[#8A6D3B]/75 text-[#F3EFE6] hover:border-[#C5A059] transition-colors cursor-pointer"
                 >
                   PRIMARY FAILURE MODE:{" "}
-                  {(
-                    SHORT_FAILURE_LABELS[weeklyState.primaryFailureMode] ||
+                  {formatFailureModeDisplayLabel(
                     weeklyState.primaryFailureMode
                   ).toUpperCase()}
                 </button>
@@ -224,7 +214,7 @@ export function TrestleboardClient({
           <div className="lg:w-[35%] p-6 sm:p-8 lg:p-10 border-t lg:border-t-0 lg:border-l border-[#C5A059]/35 bg-[#0B0E14]/35 flex flex-col justify-between">
             <div className="space-y-4">
               <div className="font-mono text-xs uppercase tracking-[0.18em] text-[#C5A059]">
-                THE CAB CALL // EPISODE #{weeklyState.episodeNumber} (5 MIN)
+                THE CAB CALL // EPISODE #{weeklyState.episodeNumber} ({weeklyState.durationFormatted})
               </div>
 
               <p className="font-serif italic text-sm sm:text-[15px] text-[#F3EFE6]/90 leading-relaxed">
@@ -313,14 +303,33 @@ export function TrestleboardClient({
         </div>
       </section>
 
-      {/* C. EDITORIAL FILTER RIBBON */}
+      {/* C. ACTIVE DISPATCHES SECTION HEADER & EDITORIAL FILTER RIBBON */}
       <BrassSectionDivider />
 
       <section
         id="active-dispatches"
-        aria-label="Editorial Filter Ribbon"
-        className="mb-9 pb-6 border-b border-[#8A6D3B]/40 scroll-mt-20"
+        aria-label="Active Dispatches // The Trestleboard"
+        className="mb-9 pb-6 border-b border-[#8A6D3B]/40 scroll-mt-20 space-y-5"
       >
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 pb-4 border-b border-[#8A6D3B]/35">
+          <div>
+            <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#C5A059]">
+              VERIFIED CASE LEDGER
+            </div>
+            <h2 className="font-display text-lg sm:text-xl tracking-[0.08em] uppercase text-[#F3EFE6] mt-0.5">
+              ACTIVE DISPATCHES // THE TRESTLEBOARD
+            </h2>
+          </div>
+          <p className="font-mono text-xs text-[#94A3B8]">
+            Showing{" "}
+            <span className="text-[#C5A059] font-semibold">
+              {filteredIncidents.length}
+            </span>{" "}
+            verified incident{" "}
+            {filteredIncidents.length === 1 ? "brief" : "briefs"}
+          </p>
+        </div>
+
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-center gap-3.5 sm:gap-5">
           {/* 1. Working Tool Selector */}
           <div className="flex items-center gap-2.5 bg-[#111726]/80 border border-[#8A6D3B]/50 px-3.5 py-2">
@@ -465,7 +474,7 @@ export function TrestleboardClient({
                   href={`/incidents/${leadPostMortemIncident.slug}`}
                   className="block group/lead"
                 >
-                  <h2 className="font-display italic text-2xl sm:text-3xl lg:text-[32px] text-[#F3EFE6] group-hover/lead:text-[#C5A059] transition-colors leading-tight">
+                  <h2 className="font-serif font-semibold italic text-2xl sm:text-3xl lg:text-[32px] text-[#F3EFE6] group-hover/lead:text-[#C5A059] transition-colors leading-tight normal-case">
                     {leadPostMortemIncident.title}
                   </h2>
                 </Link>

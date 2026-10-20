@@ -11,6 +11,20 @@ export interface ProportionalityCheck {
   structuralSignal: string;
 }
 
+export type IncidentImageSourceType =
+  | "rss"
+  | "og"
+  | "og_scraped"
+  | "wikimedia_commons"
+  | "upload"
+  | "svg_card"
+  | "none"
+  | "rss_extracted"
+  | "r2_upload"
+  | "external_url"
+  | "generated_card"
+  | null;
+
 export interface IncidentArticle {
   id: string;
   incidentCode: string; // e.g. #CAB-2026-1042
@@ -41,17 +55,7 @@ export interface IncidentArticle {
   imageUrl?: string;
   imageAlt?: string;
   imageCaption?: string;
-  imageSourceType?:
-    | "rss"
-    | "og"
-    | "upload"
-    | "svg_card"
-    | "none"
-    | "rss_extracted"
-    | "r2_upload"
-    | "external_url"
-    | "generated_card"
-    | null;
+  imageSourceType?: IncidentImageSourceType;
   editorialNotes?: string;
   isPinned?: boolean;
   isHidden?: boolean;

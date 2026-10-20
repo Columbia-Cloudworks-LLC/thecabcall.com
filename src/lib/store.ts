@@ -36,6 +36,7 @@ import {
   INITIAL_PIPELINE_RUNS,
 } from "./seed-data";
 import {
+  formatFailureModeDisplayLabel,
   getFailureModeBySlug,
   getWorkingToolBySlug,
   SreFailureModeId,
@@ -357,24 +358,48 @@ export function buildWeeklyTrestleboardState(
     )
   );
 
-  const [inc1, inc2, inc3] = anchorIncidents;
-  const anchor1Clause = inc1
-    ? `"${inc1.title}" (${inc1.sourceFeed})`
-    : "infrastructure compliance drift";
-  const anchor2Clause = inc2
-    ? `"${inc2.title}" (${inc2.sourceFeed})`
-    : "cross-boundary coordination strain";
-  const anchor3Clause = inc3
-    ? `"${inc3.title}" (${inc3.sourceFeed})`
-    : "deferred institutional capacity";
-
   const episodeNumber = pinnedEpisode.episodeNumber || 43;
+  const failureDisplayLabel = formatFailureModeDisplayLabel(primaryFailureMode);
 
-  const heroTitle = `CAB Weekly Brief #${episodeNumber}: ${dominantTool} (${dominantToolPercentage}%), ${primaryFailureMode}, and This Week's Trestleboard`;
+  const sectorSet = Array.from(
+    new Set(
+      incidents
+        .slice(0, 6)
+        .map((inc) => inc.domainSector)
+        .filter(Boolean)
+    )
+  );
+  const sectorPhrase =
+    sectorSet.length >= 2
+      ? `spanning ${sectorSet.slice(0, 3).join(", ").toLowerCase()}`
+      : "across public and private infrastructure";
 
-  const heroOpeningProse = `${dominantTool} leads this week's Trestleboard at ${dominantToolPercentage}% of active classifications, with ${primaryFailureMode} emerging as the primary operational failure mode across ${activeIncidentCount} verified incidents. Three anchor dispatches set the post-incident docket: ${anchor1Clause}; ${anchor2Clause}; and ${anchor3Clause}. Across all three events, the structural signal separates reactive commentary from the underlying gap between formal institutional rules and live operational state.`;
+  const structuralSynthesisByFailure: Record<SreFailureModeId, string> = {
+    "Configuration Drift":
+      "Across these dispatches, live operational practice quietly wandered off the written blueprint through unmonitored exceptions, deferred audits, and informal workarounds before any single alarm fired.",
+    "Cascading Failure":
+      "Across these dispatches, localized bottlenecks crossed organizational boundaries without functional firebreaks, turning isolated component strain into multi-system disruption.",
+    "Single Point of Failure (SPOF) / Untested Failover":
+      "Across these dispatches, nominal redundancy collapsed under real-world load because primary and backup paths shared hidden dependencies that were never verified in production.",
+    "Alert Fatigue & Signal Loss":
+      "Across these dispatches, high-volume procedural noise and reactive compliance theater exhausted operator bandwidth before genuine structural warnings could be acted upon.",
+    "Blame Culture vs. Root-Cause Isolation":
+      "Across these dispatches, institutional response fixated on proximate human error and individual scapegoats rather than isolating the upstream incentives and missing guardrails that shaped the breakdown.",
+    "Technical & Institutional Debt":
+      "Across these dispatches, years of deferred maintenance and underfunded operational capacity compounded until routine load forced emergency intervention.",
+    "Structural Friction":
+      "Across these dispatches, unmapped handoffs and competing institutional incentives pulled field execution away from its stated operational baseline.",
+  };
 
-  const podcastDescription = `Five-minute Friday synthesis anchored by ${dominantTool} (${dominantToolPercentage}%) and ${primaryFailureMode} across ${activeIncidentCount} active dispatches on the Trestleboard.`;
+  const thematicClause =
+    structuralSynthesisByFailure[primaryFailureMode] ||
+    structuralSynthesisByFailure["Configuration Drift"];
+
+  const heroTitle = `CAB Weekly Brief #${episodeNumber}: ${dominantTool} (${dominantToolPercentage}%), ${failureDisplayLabel}, and This Week's Trestleboard`;
+
+  const heroOpeningProse = `${dominantTool} leads this week's Trestleboard at ${dominantToolPercentage}% of active classifications, with ${failureDisplayLabel} emerging as the primary failure mode across ${activeIncidentCount} verified incident briefs ${sectorPhrase}. ${thematicClause} Applying ${dominantTool} separates the 24-hour commentary cycle from the underlying structural gap between formal institutional commitments and live shop-floor state.`;
+
+  const podcastDescription = `Friday audio synthesis anchored by ${dominantTool} (${dominantToolPercentage}%) and ${failureDisplayLabel} across ${activeIncidentCount} active dispatches on the Trestleboard.`;
 
   return Object.freeze({
     episodeNumber,

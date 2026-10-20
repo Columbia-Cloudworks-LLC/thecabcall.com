@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   isRenderablePublicEpisode,
   isRenderablePublicIncident,
+  mapDtoToCraftLexicon,
   projectPublicIncidentDto,
   PublicEpisodeDto,
   PublicIncidentDto,
@@ -259,19 +260,30 @@ export function mapD1RowToIncidentArticle(
       ? row.image_caption.trim()
       : `Blueprint Card · ${primaryTool} / ${sreFailureMode}`;
 
+  const cleanedTitle = (row.title || "")
+    .replace(/\s*:\s*Operational\s*&\s*Governance\s*Assessment\s*$/i, "")
+    .trim();
+  const cleanedOriginalTitle =
+    typeof row.original_title === "string" && row.original_title.trim().length > 0
+      ? row.original_title
+          .replace(/\s*:\s*Operational\s*&\s*Governance\s*Assessment\s*$/i, "")
+          .trim()
+      : cleanedTitle;
+  const effectiveTitleRewritten =
+    Number(row.title_rewritten ?? 0) === 1 &&
+    cleanedTitle !== cleanedOriginalTitle;
+
   const candidate: IncidentArticle = {
     id: `d1-inc-${row.id}`,
     incidentCode: `#CAB-2026-${incidentNumber}`,
-    slug: makeIncidentSlug(row.title, row.id),
+    slug: makeIncidentSlug(cleanedTitle, row.id),
     urlHash: row.url_hash,
     sourceFeed: row.source_feed.toUpperCase(),
-    title: row.title,
-    originalTitle:
-      typeof row.original_title === "string" && row.original_title.trim().length > 0
-        ? row.original_title.trim()
-        : row.title,
-    titleRewritten: Number(row.title_rewritten ?? 0) === 1,
+    title: cleanedTitle,
+    originalTitle: cleanedOriginalTitle,
+    titleRewritten: effectiveTitleRewritten,
     titleRewriteReason:
+      effectiveTitleRewritten &&
       typeof row.title_rewrite_reason === "string" &&
       row.title_rewrite_reason.trim().length > 0
         ? row.title_rewrite_reason.trim()
@@ -852,11 +864,12 @@ const PIPELINE_RUNS_SNAPSHOT_COLUMNS = `
 `;
 
 function mapPublicIncidentDtoToIncidentArticle(
-  dto: PublicIncidentDto
+  rawDto: PublicIncidentDto
 ): IncidentArticle | null {
-  if (!isRenderablePublicIncident(dto)) {
+  if (!isRenderablePublicIncident(rawDto)) {
     return null;
   }
+  const dto = mapDtoToCraftLexicon(rawDto);
   const defaultProbs: ToolProbabilityDistribution = {
     "24-Inch Gauge": 0.12,
     "Common Gavel": 0.12,

@@ -246,7 +246,20 @@ function mapWorkerRowToPublicIncidentDto(
     return null;
   }
 
-  const slugBase = row.title
+  const cleanedTitle = (row.title || "")
+    .replace(/\s*:\s*Operational\s*&\s*Governance\s*Assessment\s*$/i, "")
+    .trim();
+  const cleanedOriginalTitle =
+    typeof row.original_title === "string" && row.original_title.trim().length > 0
+      ? row.original_title
+          .replace(/\s*:\s*Operational\s*&\s*Governance\s*Assessment\s*$/i, "")
+          .trim()
+      : cleanedTitle;
+  const effectiveTitleRewritten =
+    Number(row.title_rewritten ?? 0) === 1 &&
+    cleanedTitle !== cleanedOriginalTitle;
+
+  const slugBase = cleanedTitle
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
@@ -264,7 +277,7 @@ function mapWorkerRowToPublicIncidentDto(
   const effectiveImageAlt =
     typeof row.image_alt === "string" && row.image_alt.trim().length > 0
       ? row.image_alt.trim()
-      : `${primaryTool} · ${sreFailureMode} telemetry blueprint for ${row.title}`;
+      : `${primaryTool} · ${sreFailureMode} telemetry blueprint for ${cleanedTitle}`;
   const effectiveImageCaption =
     typeof row.image_caption === "string" && row.image_caption.trim().length > 0
       ? row.image_caption.trim()
@@ -275,13 +288,11 @@ function mapWorkerRowToPublicIncidentDto(
     incidentCode: `#CAB-2026-${2000 + row.id}`,
     slug: `${slugBase || "incident"}-d1-${row.id}`,
     sourceFeed: row.source_feed.toUpperCase(),
-    title: row.title,
-    originalTitle:
-      typeof row.original_title === "string" && row.original_title.trim().length > 0
-        ? row.original_title.trim()
-        : row.title,
-    titleRewritten: Number(row.title_rewritten ?? 0) === 1,
+    title: cleanedTitle,
+    originalTitle: cleanedOriginalTitle,
+    titleRewritten: effectiveTitleRewritten,
     titleRewriteReason:
+      effectiveTitleRewritten &&
       typeof row.title_rewrite_reason === "string" &&
       row.title_rewrite_reason.trim().length > 0
         ? row.title_rewrite_reason.trim()
@@ -3708,6 +3719,8 @@ const worker = {
           if (action === "attach_image") {
             const mode = body.generateSvgCard
               ? "generated_card"
+              : body.imageSourceType === "wikimedia_commons"
+              ? "wikimedia_commons"
               : body.extractFromSource
               ? "rss_extracted"
               : !body.imageUrl || body.imageSourceType === "none"

@@ -102,7 +102,7 @@ export function SiteHeader() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileExpandedIds, setMobileExpandedIds] = useState<
     Record<string, boolean>
-  >({ trestleboard: true });
+  >({});
 
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navContainerRef = useRef<HTMLDivElement | null>(null);
