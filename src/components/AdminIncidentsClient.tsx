@@ -4,7 +4,11 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AdminFeedsClient } from "./AdminFeedsClient";
 import { AdminFiltersClient } from "./AdminFiltersClient";
-import { HeroCornerBrackets } from "./ui/BroadsheetPrimitives";
+import { formatTranscriptParagraphs } from "@/lib/episode-metadata";
+import {
+  HairlineSection,
+  HeroCornerBrackets,
+} from "./ui/BroadsheetPrimitives";
 import type { AuthenticatedAdminActor } from "@/pipeline/auth";
 import type {
   AuditChainVerificationResult,
@@ -665,17 +669,19 @@ export function AdminIncidentsClient({
             </p>
           </div>
 
-          {/* Compact Summary Badges */}
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="px-3 py-1.5 bg-[#0B0E14] border border-[#8A6D3B]/45 font-sans text-[#F3EFE6]">
+          {/* Compact Summary Metrics */}
+          <div className="flex flex-wrap items-center gap-3 text-xs font-sans text-[#F3EFE6]">
+            <span>
               <strong className="text-[#C5A059]">{counts.synthesized}</strong>{" "}
               Published Briefs
             </span>
-            <span className="px-3 py-1.5 bg-[#0B0E14] border border-[#8A6D3B]/45 font-sans text-[#F3EFE6]">
+            <span className="text-[#8A6D3B]/60">•</span>
+            <span>
               <strong className="text-emerald-300">{counts.rewritten}</strong>{" "}
               Calm Headlines
             </span>
-            <span className="px-3 py-1.5 bg-[#0B0E14] border border-[#8A6D3B]/45 font-sans text-[#F3EFE6]">
+            <span className="text-[#8A6D3B]/60">•</span>
+            <span>
               <strong className="text-[#C5A059]">{initialFeeds.length}</strong>{" "}
               RSS Sources
             </span>
@@ -686,17 +692,17 @@ export function AdminIncidentsClient({
         <div
           role="tablist"
           aria-label="Editorial & Feeds Workspace Views"
-          className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-4 border-t border-[#8A6D3B]/35"
+          className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-[#8A6D3B]/35 pt-4 border-t border-[#8A6D3B]/35"
         >
           <button
             type="button"
             role="tab"
             aria-selected={activeView === "stories"}
             onClick={() => setActiveView("stories")}
-            className={`px-4 py-3 text-left border transition-all duration-200 ease-out cursor-pointer ${
+            className={`py-2 sm:pr-4 text-left transition-all duration-200 ease-out cursor-pointer ${
               activeView === "stories"
-                ? "bg-[#C5A059]/15 border-[#C5A059] text-[#F3EFE6]"
-                : "bg-[#0B0E14]/80 border-[#8A6D3B]/40 text-[#94A3B8] hover:text-[#F3EFE6] hover:border-[#C5A059]/60"
+                ? "border-b-2 border-b-[#C5A059] text-[#F3EFE6]"
+                : "text-[#94A3B8] hover:text-[#F3EFE6]"
             }`}
           >
             <div className="font-display text-xs uppercase tracking-wider font-bold">
@@ -712,10 +718,10 @@ export function AdminIncidentsClient({
             role="tab"
             aria-selected={activeView === "feeds"}
             onClick={() => setActiveView("feeds")}
-            className={`px-4 py-3 text-left border transition-all duration-200 ease-out cursor-pointer ${
+            className={`py-2 sm:px-4 text-left transition-all duration-200 ease-out cursor-pointer ${
               activeView === "feeds"
-                ? "bg-[#C5A059]/15 border-[#C5A059] text-[#F3EFE6]"
-                : "bg-[#0B0E14]/80 border-[#8A6D3B]/40 text-[#94A3B8] hover:text-[#F3EFE6] hover:border-[#C5A059]/60"
+                ? "border-b-2 border-b-[#C5A059] text-[#F3EFE6]"
+                : "text-[#94A3B8] hover:text-[#F3EFE6]"
             }`}
           >
             <div className="font-display text-xs uppercase tracking-wider font-bold">
@@ -731,10 +737,10 @@ export function AdminIncidentsClient({
             role="tab"
             aria-selected={activeView === "rules"}
             onClick={() => setActiveView("rules")}
-            className={`px-4 py-3 text-left border transition-all duration-200 ease-out cursor-pointer ${
+            className={`py-2 sm:pl-4 text-left transition-all duration-200 ease-out cursor-pointer ${
               activeView === "rules"
-                ? "bg-[#C5A059]/15 border-[#C5A059] text-[#F3EFE6]"
-                : "bg-[#0B0E14]/80 border-[#8A6D3B]/40 text-[#94A3B8] hover:text-[#F3EFE6] hover:border-[#C5A059]/60"
+                ? "border-b-2 border-b-[#C5A059] text-[#F3EFE6]"
+                : "text-[#94A3B8] hover:text-[#F3EFE6]"
             }`}
           >
             <div className="font-display text-xs uppercase tracking-wider font-bold">
@@ -810,7 +816,7 @@ export function AdminIncidentsClient({
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="divide-y divide-[#8A6D3B]/30">
               {transforms.map((t) => {
                 const meta = TRANSFORM_LABELS[t.transformKey] || {
                   title: t.transformKey,
@@ -823,27 +829,23 @@ export function AdminIncidentsClient({
                 return (
                   <div
                     key={t.transformKey}
-                    className={`bg-[#0B0E14] border border-[#8A6D3B]/40 p-5 space-y-3 ${
-                      isCustomDirective ? "md:col-span-2" : ""
-                    }`}
+                    className="py-4 first:pt-0 last:pb-0 space-y-3"
                   >
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                      <div className="space-y-1.5">
+                      <div className="space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-display text-sm font-bold text-[#F3EFE6]">
                             {meta.title}
                           </span>
-                          <span className="px-2 py-0.5 bg-[#111726] border border-[#8A6D3B]/45 font-display text-[10px] uppercase tracking-wider text-[#C5A059]">
-                            {meta.badge}
+                          <span className="font-display text-[10px] uppercase tracking-wider text-[#C5A059]">
+                            • {meta.badge}
                           </span>
                           <span
-                            className={`px-2 py-0.5 font-display text-[10px] font-bold uppercase tracking-wider ${
-                              t.enabled
-                                ? "bg-emerald-950/70 border border-emerald-500/40 text-emerald-300"
-                                : "bg-[#111726] border border-[#8A6D3B]/40 text-[#94A3B8]"
+                            className={`font-display text-[10px] font-bold uppercase tracking-wider ${
+                              t.enabled ? "text-emerald-300" : "text-[#94A3B8]"
                             }`}
                           >
-                            {t.enabled ? "Active" : "Paused"}
+                            ({t.enabled ? "Active" : "Paused"})
                           </span>
                         </div>
                         <p className="font-serif text-xs text-[#94A3B8] leading-relaxed">
@@ -856,19 +858,19 @@ export function AdminIncidentsClient({
                           type="button"
                           disabled={submitting}
                           onClick={() => handleToggleTransform(t, !t.enabled)}
-                          className={`px-3.5 py-1.5 font-display text-[11px] font-bold uppercase tracking-wider transition-all duration-200 ease-out cursor-pointer shrink-0 ${
+                          className={`font-display text-[11px] font-bold uppercase tracking-wider transition-all duration-200 ease-out cursor-pointer shrink-0 ${
                             t.enabled
-                              ? "bg-[#111726] hover:border-red-500/50 border border-[#8A6D3B]/50 text-[#94A3B8] hover:text-red-200"
-                              : "bg-emerald-950/60 hover:bg-emerald-900/70 border border-emerald-500/40 text-emerald-200"
+                              ? "text-[#94A3B8] hover:text-red-300"
+                              : "text-emerald-300 hover:text-emerald-200"
                           }`}
                         >
-                          {t.enabled ? "Pause" : "Enable"}
+                          {t.enabled ? "Pause Rule" : "Enable Rule"}
                         </button>
                       )}
                     </div>
 
                     {isCustomDirective && (
-                      <div className="pt-3 border-t border-[#8A6D3B]/30 space-y-2.5">
+                      <div className="pt-3 border-t border-[#8A6D3B]/25 space-y-2.5">
                         <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059]">
                           Standing Editorial Guidance Instruction:
                         </label>
@@ -879,7 +881,7 @@ export function AdminIncidentsClient({
                             setCustomDirectiveText(e.target.value)
                           }
                           placeholder="e.g., Emphasize concrete failure recovery timelines and avoid speculative policy prescriptions."
-                          className="w-full px-3 py-2 bg-[#111726] border border-[#8A6D3B]/45 text-xs font-serif text-[#F3EFE6]"
+                          className="w-full max-w-prose px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 text-xs font-serif text-[#F3EFE6]"
                         />
                         {canMutate && (
                           <div className="flex justify-end">
@@ -945,7 +947,7 @@ export function AdminIncidentsClient({
                 className="w-full px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 text-xs font-sans text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
               />
 
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-3">
                 {[
                   { id: "ALL", label: "All" },
                   { id: "synthesized", label: "Published" },
@@ -957,10 +959,10 @@ export function AdminIncidentsClient({
                     key={tab.id}
                     type="button"
                     onClick={() => setStatusFilter(tab.id)}
-                    className={`px-2.5 py-1 font-display text-[10px] uppercase tracking-wider cursor-pointer border ${
+                    className={`pb-1 font-display text-[10px] uppercase tracking-wider cursor-pointer transition-colors ${
                       statusFilter === tab.id
-                        ? "bg-[#C5A059] border-[#C5A059] text-[#0B0E14] font-bold"
-                        : "bg-[#0B0E14] border-[#8A6D3B]/40 text-[#94A3B8]"
+                        ? "border-b-2 border-[#C5A059] text-[#F3EFE6] font-bold"
+                        : "text-[#94A3B8] hover:text-[#F3EFE6]"
                     }`}
                   >
                     {tab.label}
@@ -969,7 +971,7 @@ export function AdminIncidentsClient({
               </div>
             </div>
 
-            <div className="space-y-2.5 max-h-[760px] overflow-y-auto pr-1">
+            <div className="divide-y divide-[#8A6D3B]/25 max-h-[760px] overflow-y-auto pr-1">
               {filteredIncidents.map((inc) => {
                 const isSelected = inc.id === selectedIncidentId;
                 return (
@@ -977,10 +979,10 @@ export function AdminIncidentsClient({
                     key={inc.id}
                     type="button"
                     onClick={() => selectIncidentForEdit(inc)}
-                    className={`w-full text-left p-3.5 border transition-all duration-200 ease-out cursor-pointer space-y-1.5 ${
+                    className={`w-full text-left py-3 px-3 transition-all duration-200 ease-out cursor-pointer space-y-1.5 ${
                       isSelected
-                        ? "bg-[#C5A059]/10 border-[#C5A059] shadow-sm"
-                        : "bg-[#0B0E14] border-[#8A6D3B]/35 hover:border-[#C5A059]/60"
+                        ? "bg-[#C5A059]/10 border-l-4 border-l-[#C5A059]"
+                        : "hover:bg-[#0B0E14]/60"
                     }`}
                   >
                     <div className="flex flex-wrap items-center justify-between gap-1.5 text-[10px]">
@@ -993,19 +995,15 @@ export function AdminIncidentsClient({
                           {inc.sourceFeed}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1 font-display uppercase tracking-wider">
+                      <div className="flex items-center gap-2 font-display uppercase tracking-wider">
                         {inc.isPinned && (
-                          <span className="px-1.5 py-0.5 bg-[#C5A059]/20 text-[#C5A059]">
-                            Pinned
-                          </span>
+                          <span className="text-[#C5A059]">Pinned</span>
                         )}
                         {inc.isHidden && (
-                          <span className="px-1.5 py-0.5 bg-rose-950/80 text-rose-300">
-                            Hidden
-                          </span>
+                          <span className="text-rose-300">Hidden</span>
                         )}
                         {inc.titleRewritten && (
-                          <span className="px-1.5 py-0.5 bg-emerald-950/80 border border-emerald-500/40 text-emerald-300">
+                          <span className="text-emerald-300">
                             Calm Headline
                           </span>
                         )}
@@ -1022,7 +1020,7 @@ export function AdminIncidentsClient({
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between text-[11px] text-[#94A3B8] pt-1">
+                    <div className="flex items-center justify-between text-[11px] text-[#94A3B8] pt-0.5">
                       <span className="font-display text-[10px] uppercase tracking-wider text-[#C5A059]">
                         {inc.primaryTool} · {inc.sreFailureMode}
                       </span>
@@ -1062,12 +1060,12 @@ export function AdminIncidentsClient({
                     </h2>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-4 shrink-0">
                     <a
                       href={`https://thecabcall.com/incidents/${selectedIncident.slug}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="px-3 py-1.5 border border-[#8A6D3B]/50 hover:border-[#C5A059] bg-[#0B0E14] font-display text-xs uppercase tracking-wider text-[#C5A059]"
+                      className="font-display text-xs uppercase tracking-wider text-[#C5A059] hover:text-[#F3EFE6] transition-colors"
                     >
                       Public Brief ↗
                     </a>
@@ -1075,7 +1073,7 @@ export function AdminIncidentsClient({
                       href={selectedIncident.sourceUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="px-3 py-1.5 border border-[#8A6D3B]/50 hover:border-[#C5A059] bg-[#0B0E14] font-display text-xs uppercase tracking-wider text-[#F3EFE6]"
+                      className="font-display text-xs uppercase tracking-wider text-[#94A3B8] hover:text-[#C5A059] transition-colors"
                     >
                       Source Article ↗
                     </a>
@@ -1083,14 +1081,14 @@ export function AdminIncidentsClient({
                 </div>
 
                 {/* Inspector Section Tabs */}
-                <div className="flex flex-wrap gap-2 border-b border-[#8A6D3B]/35 pb-3">
+                <div className="flex flex-wrap gap-5 border-b border-[#8A6D3B]/35 pb-2">
                   <button
                     type="button"
                     onClick={() => setStudioSection("headline")}
-                    className={`px-3.5 py-2 font-display text-xs uppercase tracking-wider cursor-pointer border transition-all duration-200 ease-out ${
+                    className={`pb-1.5 font-display text-xs uppercase tracking-wider cursor-pointer transition-all duration-200 ease-out ${
                       studioSection === "headline"
-                        ? "bg-[#C5A059] border-[#C5A059] text-[#0B0E14] font-bold"
-                        : "bg-[#0B0E14] border-[#8A6D3B]/45 text-[#94A3B8] hover:text-[#F3EFE6]"
+                        ? "border-b-2 border-[#C5A059] text-[#F3EFE6] font-bold"
+                        : "text-[#94A3B8] hover:text-[#F3EFE6]"
                     }`}
                   >
                     1. Calm Headline Rewrite
@@ -1098,10 +1096,10 @@ export function AdminIncidentsClient({
                   <button
                     type="button"
                     onClick={() => setStudioSection("media")}
-                    className={`px-3.5 py-2 font-display text-xs uppercase tracking-wider cursor-pointer border transition-all duration-200 ease-out ${
+                    className={`pb-1.5 font-display text-xs uppercase tracking-wider cursor-pointer transition-all duration-200 ease-out ${
                       studioSection === "media"
-                        ? "bg-[#C5A059] border-[#C5A059] text-[#0B0E14] font-bold"
-                        : "bg-[#0B0E14] border-[#8A6D3B]/45 text-[#94A3B8] hover:text-[#F3EFE6]"
+                        ? "border-b-2 border-[#C5A059] text-[#F3EFE6] font-bold"
+                        : "text-[#94A3B8] hover:text-[#F3EFE6]"
                     }`}
                   >
                     2. Story Illustration &amp; Card
@@ -1109,10 +1107,10 @@ export function AdminIncidentsClient({
                   <button
                     type="button"
                     onClick={() => setStudioSection("brief")}
-                    className={`px-3.5 py-2 font-display text-xs uppercase tracking-wider cursor-pointer border transition-all duration-200 ease-out ${
+                    className={`pb-1.5 font-display text-xs uppercase tracking-wider cursor-pointer transition-all duration-200 ease-out ${
                       studioSection === "brief"
-                        ? "bg-[#C5A059] border-[#C5A059] text-[#0B0E14] font-bold"
-                        : "bg-[#0B0E14] border-[#8A6D3B]/45 text-[#94A3B8] hover:text-[#F3EFE6]"
+                        ? "border-b-2 border-[#C5A059] text-[#F3EFE6] font-bold"
+                        : "text-[#94A3B8] hover:text-[#F3EFE6]"
                     }`}
                   >
                     3. Craftsman&apos;s Brief &amp; Working Tools
@@ -1122,8 +1120,8 @@ export function AdminIncidentsClient({
                 {/* SECTION 1: CALM HEADLINE REWRITE */}
                 {studioSection === "headline" && (
                   <div className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="p-3.5 bg-[#0B0E14] border border-[#8A6D3B]/40 space-y-1">
+                    <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-[#8A6D3B]/30 pb-4 border-b border-[#8A6D3B]/30">
+                      <div className="pb-3 md:pb-0 md:pr-4 space-y-1">
                         <div className="font-display text-[10px] uppercase tracking-wider text-[#94A3B8]">
                           Original Source Headline (Preserved for Disclosure)
                         </div>
@@ -1135,7 +1133,7 @@ export function AdminIncidentsClient({
                         </div>
                       </div>
 
-                      <div className="p-3.5 bg-[#0B0E14] border border-emerald-500/40 space-y-1">
+                      <div className="pt-3 md:pt-0 md:pl-4 space-y-1">
                         <div className="flex items-center justify-between font-display text-[10px] uppercase tracking-wider text-emerald-400">
                           <span>Published Display Headline</span>
                           <span>
@@ -1176,7 +1174,7 @@ export function AdminIncidentsClient({
                     </div>
 
                     {canMutate && (
-                      <div className="flex flex-wrap items-center gap-2.5 pt-2">
+                      <div className="flex flex-wrap items-center gap-4 pt-2">
                         <button
                           type="button"
                           disabled={submitting}
@@ -1191,7 +1189,7 @@ export function AdminIncidentsClient({
                           onClick={() =>
                             handleRewriteTitle({ autoDeescalate: true })
                           }
-                          className="px-4 py-2 bg-emerald-950/70 hover:bg-emerald-900/80 border border-emerald-500/50 text-emerald-200 font-display text-xs font-semibold uppercase tracking-wider cursor-pointer"
+                          className="font-display text-xs uppercase tracking-wider text-emerald-300 hover:text-emerald-200 cursor-pointer transition-colors"
                         >
                           ⚡ Suggest Calm Headline
                         </button>
@@ -1202,7 +1200,7 @@ export function AdminIncidentsClient({
                             onClick={() =>
                               handleRewriteTitle({ restoreOriginal: true })
                             }
-                            className="px-3.5 py-2 bg-[#0B0E14] hover:border-[#C5A059] border border-[#8A6D3B]/45 text-[#F3EFE6] font-display text-xs uppercase tracking-wider cursor-pointer"
+                            className="font-display text-xs uppercase tracking-wider text-[#94A3B8] hover:text-[#F3EFE6] cursor-pointer transition-colors"
                           >
                             Restore Original Title
                           </button>
@@ -1215,17 +1213,17 @@ export function AdminIncidentsClient({
                 {/* SECTION 2: STORY ILLUSTRATION & BLUEPRINT CARD */}
                 {studioSection === "media" && (
                   <div className="space-y-5">
-                    <div className="p-4 bg-[#0B0E14] border border-[#8A6D3B]/40 space-y-3">
+                    <div className="space-y-3">
                       <div className="flex items-center justify-between text-xs">
                         <span className="font-display text-[#C5A059] uppercase tracking-wider">
                           Current Story Illustration
                         </span>
-                        <span className="px-2 py-0.5 bg-[#111726] border border-[#8A6D3B]/40 font-mono text-[#94A3B8] text-[11px]">
+                        <span className="font-mono text-[#94A3B8] text-[11px]">
                           Source: {selectedIncident.imageSourceType}
                         </span>
                       </div>
 
-                      <div className="overflow-hidden border border-[#8A6D3B]/35 bg-[#111726]">
+                      <div className="overflow-hidden bg-[#0B0E14]">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src={`${
@@ -1247,14 +1245,14 @@ export function AdminIncidentsClient({
                       </div>
 
                       {canMutate && (
-                        <div className="flex flex-wrap gap-2 pt-1">
+                        <div className="flex flex-wrap items-center gap-4 pt-1">
                           <button
                             type="button"
                             disabled={submitting}
                             onClick={() =>
                               handleAttachImage({ generateSvgCard: true })
                             }
-                            className="px-3.5 py-1.5 bg-[#111726] hover:border-[#C5A059] border border-[#8A6D3B]/50 font-display text-xs uppercase tracking-wider text-[#C5A059] cursor-pointer"
+                            className="px-3.5 py-1.5 bg-[#0B0E14] hover:border-[#C5A059] border border-[#8A6D3B]/50 font-display text-xs uppercase tracking-wider text-[#C5A059] cursor-pointer"
                           >
                             Use Masonic Blueprint Card
                           </button>
@@ -1264,7 +1262,7 @@ export function AdminIncidentsClient({
                             onClick={() =>
                               handleAttachImage({ extractFromSource: true })
                             }
-                            className="px-3.5 py-1.5 bg-[#111726] hover:border-[#C5A059] border border-[#8A6D3B]/50 font-display text-xs uppercase tracking-wider text-[#F3EFE6] cursor-pointer"
+                            className="font-display text-xs uppercase tracking-wider text-[#94A3B8] hover:text-[#F3EFE6] cursor-pointer transition-colors"
                           >
                             Extract Lead Image from Source URL
                           </button>
@@ -1274,7 +1272,7 @@ export function AdminIncidentsClient({
                             onClick={() =>
                               handleAttachImage({ clearImage: true })
                             }
-                            className="px-3 py-1.5 bg-red-950/40 hover:bg-red-900/60 border border-red-500/40 font-display text-xs uppercase tracking-wider text-red-200 cursor-pointer"
+                            className="font-display text-xs uppercase tracking-wider text-[#94A3B8] hover:text-red-300 cursor-pointer transition-colors"
                           >
                             Clear Image
                           </button>
@@ -1283,7 +1281,7 @@ export function AdminIncidentsClient({
                     </div>
 
                     {canMutate && (
-                      <div className="p-4 bg-[#0B0E14] border border-[#8A6D3B]/40 space-y-3">
+                      <HairlineSection className="space-y-3">
                         <div className="font-display text-xs uppercase tracking-wider text-[#C5A059]">
                           Upload Custom Illustration
                         </div>
@@ -1294,7 +1292,7 @@ export function AdminIncidentsClient({
                             onChange={(e) =>
                               setUploadFile(e.target.files?.[0] || null)
                             }
-                            className="text-xs font-sans text-[#F3EFE6] file:mr-3 file:px-3 file:py-1.5 file:border-0 file:bg-[#111726] file:text-[#C5A059] file:font-display file:uppercase file:text-xs"
+                            className="text-xs font-sans text-[#F3EFE6] file:mr-3 file:px-3 file:py-1.5 file:border-0 file:bg-[#0B0E14] file:text-[#C5A059] file:font-display file:uppercase file:text-xs"
                           />
                           <button
                             type="button"
@@ -1305,10 +1303,10 @@ export function AdminIncidentsClient({
                             Upload &amp; Attach
                           </button>
                         </div>
-                      </div>
+                      </HairlineSection>
                     )}
 
-                    <div className="space-y-3">
+                    <HairlineSection className="space-y-3">
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="sm:col-span-2">
                           <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
@@ -1377,7 +1375,7 @@ export function AdminIncidentsClient({
                           Save Illustration Settings
                         </button>
                       )}
-                    </div>
+                    </HairlineSection>
                   </div>
                 )}
 
@@ -1449,7 +1447,7 @@ export function AdminIncidentsClient({
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 p-3.5 bg-[#0B0E14] border border-[#8A6D3B]/40">
+                    <HairlineSection className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                       <div>
                         <label className="block font-display text-[10px] uppercase tracking-wider text-[#94A3B8] mb-1">
                           Publication State:
@@ -1459,7 +1457,7 @@ export function AdminIncidentsClient({
                           onChange={(e) =>
                             setStatusDraft(e.target.value as typeof statusDraft)
                           }
-                          className="w-full px-2.5 py-1.5 bg-[#111726] border border-[#8A6D3B]/45 text-xs font-sans text-[#F3EFE6]"
+                          className="w-full px-2.5 py-1.5 bg-[#0B0E14] border border-[#8A6D3B]/45 text-xs font-sans text-[#F3EFE6]"
                         >
                           <option value="synthesized">Published</option>
                           <option value="triaged">Pending Brief</option>
@@ -1495,7 +1493,7 @@ export function AdminIncidentsClient({
                         />
                         <span>Lead Post-Mortem</span>
                       </label>
-                    </div>
+                    </HairlineSection>
 
                     <div>
                       <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
@@ -1505,19 +1503,32 @@ export function AdminIncidentsClient({
                         rows={2}
                         value={execSummaryDraft}
                         onChange={(e) => setExecSummaryDraft(e.target.value)}
-                        className="w-full px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 font-serif text-sm text-[#F3EFE6]"
+                        className="w-full max-w-prose px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 font-serif text-sm text-[#F3EFE6] leading-relaxed"
                       />
                     </div>
 
                     <div>
-                      <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8] mb-1">
-                        Section I — What Happened (The Plain Facts):
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block font-display text-[11px] uppercase tracking-wider text-[#94A3B8]">
+                          Section I — What Happened (The Plain Facts):
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSocraticBriefDraft(
+                              formatTranscriptParagraphs(socraticBriefDraft)
+                            )
+                          }
+                          className="font-display text-[10px] uppercase tracking-wider text-[#C5A059] hover:text-[#F3EFE6] cursor-pointer"
+                        >
+                          Format Paragraphs
+                        </button>
+                      </div>
                       <textarea
-                        rows={3}
+                        rows={4}
                         value={socraticBriefDraft}
                         onChange={(e) => setSocraticBriefDraft(e.target.value)}
-                        className="w-full px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 font-serif text-sm text-[#F3EFE6]"
+                        className="w-full max-w-prose px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 font-serif text-sm text-[#F3EFE6] leading-relaxed"
                       />
                     </div>
 
@@ -1530,7 +1541,7 @@ export function AdminIncidentsClient({
                           rows={3}
                           value={noiseDraft}
                           onChange={(e) => setNoiseDraft(e.target.value)}
-                          className="w-full px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 font-serif text-sm text-[#F3EFE6]"
+                          className="w-full px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 font-serif text-sm text-[#F3EFE6] leading-relaxed"
                         />
                       </div>
 
@@ -1542,7 +1553,7 @@ export function AdminIncidentsClient({
                           rows={3}
                           value={signalDraft}
                           onChange={(e) => setSignalDraft(e.target.value)}
-                          className="w-full px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 font-serif text-sm text-[#F3EFE6]"
+                          className="w-full px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 font-serif text-sm text-[#F3EFE6] leading-relaxed"
                         />
                       </div>
                     </div>
@@ -1574,15 +1585,28 @@ export function AdminIncidentsClient({
 
                     {isLeadDraft && (
                       <div>
-                        <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059] mb-1">
-                          Lead Post-Mortem Analysis:
-                        </label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059]">
+                            Lead Post-Mortem Analysis:
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setLeadAnalysisDraft(
+                                formatTranscriptParagraphs(leadAnalysisDraft)
+                              )
+                            }
+                            className="font-display text-[10px] uppercase tracking-wider text-[#C5A059] hover:text-[#F3EFE6] cursor-pointer"
+                          >
+                            Format Paragraphs
+                          </button>
+                        </div>
                         <textarea
                           rows={4}
                           value={leadAnalysisDraft}
                           onChange={(e) => setLeadAnalysisDraft(e.target.value)}
                           placeholder="Enter 2+ paragraphs separated by a blank line…"
-                          className="w-full px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 font-serif text-sm text-[#F3EFE6]"
+                          className="w-full max-w-prose px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/45 font-serif text-sm text-[#F3EFE6] leading-relaxed"
                         />
                       </div>
                     )}
@@ -1601,7 +1625,7 @@ export function AdminIncidentsClient({
                     </div>
 
                     {canMutate && (
-                      <div className="flex flex-wrap items-center gap-2.5 pt-2">
+                      <div className="flex flex-wrap items-center gap-4 pt-2">
                         <button
                           type="button"
                           disabled={submitting}
@@ -1614,7 +1638,7 @@ export function AdminIncidentsClient({
                           type="button"
                           disabled={submitting}
                           onClick={() => handleSaveBriefOverride(true)}
-                          className="px-4 py-2 bg-[#0B0E14] hover:border-[#C5A059] border border-[#8A6D3B]/50 text-[#C5A059] font-display text-xs font-semibold uppercase tracking-wider cursor-pointer"
+                          className="font-display text-xs uppercase tracking-wider text-[#C5A059] hover:text-[#F3EFE6] cursor-pointer transition-colors"
                         >
                           ↻ Re-Draft Brief Automatically
                         </button>

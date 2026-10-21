@@ -10,7 +10,11 @@ import type {
 } from "@/pipeline/audit";
 import type { AdminEpisodeRecord } from "@/pipeline/rollup";
 import type { TelemetryArticleRow } from "@/pipeline/synthesize";
-import { HeroCornerBrackets } from "./ui/BroadsheetPrimitives";
+import { formatTranscriptParagraphs } from "@/lib/episode-metadata";
+import {
+  HairlineSection,
+  HeroCornerBrackets,
+} from "./ui/BroadsheetPrimitives";
 
 interface AdminEpisodesClientProps {
   actor: AuthenticatedAdminActor;
@@ -719,8 +723,8 @@ export function AdminEpisodesClient({
               <span className="font-display text-[11px] uppercase tracking-[0.18em] text-[#C5A059]">
                 Podcast Studio • External Media &amp; Transcripts
               </span>
-              <span className="px-2 py-0.5 bg-[#0B0E14] border border-[#8A6D3B]/45 font-sans text-[11px] text-[#94A3B8]">
-                {episodes.length} published episodes
+              <span className="font-sans text-[11px] text-[#94A3B8]">
+                • {episodes.length} published episodes
               </span>
             </div>
             <h1 className="font-display text-2xl sm:text-3xl text-[#F3EFE6] tracking-wide">
@@ -733,12 +737,12 @@ export function AdminEpisodesClient({
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <div className="flex flex-wrap items-center gap-4 shrink-0">
             <a
               href="https://thecabcall.com/podcast"
               target="_blank"
               rel="noopener noreferrer"
-              className="px-3.5 py-2 border border-[#8A6D3B]/50 hover:border-[#C5A059] bg-[#0B0E14] text-xs font-display uppercase tracking-wider text-[#F3EFE6] transition-all duration-200 ease-out"
+              className="text-xs font-display uppercase tracking-wider text-[#94A3B8] hover:text-[#C5A059] transition-colors"
             >
               Public Podcast Page ↗
             </a>
@@ -746,7 +750,7 @@ export function AdminEpisodesClient({
               href="https://thecabcall.com/feed.xml"
               target="_blank"
               rel="noopener noreferrer"
-              className="px-3.5 py-2 border border-[#8A6D3B]/50 hover:border-[#C5A059] bg-[#0B0E14] text-xs font-display uppercase tracking-wider text-[#F3EFE6] transition-all duration-200 ease-out"
+              className="text-xs font-display uppercase tracking-wider text-[#94A3B8] hover:text-[#C5A059] transition-colors"
             >
               Podcast RSS ↗
             </a>
@@ -816,7 +820,7 @@ export function AdminEpisodesClient({
           <form onSubmit={handlePublishEpisode} className="space-y-5">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Episode Number */}
-              <div className="bg-[#0B0E14] border border-[#8A6D3B]/40 p-3.5 space-y-2">
+              <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="font-display text-xs uppercase tracking-wider text-[#F3EFE6]">
                     Episode Number
@@ -844,17 +848,17 @@ export function AdminEpisodesClient({
                     onChange={(e) =>
                       setCustomEpNumber(parseInt(e.target.value, 10) || 22)
                     }
-                    className="w-full bg-[#111726] border border-[#8A6D3B]/50 px-3 py-1.5 text-sm font-mono text-[#F3EFE6]"
+                    className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-mono text-[#F3EFE6]"
                   />
                 ) : (
-                  <div className="px-3 py-1.5 bg-[#111726] border border-[#8A6D3B]/35 font-mono text-sm text-[#C5A059] font-bold">
+                  <div className="px-3 py-2 bg-[#0B0E14] border border-[#8A6D3B]/35 font-mono text-xs text-[#C5A059] font-bold">
                     Auto (#{nextAutoEpisodeNumber})
                   </div>
                 )}
               </div>
 
               {/* Audio File Selector (MP3 / M4A / WAV / AAC) */}
-              <div className="bg-[#0B0E14] border border-[#8A6D3B]/40 p-3.5 space-y-2 md:col-span-2">
+              <div className="space-y-1.5 md:col-span-2">
                 <label className="block font-display text-xs uppercase tracking-wider text-[#C5A059]">
                   Upload Produced Audio File (MP3, M4A, WAV, AAC, OGG, FLAC)
                 </label>
@@ -862,7 +866,7 @@ export function AdminEpisodesClient({
                   type="file"
                   accept="audio/*,.mp3,.m4a,.mp4,.wav,.aac,.ogg,.flac"
                   onChange={handleNewAudioFileChange}
-                  className="w-full bg-[#111726] border border-[#8A6D3B]/50 px-3 py-1.5 text-xs font-mono text-[#F3EFE6] file:mr-3 file:px-2.5 file:py-1 file:border-0 file:bg-[#C5A059] file:text-[#0B0E14] file:font-display file:text-[10px] file:uppercase file:font-bold file:cursor-pointer"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-1.5 text-xs font-mono text-[#F3EFE6] file:mr-3 file:px-2.5 file:py-1 file:border-0 file:bg-[#C5A059] file:text-[#0B0E14] file:font-display file:text-[10px] file:uppercase file:font-bold file:cursor-pointer"
                 />
                 {newAudioFile && (
                   <div className="text-[11px] font-mono text-emerald-300">
@@ -987,18 +991,31 @@ export function AdminEpisodesClient({
               </div>
 
               <div className="space-y-1.5">
-                <label className="block font-display text-xs uppercase tracking-wider text-[#C5A059]">
-                  Full Episode Transcript{" "}
-                  <span className="text-[#94A3B8] normal-case font-serif italic">
-                    (optional)
-                  </span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="block font-display text-xs uppercase tracking-wider text-[#C5A059]">
+                    Full Episode Transcript{" "}
+                    <span className="text-[#94A3B8] normal-case font-serif italic">
+                      (optional)
+                    </span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setNewTranscript(
+                        formatTranscriptParagraphs(newTranscript)
+                      )
+                    }
+                    className="font-display text-[10px] uppercase tracking-wider text-[#C5A059] hover:text-[#F3EFE6] cursor-pointer"
+                  >
+                    Format Paragraphs
+                  </button>
+                </div>
                 <textarea
                   rows={4}
                   value={newTranscript}
                   onChange={(e) => setNewTranscript(e.target.value)}
                   placeholder="Paste episode transcript..."
-                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-serif text-[#F3EFE6]"
+                  className="w-full max-w-prose bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-2 text-xs font-serif text-[#F3EFE6] leading-relaxed"
                 />
               </div>
             </div>
@@ -1033,14 +1050,14 @@ export function AdminEpisodesClient({
 
       {/* Filter & Search Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#111726] border border-[#8A6D3B]/45 p-4">
-        <div className="flex flex-wrap items-center gap-2 font-display text-xs uppercase tracking-wider">
+        <div className="flex flex-wrap items-center gap-4 font-display text-xs uppercase tracking-wider">
           <button
             type="button"
             onClick={() => setSeriesFilter("all")}
-            className={`px-3 py-1.5 border transition-all duration-200 ease-out cursor-pointer ${
+            className={`pb-1 transition-all duration-200 ease-out cursor-pointer ${
               seriesFilter === "all"
-                ? "bg-[#C5A059] text-[#0B0E14] border-[#C5A059] font-bold"
-                : "bg-[#0B0E14] text-[#94A3B8] border-[#8A6D3B]/40 hover:text-[#F3EFE6]"
+                ? "border-b-2 border-[#C5A059] text-[#F3EFE6] font-bold"
+                : "text-[#94A3B8] hover:text-[#F3EFE6]"
             }`}
           >
             All Episodes ({episodes.length})
@@ -1049,10 +1066,10 @@ export function AdminEpisodesClient({
             <button
               type="button"
               onClick={() => setSeriesFilter("weekly_rollup")}
-              className={`px-3 py-1.5 border transition-all duration-200 ease-out cursor-pointer ${
+              className={`pb-1 transition-all duration-200 ease-out cursor-pointer ${
                 seriesFilter === "weekly_rollup"
-                  ? "bg-[#C5A059] text-[#0B0E14] border-[#C5A059] font-bold"
-                  : "bg-[#0B0E14] text-[#94A3B8] border-[#8A6D3B]/40 hover:text-[#F3EFE6]"
+                  ? "border-b-2 border-[#C5A059] text-[#F3EFE6] font-bold"
+                  : "text-[#94A3B8] hover:text-[#F3EFE6]"
               }`}
             >
               Weekly Briefs ({weeklyRollupCount})
@@ -1062,10 +1079,10 @@ export function AdminEpisodesClient({
             <button
               type="button"
               onClick={() => setSeriesFilter("legacy_archive")}
-              className={`px-3 py-1.5 border transition-all duration-200 ease-out cursor-pointer ${
+              className={`pb-1 transition-all duration-200 ease-out cursor-pointer ${
                 seriesFilter === "legacy_archive"
-                  ? "bg-[#C5A059] text-[#0B0E14] border-[#C5A059] font-bold"
-                  : "bg-[#0B0E14] text-[#94A3B8] border-[#8A6D3B]/40 hover:text-[#F3EFE6]"
+                  ? "border-b-2 border-[#C5A059] text-[#F3EFE6] font-bold"
+                  : "text-[#94A3B8] hover:text-[#F3EFE6]"
               }`}
             >
               Foundational Essays ({legacyArchiveCount})
@@ -1123,7 +1140,7 @@ export function AdminEpisodesClient({
               >
                 <div className="space-y-1.5 flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2.5 text-xs">
-                    <span className="px-2 py-0.5 bg-[#0B0E14] border border-[#C5A059]/60 font-display text-[11px] uppercase tracking-wider text-[#C5A059] font-bold">
+                    <span className="font-display text-[11px] uppercase tracking-wider text-[#C5A059] font-bold">
                       Ep #{ep.episodeNumber}
                     </span>
                     <span className="font-sans text-xs text-[#94A3B8]">
@@ -1149,7 +1166,7 @@ export function AdminEpisodesClient({
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-                  <span className="px-3 py-1.5 bg-[#0B0E14] border border-[#8A6D3B]/50 group-hover:border-[#C5A059] font-display text-xs uppercase tracking-wider text-[#C5A059] group-hover:text-[#F3EFE6] transition-all duration-200 ease-out">
+                  <span className="font-display text-xs uppercase tracking-wider text-[#C5A059] group-hover:text-[#F3EFE6] transition-all duration-200 ease-out">
                     Inspect &amp; Edit →
                   </span>
                 </div>
@@ -1189,7 +1206,7 @@ export function AdminEpisodesClient({
             <div className="flex items-start justify-between gap-4 border-b border-[#8A6D3B]/40 pb-4">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 bg-[#0B0E14] border border-[#C5A059]/60 font-display text-[10px] uppercase tracking-wider text-[#C5A059] font-bold">
+                  <span className="font-display text-[10px] uppercase tracking-wider text-[#C5A059] font-bold">
                     Ep #{inspectingEpisode.episodeNumber}
                   </span>
                   <span className="font-sans text-xs text-[#94A3B8]">
@@ -1205,14 +1222,14 @@ export function AdminEpisodesClient({
               <button
                 type="button"
                 onClick={() => setInspectingEpisode(null)}
-                className="px-3 py-1.5 bg-[#0B0E14] border border-[#8A6D3B]/50 hover:border-[#C5A059] font-display text-xs uppercase tracking-wider text-[#94A3B8] hover:text-[#F3EFE6] cursor-pointer shrink-0"
+                className="font-display text-xs uppercase tracking-wider text-[#94A3B8] hover:text-[#F3EFE6] cursor-pointer shrink-0"
               >
                 ✕ Close
               </button>
             </div>
 
             {/* 1. Single Shared Audio Player at the Top of the Drawer */}
-            <div className="bg-[#0B0E14] border border-[#8A6D3B]/45 p-4 space-y-2.5">
+            <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-display text-[11px] uppercase tracking-wider text-[#C5A059]">
                   Episode Audio Player ({inspectingEpisode.r2Key})
@@ -1277,7 +1294,7 @@ export function AdminEpisodesClient({
                   required
                   value={editSummary}
                   onChange={(e) => setEditSummary(e.target.value)}
-                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 p-3 font-serif text-sm text-[#F3EFE6] leading-relaxed focus:border-[#C5A059] focus:outline-none"
+                  className="w-full max-w-prose bg-[#0B0E14] border border-[#8A6D3B]/45 p-3 font-serif text-sm text-[#F3EFE6] leading-relaxed focus:border-[#C5A059] focus:outline-none"
                 />
               </div>
 
@@ -1293,12 +1310,12 @@ export function AdminEpisodesClient({
                   value={editExtendedNotes}
                   onChange={(e) => setEditExtendedNotes(e.target.value)}
                   placeholder="Detailed show notes or listener guide..."
-                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 p-3 font-serif text-sm text-[#F3EFE6] leading-relaxed focus:border-[#C5A059] focus:outline-none"
+                  className="w-full max-w-prose bg-[#0B0E14] border border-[#8A6D3B]/45 p-3 font-serif text-sm text-[#F3EFE6] leading-relaxed focus:border-[#C5A059] focus:outline-none"
                 />
               </div>
 
               {/* Replace / Upload Audio File Option */}
-              <div className="bg-[#0B0E14] border border-[#8A6D3B]/40 p-3.5 space-y-2.5">
+              <HairlineSection className="space-y-2">
                 <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059]">
                   Replace / Upload Audio File (MP3, M4A, WAV, AAC)
                 </label>
@@ -1306,7 +1323,7 @@ export function AdminEpisodesClient({
                   type="file"
                   accept="audio/*,.mp3,.m4a,.mp4,.wav,.aac,.ogg,.flac"
                   onChange={handleReplacementAudioFileChange}
-                  className="w-full bg-[#111726] border border-[#8A6D3B]/50 px-3 py-1.5 text-xs font-mono text-[#F3EFE6] file:mr-3 file:px-2.5 file:py-1 file:border-0 file:bg-[#C5A059] file:text-[#0B0E14] file:font-display file:text-[10px] file:uppercase file:font-bold file:cursor-pointer"
+                  className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-3 py-1.5 text-xs font-mono text-[#F3EFE6] file:mr-3 file:px-2.5 file:py-1 file:border-0 file:bg-[#C5A059] file:text-[#0B0E14] file:font-display file:text-[10px] file:uppercase file:font-bold file:cursor-pointer"
                 />
                 {replacementAudioFile && (
                   <div className="text-[11px] font-mono text-emerald-300">
@@ -1315,22 +1332,41 @@ export function AdminEpisodesClient({
                     {formatDurationMmSs(editDurationSeconds)})
                   </div>
                 )}
-              </div>
+              </HairlineSection>
 
               {/* Transcript Editor */}
-              <div className="space-y-3 pt-3 border-t border-[#8A6D3B]/35">
+              <HairlineSection className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-display text-xs uppercase tracking-wider text-[#F3EFE6]">
-                    Episode Transcript
-                  </span>
-                  <div className="flex items-center gap-1.5 font-display text-[11px] uppercase tracking-wider">
+                  <div className="flex items-center gap-3">
+                    <span className="font-display text-xs uppercase tracking-wider text-[#F3EFE6]">
+                      Episode Transcript
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (editMode === "sections") {
+                          setEditPart1(formatTranscriptParagraphs(editPart1));
+                          setEditPart2(formatTranscriptParagraphs(editPart2));
+                          setEditPart3(formatTranscriptParagraphs(editPart3));
+                        } else {
+                          setEditRawTranscript(
+                            formatTranscriptParagraphs(editRawTranscript)
+                          );
+                        }
+                      }}
+                      className="font-display text-[10px] uppercase tracking-wider text-[#C5A059] hover:text-[#F3EFE6] cursor-pointer"
+                    >
+                      Format Paragraphs
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-3 font-display text-[11px] uppercase tracking-wider">
                     <button
                       type="button"
                       onClick={() => setEditMode("raw")}
-                      className={`px-2.5 py-1 border cursor-pointer ${
+                      className={`pb-0.5 cursor-pointer ${
                         editMode === "raw"
-                          ? "bg-[#C5A059] text-[#0B0E14] border-[#C5A059] font-bold"
-                          : "bg-[#0B0E14] text-[#94A3B8] border-[#8A6D3B]/40"
+                          ? "border-b-2 border-[#C5A059] text-[#F3EFE6] font-bold"
+                          : "text-[#94A3B8] hover:text-[#F3EFE6]"
                       }`}
                     >
                       Full Text
@@ -1338,10 +1374,10 @@ export function AdminEpisodesClient({
                     <button
                       type="button"
                       onClick={() => setEditMode("sections")}
-                      className={`px-2.5 py-1 border cursor-pointer ${
+                      className={`pb-0.5 cursor-pointer ${
                         editMode === "sections"
-                          ? "bg-[#C5A059] text-[#0B0E14] border-[#C5A059] font-bold"
-                          : "bg-[#0B0E14] text-[#94A3B8] border-[#8A6D3B]/40"
+                          ? "border-b-2 border-[#C5A059] text-[#F3EFE6] font-bold"
+                          : "text-[#94A3B8] hover:text-[#F3EFE6]"
                       }`}
                     >
                       3-Part Structured
@@ -1364,7 +1400,7 @@ export function AdminEpisodesClient({
                         rows={4}
                         value={editPart1}
                         onChange={(e) => setEditPart1(e.target.value)}
-                        className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 p-3 font-serif text-sm text-[#F3EFE6] leading-relaxed focus:border-[#C5A059] focus:outline-none"
+                        className="w-full max-w-prose bg-[#0B0E14] border border-[#8A6D3B]/45 p-3 font-serif text-sm text-[#F3EFE6] leading-relaxed focus:border-[#C5A059] focus:outline-none"
                       />
                     </div>
 
@@ -1381,7 +1417,7 @@ export function AdminEpisodesClient({
                         rows={5}
                         value={editPart2}
                         onChange={(e) => setEditPart2(e.target.value)}
-                        className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 p-3 font-serif text-sm text-[#F3EFE6] leading-relaxed focus:border-[#C5A059] focus:outline-none"
+                        className="w-full max-w-prose bg-[#0B0E14] border border-[#8A6D3B]/45 p-3 font-serif text-sm text-[#F3EFE6] leading-relaxed focus:border-[#C5A059] focus:outline-none"
                       />
                     </div>
 
@@ -1398,7 +1434,7 @@ export function AdminEpisodesClient({
                         rows={4}
                         value={editPart3}
                         onChange={(e) => setEditPart3(e.target.value)}
-                        className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 p-3 font-serif text-sm text-[#F3EFE6] leading-relaxed focus:border-[#C5A059] focus:outline-none"
+                        className="w-full max-w-prose bg-[#0B0E14] border border-[#8A6D3B]/45 p-3 font-serif text-sm text-[#F3EFE6] leading-relaxed focus:border-[#C5A059] focus:outline-none"
                       />
                     </div>
                   </div>
@@ -1416,15 +1452,15 @@ export function AdminEpisodesClient({
                       rows={10}
                       value={editRawTranscript}
                       onChange={(e) => setEditRawTranscript(e.target.value)}
-                      className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 p-3 font-serif text-sm text-[#F3EFE6] leading-relaxed focus:border-[#C5A059] focus:outline-none"
+                      className="w-full max-w-prose max-h-[360px] overflow-y-auto bg-[#0B0E14] border border-[#8A6D3B]/45 p-3 font-serif text-sm text-[#F3EFE6] leading-relaxed focus:border-[#C5A059] focus:outline-none"
                     />
                   </div>
                 )}
-              </div>
+              </HairlineSection>
 
               {/* Audit Note & Save Button */}
               {canMutate && (
-                <div className="space-y-3 pt-2 border-t border-[#8A6D3B]/35">
+                <HairlineSection className="space-y-3">
                   <div>
                     <label className="block font-display text-[11px] uppercase tracking-wider text-[#C5A059] mb-1">
                       Editorial Note (Recorded in Audit Ledger)
@@ -1438,11 +1474,11 @@ export function AdminEpisodesClient({
                     />
                   </div>
 
-                  <div className="flex justify-end gap-2">
+                  <div className="flex items-center justify-end gap-4">
                     <button
                       type="button"
                       onClick={() => setInspectingEpisode(null)}
-                      className="px-4 py-2 border border-[#8A6D3B]/45 font-display text-xs uppercase tracking-wider text-[#94A3B8] hover:text-[#F3EFE6] cursor-pointer"
+                      className="font-display text-xs uppercase tracking-wider text-[#94A3B8] hover:text-[#F3EFE6] cursor-pointer"
                     >
                       Close
                     </button>
@@ -1454,12 +1490,12 @@ export function AdminEpisodesClient({
                       {submittingEdit ? "Saving Changes…" : "Save Changes"}
                     </button>
                   </div>
-                </div>
+                </HairlineSection>
               )}
             </form>
 
             {/* 3. Collapsible Technical Metadata Accordion */}
-            <div className="border-t border-[#8A6D3B]/35 pt-4">
+            <HairlineSection>
               <button
                 type="button"
                 onClick={() => setShowTechMetadata((prev) => !prev)}
@@ -1470,7 +1506,7 @@ export function AdminEpisodesClient({
               </button>
 
               {showTechMetadata && (
-                <div className="mt-3 bg-[#0B0E14] border border-[#8A6D3B]/35 p-3.5 space-y-2 text-xs">
+                <div className="mt-3 pt-3 border-t border-[#8A6D3B]/25 space-y-2 text-xs">
                   <div className="flex justify-between gap-2">
                     <span className="text-[#94A3B8]">Database Record ID:</span>
                     <code className="font-mono text-[#F3EFE6]">
@@ -1504,7 +1540,7 @@ export function AdminEpisodesClient({
                         type="text"
                         value={editAudioUrl}
                         onChange={(e) => setEditAudioUrl(e.target.value)}
-                        className="w-full bg-[#111726] border border-[#8A6D3B]/40 px-2.5 py-1.5 font-mono text-xs text-[#F3EFE6]"
+                        className="w-full bg-[#0B0E14] border border-[#8A6D3B]/40 px-2.5 py-1.5 font-mono text-xs text-[#F3EFE6]"
                       />
                     </div>
                     <div>
@@ -1520,7 +1556,7 @@ export function AdminEpisodesClient({
                             parseInt(e.target.value, 10) || 1800
                           )
                         }
-                        className="w-full bg-[#111726] border border-[#8A6D3B]/40 px-2.5 py-1.5 font-mono text-xs text-[#F3EFE6]"
+                        className="w-full bg-[#0B0E14] border border-[#8A6D3B]/40 px-2.5 py-1.5 font-mono text-xs text-[#F3EFE6]"
                       />
                     </div>
                   </div>
@@ -1533,7 +1569,7 @@ export function AdminEpisodesClient({
                         type="text"
                         value={editArtworkUrl}
                         onChange={(e) => setEditArtworkUrl(e.target.value)}
-                        className="w-full bg-[#111726] border border-[#8A6D3B]/40 px-2.5 py-1.5 font-mono text-xs text-[#F3EFE6]"
+                        className="w-full bg-[#0B0E14] border border-[#8A6D3B]/40 px-2.5 py-1.5 font-mono text-xs text-[#F3EFE6]"
                       />
                     </div>
                     <div>
@@ -1544,7 +1580,7 @@ export function AdminEpisodesClient({
                         type="text"
                         value={editPublishedAt}
                         onChange={(e) => setEditPublishedAt(e.target.value)}
-                        className="w-full bg-[#111726] border border-[#8A6D3B]/40 px-2.5 py-1.5 font-mono text-xs text-[#F3EFE6]"
+                        className="w-full bg-[#0B0E14] border border-[#8A6D3B]/40 px-2.5 py-1.5 font-mono text-xs text-[#F3EFE6]"
                       />
                     </div>
                   </div>
@@ -1558,12 +1594,12 @@ export function AdminEpisodesClient({
                       onChange={(e) =>
                         setEditExternalSourcesJson(e.target.value)
                       }
-                      className="w-full bg-[#111726] border border-[#8A6D3B]/40 p-2 font-mono text-[11px] text-[#F3EFE6]"
+                      className="w-full bg-[#0B0E14] border border-[#8A6D3B]/40 p-2 font-mono text-[11px] text-[#F3EFE6]"
                     />
                   </div>
                 </div>
               )}
-            </div>
+            </HairlineSection>
 
             {/* 4. Danger Zone / Delete Episode Action */}
             {canMutate && (
@@ -1580,7 +1616,7 @@ export function AdminEpisodesClient({
                 {showDangerZone && (
                   <form
                     onSubmit={handleConfirmDelete}
-                    className="mt-3 bg-red-950/25 border border-red-500/40 p-4 space-y-3"
+                    className="mt-3 pt-3 border-t border-red-500/30 space-y-3"
                   >
                     <p className="font-serif text-xs text-red-200/90">
                       Removing Episode #{inspectingEpisode.episodeNumber}{" "}

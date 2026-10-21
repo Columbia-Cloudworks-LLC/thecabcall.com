@@ -53,15 +53,16 @@ export default function AdminPublishingPage() {
               Syndication &amp; Outbound Feeds
             </h1>
             <p className="font-serif text-sm text-[#94A3B8] max-w-2xl">
-              Public distribution channels serving weekly podcast episodes and
+              All three public distribution channels are active, serving{" "}
+              {INITIAL_EPISODES.length} published podcast episodes and
               Craftsman&apos;s Briefs to podcast directories and RSS subscribers.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-4">
             <Link
               href="/admin/episodes"
-              className="px-3.5 py-2 bg-[#0B0E14] border border-[#8A6D3B]/50 hover:border-[#C5A059] text-xs font-display uppercase tracking-wider text-[#F3EFE6] transition-all duration-200 ease-out"
+              className="text-xs font-display uppercase tracking-wider text-[#94A3B8] hover:text-[#C5A059] transition-colors"
             >
               Open Podcast Studio →
             </Link>
@@ -79,21 +80,18 @@ export default function AdminPublishingPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         {SYNDICATION_FEEDS.map((feed) => (
-          <div
+          <a
             key={feed.path}
-            className="relative bg-[#111726] border border-[#8A6D3B]/45 hover:border-[#C5A059]/80 p-5 flex flex-col justify-between gap-4 transition-all duration-200 ease-out"
+            href={feed.path}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group relative bg-[#111726] border border-[#8A6D3B]/45 hover:border-[#C5A059] p-5 flex flex-col justify-between gap-4 transition-all duration-200 ease-out"
           >
             <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="px-2 py-0.5 bg-[#0B0E14] border border-[#8A6D3B]/45 font-mono text-[10px] uppercase tracking-wider text-[#C5A059]">
-                  {feed.format}
-                </span>
-                <span className="inline-flex items-center gap-1 text-[11px] font-sans text-emerald-300">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  Active
-                </span>
+              <div className="font-mono text-[10px] uppercase tracking-wider text-[#C5A059] font-semibold">
+                {feed.format}
               </div>
-              <h2 className="font-display text-base text-[#F3EFE6] tracking-wide">
+              <h2 className="font-display text-base text-[#F3EFE6] group-hover:text-[#C5A059] transition-colors tracking-wide">
                 {feed.title}
               </h2>
               <p className="font-serif text-xs text-[#94A3B8] leading-relaxed">
@@ -101,25 +99,15 @@ export default function AdminPublishingPage() {
               </p>
             </div>
 
-            <div className="pt-3 border-t border-[#8A6D3B]/30 space-y-2.5">
-              <div className="font-mono text-[11px] text-[#C5A059] truncate bg-[#0B0E14] px-2.5 py-1.5 border border-[#8A6D3B]/30">
+            <div className="pt-3 border-t border-[#8A6D3B]/30 flex items-center justify-between gap-2">
+              <span className="font-mono text-[11px] text-[#94A3B8] truncate">
                 {feed.url}
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] font-sans text-[#94A3B8]">
-                  {INITIAL_EPISODES.length} published episodes
-                </span>
-                <a
-                  href={feed.path}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs font-display uppercase tracking-wider text-[#C5A059] hover:text-[#F3EFE6] transition-colors"
-                >
-                  Inspect Feed ↗
-                </a>
-              </div>
+              </span>
+              <span className="text-xs font-display uppercase tracking-wider text-[#C5A059] group-hover:text-[#F3EFE6] transition-colors shrink-0">
+                Inspect Feed ↗
+              </span>
             </div>
-          </div>
+          </a>
         ))}
       </div>
     </div>

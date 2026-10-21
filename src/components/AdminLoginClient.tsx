@@ -100,12 +100,15 @@ export function AdminLoginClient({
 
         {/* Top Security Banner */}
         <div className="bg-[#0B0E14] border-b border-[#8A6D3B]/40 px-6 py-4 flex items-start gap-3">
-          <span className="inline-flex items-center justify-center w-6 h-6 rounded-sm bg-[#C5A059]/15 border border-[#C5A059]/45 text-[#C5A059] font-mono text-xs shrink-0 mt-0.5">
+          <span
+            aria-hidden="true"
+            className="inline-flex items-center justify-center w-5 h-5 text-[#C5A059] text-sm shrink-0 mt-0.5"
+          >
             🔒
           </span>
           <div>
             <div className="font-mono text-[11px] uppercase tracking-widest text-[#C5A059] font-semibold">
-              Security Gate // Immutable Audit Enforcement
+              Restricted Editorial Console
             </div>
             <p className="font-serif text-xs text-[#E5E0D8]/90 mt-1 leading-relaxed">
               Restricted Change Advisory Board Console — Access limited to the
@@ -119,7 +122,7 @@ export function AdminLoginClient({
           {/* Header */}
           <div>
             <div className="font-mono text-xs uppercase tracking-widest text-[#C5A059]">
-              THE CAB CALL // THE EDITOR&apos;S STUDY
+              The CAB Call • The Editor&apos;s Study
             </div>
             <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#F3EFE6] mt-1 tracking-wide">
               Change Advisory Board Console

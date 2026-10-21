@@ -555,11 +555,7 @@ export function AdminFiltersClient({
   function getFilterTypeBadge(type: IngestFilterType) {
     const spec = FILTER_TYPES.find((t) => t.value === type);
     return (
-      <span
-        className={`inline-block px-2 py-0.5 border font-display text-[10px] uppercase tracking-wider font-semibold ${
-          spec?.badgeColor || "bg-[#0B0E14] border-[#8A6D3B]/45 text-[#94A3B8]"
-        }`}
-      >
+      <span className="inline-block font-display text-[10px] uppercase tracking-wider font-semibold text-[#C5A059]">
         {spec?.label || type}
       </span>
     );
@@ -637,7 +633,7 @@ export function AdminFiltersClient({
                 out as low-signal noise.
               </p>
             </div>
-            <span className="px-2.5 py-1 bg-[#C5A059]/15 border border-[#C5A059] font-display text-xs font-bold text-[#C5A059]">
+            <span className="font-display text-sm font-bold text-[#C5A059]">
               ≥ {Math.round(minSysProb * 100)}%
             </span>
           </div>
@@ -947,7 +943,7 @@ export function AdminFiltersClient({
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 bg-[#0B0E14] border border-[#8A6D3B]/40 p-3.5">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 pt-1">
           <div className="md:col-span-5">
             <label className="block font-display text-[10px] uppercase tracking-wider text-[#94A3B8] mb-1">
               Sample Headline (Optional)
@@ -957,7 +953,7 @@ export function AdminFiltersClient({
               value={customTestHeadline}
               onChange={(e) => setCustomTestHeadline(e.target.value)}
               placeholder="e.g. Inspector General Audit Finds Skipped FAA Failover Checks"
-              className="w-full bg-[#111726] border border-[#8A6D3B]/45 px-2.5 py-1.5 text-xs font-serif text-[#F3EFE6]"
+              className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-2.5 py-1.5 text-xs font-serif text-[#F3EFE6]"
             />
           </div>
           <div className="md:col-span-5">
@@ -969,7 +965,7 @@ export function AdminFiltersClient({
               value={customTestExcerpt}
               onChange={(e) => setCustomTestExcerpt(e.target.value)}
               placeholder="Enter sample paragraph to test keyword matching…"
-              className="w-full bg-[#111726] border border-[#8A6D3B]/45 px-2.5 py-1.5 text-xs font-serif text-[#F3EFE6]"
+              className="w-full bg-[#0B0E14] border border-[#8A6D3B]/45 px-2.5 py-1.5 text-xs font-serif text-[#F3EFE6]"
             />
           </div>
           <div className="md:col-span-2 flex items-end">
@@ -977,7 +973,7 @@ export function AdminFiltersClient({
               type="button"
               disabled={runningDryRun}
               onClick={() => handleRunDryRun(Boolean(newPattern.trim()))}
-              className="w-full py-1.5 px-3 bg-[#111726] hover:border-[#C5A059] border border-[#8A6D3B]/55 font-display text-xs uppercase tracking-wider text-[#C5A059] cursor-pointer"
+              className="w-full py-1.5 px-3 bg-[#0B0E14] hover:border-[#C5A059] border border-[#8A6D3B]/55 font-display text-xs uppercase tracking-wider text-[#C5A059] cursor-pointer"
             >
               Test Sample
             </button>
@@ -985,24 +981,26 @@ export function AdminFiltersClient({
         </div>
 
         {dryRunResult && (
-          <div className="space-y-4 pt-2">
-            <div className="flex flex-wrap items-center gap-3 text-xs">
-              <span className="px-3 py-1 bg-[#0B0E14] border border-[#8A6D3B]/45 font-sans text-[#F3EFE6]">
+          <div className="space-y-3 pt-3 border-t border-[#8A6D3B]/35">
+            <div className="flex flex-wrap items-center gap-4 text-xs">
+              <span className="font-sans text-[#F3EFE6]">
                 Evaluated: <strong>{dryRunResult.totalTested}</strong> stories
               </span>
-              <span className="px-3 py-1 bg-emerald-950/60 border border-emerald-500/40 font-sans text-emerald-300">
+              <span className="text-[#8A6D3B]/50">•</span>
+              <span className="font-sans text-emerald-300">
                 Accepted: <strong>{dryRunResult.triagedCount}</strong> (≥{" "}
                 {Math.round(
                   dryRunResult.thresholds.jevMinSystemicProb * 100
                 )}
                 %)
               </span>
-              <span className="px-3 py-1 bg-red-950/60 border border-red-500/40 font-sans text-red-300">
+              <span className="text-[#8A6D3B]/50">•</span>
+              <span className="font-sans text-red-300">
                 Filtered Out: <strong>{dryRunResult.droppedCount}</strong>
               </span>
             </div>
 
-            <div className="overflow-x-auto max-h-[360px] border border-[#8A6D3B]/40">
+            <div className="overflow-x-auto max-h-[360px] border-t border-[#8A6D3B]/35">
               <table className="w-full text-left border-collapse text-xs">
                 <thead className="bg-[#0B0E14] sticky top-0 font-display text-[11px] uppercase tracking-wider text-[#94A3B8] border-b border-[#8A6D3B]/35">
                   <tr>
@@ -1018,10 +1016,10 @@ export function AdminFiltersClient({
                     <tr key={idx} className="hover:bg-[#111726]">
                       <td className="py-2.5 px-3">
                         <span
-                          className={`inline-block px-2 py-0.5 border font-display text-[10px] font-bold uppercase tracking-wider ${
+                          className={`inline-block font-display text-[10px] font-bold uppercase tracking-wider ${
                             item.finalOutcome === "triaged"
-                              ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-300"
-                              : "bg-red-950/60 border-red-500/40 text-red-300"
+                              ? "text-emerald-300"
+                              : "text-red-300"
                           }`}
                         >
                           {item.finalOutcome === "triaged"
@@ -1098,14 +1096,14 @@ export function AdminFiltersClient({
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-3">
             <button
               type="button"
               onClick={() => setSelectedTypeTab("all")}
-              className={`px-2.5 py-1 border font-display text-[10px] uppercase tracking-wider cursor-pointer ${
+              className={`pb-1 font-display text-[10px] uppercase tracking-wider cursor-pointer transition-colors ${
                 selectedTypeTab === "all"
-                  ? "bg-[#C5A059] border-[#C5A059] text-[#0B0E14] font-bold"
-                  : "bg-[#0B0E14] border-[#8A6D3B]/40 text-[#94A3B8]"
+                  ? "border-b-2 border-[#C5A059] text-[#F3EFE6] font-bold"
+                  : "text-[#94A3B8] hover:text-[#F3EFE6]"
               }`}
             >
               All ({filters.length})
@@ -1119,10 +1117,10 @@ export function AdminFiltersClient({
                   key={ft.value}
                   type="button"
                   onClick={() => setSelectedTypeTab(ft.value)}
-                  className={`px-2.5 py-1 border font-display text-[10px] uppercase tracking-wider cursor-pointer ${
+                  className={`pb-1 font-display text-[10px] uppercase tracking-wider cursor-pointer transition-colors ${
                     selectedTypeTab === ft.value
-                      ? "bg-[#C5A059] border-[#C5A059] text-[#0B0E14] font-bold"
-                      : "bg-[#0B0E14] border-[#8A6D3B]/40 text-[#94A3B8]"
+                      ? "border-b-2 border-[#C5A059] text-[#F3EFE6] font-bold"
+                      : "text-[#94A3B8] hover:text-[#F3EFE6]"
                   }`}
                 >
                   {ft.label} ({count})
@@ -1158,10 +1156,10 @@ export function AdminFiltersClient({
                       type="button"
                       disabled={!canMutate}
                       onClick={() => handleToggleFilterEnabled(filter)}
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 border font-display text-[10px] uppercase tracking-wider font-semibold cursor-pointer ${
+                      className={`inline-flex items-center gap-1.5 font-display text-[10px] uppercase tracking-wider font-semibold cursor-pointer transition-colors ${
                         filter.enabled
-                          ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-300"
-                          : "bg-[#0B0E14] border-[#8A6D3B]/40 text-[#94A3B8]"
+                          ? "text-emerald-300 hover:text-emerald-200"
+                          : "text-[#94A3B8] hover:text-[#F3EFE6]"
                       }`}
                     >
                       <span>{filter.enabled ? "●" : "⏸"}</span>
@@ -1173,7 +1171,7 @@ export function AdminFiltersClient({
                     <div className="font-display text-sm text-[#F3EFE6]">
                       {filter.name}
                     </div>
-                    <div className="mt-1">
+                    <div className="mt-0.5">
                       {getFilterTypeBadge(filter.filterType)}
                     </div>
                     {filter.description && (
@@ -1198,9 +1196,7 @@ export function AdminFiltersClient({
                   </td>
 
                   <td className="py-3.5 px-4 font-mono text-[11px] text-[#C5A059] max-w-xs break-all">
-                    <code className="bg-[#0B0E14] border border-[#8A6D3B]/40 px-2 py-1 block">
-                      {filter.pattern}
-                    </code>
+                    <code className="block">{filter.pattern}</code>
                   </td>
 
                   <td className="py-3.5 px-4 font-mono text-xs font-bold text-[#F3EFE6]">
@@ -1213,7 +1209,7 @@ export function AdminFiltersClient({
 
                   <td className="py-3.5 px-4 text-right">
                     {canMutate && (
-                      <div className="inline-flex items-center gap-1.5 font-display text-[10px] uppercase tracking-wider">
+                      <div className="inline-flex items-center gap-3 font-display text-[10px] uppercase tracking-wider">
                         <button
                           type="button"
                           onClick={() => openEditModal(filter)}
@@ -1227,7 +1223,7 @@ export function AdminFiltersClient({
                             setDeletingFilter(filter);
                             setDeleteReason("");
                           }}
-                          className="px-2.5 py-1 bg-red-950/40 hover:bg-red-900/60 border border-red-500/40 text-red-200 cursor-pointer"
+                          className="text-[#94A3B8] hover:text-red-300 cursor-pointer transition-colors"
                         >
                           Remove
                         </button>

@@ -343,8 +343,8 @@ export function AdminUsersClient({
       <div className="relative bg-[#111726] border border-[#8A6D3B]/45 rounded-md p-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 shadow-lg">
         <HeroCornerBrackets size="sm" />
         <div className="space-y-1.5">
-          <div className="font-mono text-xs uppercase tracking-widest text-[#C5A059] font-semibold">
-            SETTINGS &amp; AUDIT // TEAM &amp; ACCESS
+          <div className="font-display text-[11px] uppercase tracking-[0.18em] text-[#C5A059] font-semibold">
+            Settings &amp; Audit • Team &amp; Access
           </div>
           <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#F3EFE6] tracking-wide">
             Team &amp; Access Governance
@@ -448,8 +448,8 @@ export function AdminUsersClient({
       {canManageUsers && (
         <div className="bg-[#111726] border border-[#8A6D3B]/45 rounded-md p-6 space-y-5 shadow-md">
           <div>
-            <div className="font-mono text-xs uppercase tracking-widest text-[#C5A059]">
-              INVITE TEAM MEMBER // GOOGLE OAUTH OR MAGIC LINK
+            <div className="font-display text-[11px] uppercase tracking-[0.18em] text-[#C5A059]">
+              Invite Team Member
             </div>
             <h2 className="font-display text-xl font-bold text-[#F3EFE6] mt-1">
               Authorize New Change Advisory Board Account
@@ -619,14 +619,14 @@ export function AdminUsersClient({
 
                     <td className="py-3.5 px-4 font-mono">
                       <span
-                        className={`inline-block px-2 py-0.5 rounded-sm uppercase text-[10px] font-semibold ${
+                        className={`inline-block uppercase text-[10px] font-semibold ${
                           u.role === "owner"
-                            ? "bg-[#C5A059]/20 border border-[#C5A059]/50 text-[#C5A059]"
+                            ? "text-[#C5A059]"
                             : u.role === "admin"
-                            ? "bg-sky-950/60 border border-sky-500/40 text-sky-300"
+                            ? "text-sky-300"
                             : u.role === "editor"
-                            ? "bg-emerald-950/60 border border-emerald-500/40 text-emerald-300"
-                            : "bg-purple-950/60 border border-purple-500/40 text-purple-300"
+                            ? "text-emerald-300"
+                            : "text-purple-300"
                         }`}
                       >
                         {u.role}
@@ -635,12 +635,12 @@ export function AdminUsersClient({
 
                     <td className="py-3.5 px-4 font-mono">
                       <span
-                        className={`inline-block px-2 py-0.5 rounded-sm uppercase text-[10px] font-semibold ${
+                        className={`inline-block uppercase text-[10px] font-semibold ${
                           u.status === "active"
-                            ? "bg-emerald-950/60 border border-emerald-500/40 text-emerald-300"
+                            ? "text-emerald-300"
                             : u.status === "invited"
-                            ? "bg-amber-950/60 border border-amber-500/40 text-amber-300"
-                            : "bg-red-950/60 border border-red-500/40 text-red-300"
+                            ? "text-amber-300"
+                            : "text-red-300"
                         }`}
                       >
                         {u.status}
@@ -668,7 +668,7 @@ export function AdminUsersClient({
                         </span>
                       ) : (
                         canManageUsers && (
-                          <div className="inline-flex flex-wrap items-center justify-end gap-2">
+                          <div className="inline-flex flex-wrap items-center justify-end gap-3">
                             {u.status !== "revoked" && (
                               <>
                                 <button
@@ -676,7 +676,7 @@ export function AdminUsersClient({
                                   onClick={() =>
                                     handleGenerateDirectMagicLink(u)
                                   }
-                                  className="px-2.5 py-1 rounded-sm bg-[#0B0E14] hover:bg-[#111726] border border-[#C5A059]/45 text-[#C5A059] font-mono text-[11px] cursor-pointer"
+                                  className="px-2.5 py-1 rounded-sm bg-[#0B0E14] hover:border-[#C5A059] border border-[#8A6D3B]/45 text-[#C5A059] font-mono text-[11px] cursor-pointer"
                                 >
                                   Send / Copy Magic Link
                                 </button>
@@ -703,7 +703,7 @@ export function AdminUsersClient({
                                     setRevokeTarget(u);
                                     setRevokeReason("");
                                   }}
-                                  className="px-2.5 py-1 rounded-sm bg-red-950/50 hover:bg-red-900/70 border border-red-500/40 text-red-200 font-mono text-[11px] cursor-pointer"
+                                  className="text-[#9CA3AF] hover:text-red-300 font-mono text-[11px] cursor-pointer transition-colors"
                                 >
                                   Revoke
                                 </button>
@@ -721,7 +721,7 @@ export function AdminUsersClient({
                                     `Re-inviting previously revoked user ${u.email}`
                                   );
                                 }}
-                                className="px-2.5 py-1 rounded-sm bg-amber-950/50 hover:bg-amber-900/60 border border-amber-500/40 text-amber-200 font-mono text-[11px] cursor-pointer"
+                                className="text-amber-300 hover:text-amber-200 font-mono text-[11px] cursor-pointer transition-colors"
                               >
                                 Re-Invite
                               </button>
@@ -746,7 +746,7 @@ export function AdminUsersClient({
             className="bg-[#111726] border border-red-500/50 rounded-md max-w-md w-full p-6 space-y-4 shadow-2xl"
           >
             <div className="font-mono text-xs uppercase text-red-400 font-semibold">
-              Confirm Access Revocation // Audit Required
+              Confirm Access Revocation
             </div>
             <h3 className="font-display text-lg font-bold text-[#F3EFE6]">
               Revoke {revokeTarget.email}?
@@ -799,7 +799,7 @@ export function AdminUsersClient({
             className="bg-[#111726] border border-[#C5A059]/60 rounded-md max-w-md w-full p-6 space-y-4 shadow-2xl"
           >
             <div className="font-mono text-xs uppercase text-[#C5A059] font-semibold">
-              Confirm Role Update // Audit Required
+              Confirm Role Update
             </div>
             <h3 className="font-display text-lg font-bold text-[#F3EFE6]">
               Change role for {roleTarget.user.email} to{" "}

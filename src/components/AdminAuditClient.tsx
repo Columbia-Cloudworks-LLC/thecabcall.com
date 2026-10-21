@@ -8,7 +8,10 @@ import type {
   AuditLedgerEntry,
   AuditReplayResult,
 } from "@/pipeline/audit";
-import { HeroCornerBrackets } from "./ui/BroadsheetPrimitives";
+import {
+  HairlineSection,
+  HeroCornerBrackets,
+} from "./ui/BroadsheetPrimitives";
 
 interface AdminAuditClientProps {
   actor: AuthenticatedAdminActor;
@@ -492,21 +495,19 @@ export function AdminAuditClient({
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2.5">
-              <span className="font-mono text-xs uppercase tracking-widest text-[#C5A059] font-semibold">
-                SETTINGS &amp; AUDIT // IMMUTABLE AUDIT LEDGER
+              <span className="font-display text-[11px] uppercase tracking-[0.18em] text-[#C5A059] font-semibold">
+                Settings &amp; Audit • Immutable Audit Ledger
               </span>
               <span
-                className={`inline-flex items-center gap-1.5 px-3 py-0.5 rounded-sm border font-mono text-xs font-bold ${
-                  chainIntegrity.valid
-                    ? "bg-emerald-950/70 border-emerald-500/50 text-emerald-300"
-                    : "bg-red-950/80 border-red-500 text-red-200"
+                className={`inline-flex items-center gap-1.5 font-mono text-xs font-bold ${
+                  chainIntegrity.valid ? "text-emerald-300" : "text-red-300"
                 }`}
               >
                 <span>{chainIntegrity.valid ? "●" : "▲"}</span>
                 <span>
                   {chainIntegrity.valid
-                    ? "SHA-256 HASH CHAIN VERIFIED"
-                    : "HASH CHAIN INTEGRITY VIOLATION"}
+                    ? "Ledger Chain Verified"
+                    : "Hash Chain Integrity Violation"}
                 </span>
               </span>
             </div>
@@ -525,37 +526,35 @@ export function AdminAuditClient({
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+          <div className="flex flex-wrap items-center gap-3 shrink-0">
             <button
               type="button"
               disabled={verifyingChain}
               onClick={handleVerifyChainNow}
-              className="px-4 py-2.5 rounded-sm bg-emerald-950/60 hover:bg-emerald-900/70 border border-emerald-500/50 text-emerald-200 font-mono text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+              className="px-4 py-2 rounded-sm bg-[#C5A059] hover:bg-[#d4b26a] text-[#0B0E14] font-mono text-xs font-bold uppercase transition-colors cursor-pointer disabled:opacity-50"
             >
-              {verifyingChain
-                ? "Recomputing SHA-256 Chain…"
-                : "✓ Re-Verify SHA-256 Chain"}
+              {verifyingChain ? "Verifying Chain…" : "✓ Verify Ledger Chain"}
             </button>
 
             <button
               type="button"
               disabled={loadingDisclosure}
               onClick={handlePreviewDisclosure}
-              className="px-3.5 py-2.5 rounded-sm bg-[#0B0E14] hover:bg-[#111726] border border-[#8A6D3B]/45 hover:border-[#C5A059] text-[#F3EFE6] font-mono text-xs transition-colors cursor-pointer"
+              className="text-xs font-mono text-[#E5E0D8] hover:text-[#C5A059] transition-colors cursor-pointer"
             >
               {loadingDisclosure ? "Building Report…" : "Preview Disclosure"}
             </button>
 
             <a
               href={`/api/admin/audit/export?format=md${exportQuerySuffix}`}
-              className="px-3.5 py-2.5 rounded-sm bg-[#C5A059] hover:bg-[#d4b26a] text-[#0B0E14] font-mono text-xs font-bold uppercase transition-colors"
+              className="text-xs font-mono text-[#C5A059] hover:text-[#F3EFE6] uppercase transition-colors"
             >
               Export .MD
             </a>
 
             <a
               href={`/api/admin/audit/export?format=json${exportQuerySuffix}`}
-              className="px-3.5 py-2.5 rounded-sm border border-[#C5A059]/60 hover:border-[#C5A059] text-[#C5A059] font-mono text-xs font-semibold uppercase transition-colors"
+              className="text-xs font-mono text-[#9CA3AF] hover:text-[#C5A059] uppercase transition-colors"
             >
               Export .JSON
             </a>
@@ -563,8 +562,8 @@ export function AdminAuditClient({
         </div>
 
         {/* Cryptographic Chain Digest Bar */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2 border-t border-[#8A6D3B]/35 font-mono text-xs">
-          <div className="bg-[#0B0E14] border border-[#8A6D3B]/35 rounded-sm p-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-[#8A6D3B]/30 pt-4 border-t border-[#8A6D3B]/35 font-mono text-xs">
+          <div className="py-2 sm:py-0 sm:pr-4">
             <div className="text-[10px] uppercase text-[#9CA3AF]">
               Total Chained Entries
             </div>
@@ -576,7 +575,7 @@ export function AdminAuditClient({
             </div>
           </div>
 
-          <div className="bg-[#0B0E14] border border-[#8A6D3B]/35 rounded-sm p-3">
+          <div className="py-2 sm:py-0 sm:px-4">
             <div className="flex items-center justify-between">
               <span className="text-[10px] uppercase text-[#9CA3AF]">
                 GENESIS Entry Digest (Row #1)
@@ -602,7 +601,7 @@ export function AdminAuditClient({
             </div>
           </div>
 
-          <div className="bg-[#0B0E14] border border-[#8A6D3B]/35 rounded-sm p-3">
+          <div className="py-2 sm:py-0 sm:px-4">
             <div className="flex items-center justify-between">
               <span className="text-[10px] uppercase text-[#9CA3AF]">
                 Current HEAD Digest
@@ -626,7 +625,7 @@ export function AdminAuditClient({
             </div>
           </div>
 
-          <div className="bg-[#0B0E14] border border-[#8A6D3B]/35 rounded-sm p-3">
+          <div className="py-2 sm:py-0 sm:pl-4">
             <div className="text-[10px] uppercase text-[#9CA3AF]">
               Chain Verification Timestamp
             </div>
@@ -829,7 +828,7 @@ export function AdminAuditClient({
                         <span className="font-mono text-xs font-bold text-[#F3EFE6]">
                           #{entry.id}
                         </span>
-                        <span className="px-2 py-0.5 rounded-sm bg-[#0B0E14] border border-[#8A6D3B]/45 font-mono text-[11px] text-[#C5A059] font-semibold">
+                        <span className="font-mono text-[11px] text-[#C5A059] font-semibold">
                           {entry.actionType}
                         </span>
                       </div>
@@ -884,17 +883,17 @@ export function AdminAuditClient({
           ) : (
             <div className="p-6 space-y-6">
               {/* Inspector Header & Replay Action Buttons */}
-              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 pb-4 border-b border-[#8A6D3B]/35">
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 pb-2">
                 <div className="space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-xs uppercase text-[#C5A059] font-bold">
-                      EVENT #{selectedEntry.id} INSPECTOR
+                      Event #{selectedEntry.id} Inspector
                     </span>
-                    <span className="px-2 py-0.5 rounded-sm bg-[#0B0E14] border border-[#8A6D3B]/45 font-mono text-xs text-[#F3EFE6] font-semibold">
-                      {selectedEntry.actionType}
+                    <span className="font-mono text-xs text-[#F3EFE6] font-semibold">
+                      • {selectedEntry.actionType}
                     </span>
                     <span className="font-mono text-xs text-[#9CA3AF]">
-                      {selectedEntry.timestamp}
+                      ({selectedEntry.timestamp})
                     </span>
                   </div>
                   <div className="font-mono text-xs text-[#9CA3AF]">
@@ -929,7 +928,7 @@ export function AdminAuditClient({
 
                 {/* Deterministic Revert / Replay Buttons */}
                 {selectedEntry.actionType !== "system.bootstrap" && canReplay && (
-                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <div className="flex flex-wrap items-center gap-3 shrink-0">
                     <button
                       type="button"
                       onClick={() =>
@@ -944,7 +943,7 @@ export function AdminAuditClient({
                       onClick={() =>
                         openReplayModal(selectedEntry, "reapply_after")
                       }
-                      className="px-3.5 py-2 rounded-sm bg-[#0B0E14] hover:bg-[#111726] border border-[#8A6D3B]/45 hover:border-[#C5A059] text-[#F3EFE6] font-mono text-xs font-semibold transition-colors cursor-pointer"
+                      className="font-mono text-xs text-[#9CA3AF] hover:text-[#C5A059] transition-colors cursor-pointer"
                     >
                       ↻ Re-Apply After State
                     </button>
@@ -952,8 +951,8 @@ export function AdminAuditClient({
                 )}
               </div>
 
-              {/* Disclosure Reason Box */}
-              <div className="bg-[#0B0E14] border border-[#8A6D3B]/35 rounded-sm p-4">
+              {/* Disclosure Reason Section */}
+              <HairlineSection>
                 <div className="font-mono text-[10px] uppercase tracking-wider text-[#C5A059] font-semibold">
                   Editorial / Governance Disclosure Justification (reason)
                 </div>
@@ -961,10 +960,10 @@ export function AdminAuditClient({
                   {selectedEntry.reason ||
                     "No explicit reason recorded for this event."}
                 </p>
-              </div>
+              </HairlineSection>
 
-              {/* Cryptographic Chain Provenance Box */}
-              <div className="bg-[#0B0E14] border border-[#8A6D3B]/35 rounded-sm p-4 space-y-2 font-mono text-xs">
+              {/* Cryptographic Chain Provenance Section */}
+              <HairlineSection className="space-y-2 font-mono text-xs">
                 <div className="text-[10px] uppercase tracking-wider text-emerald-300 font-semibold">
                   Cryptographic SHA-256 Chain Link
                 </div>
@@ -986,10 +985,10 @@ export function AdminAuditClient({
                     </div>
                   </div>
                 </div>
-              </div>
+              </HairlineSection>
 
               {/* Field-Level Diff Inspector */}
-              <div className="space-y-3">
+              <HairlineSection className="space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="font-mono text-xs uppercase tracking-wider text-[#C5A059] font-semibold">
                     Field-Level State Diff ({fieldDiffs.length} fields)
@@ -1006,11 +1005,11 @@ export function AdminAuditClient({
                 </div>
 
                 {visibleFieldDiffs.length === 0 ? (
-                  <div className="p-4 rounded-sm bg-[#0B0E14] border border-[#8A6D3B]/35 font-mono text-xs text-[#9CA3AF]">
+                  <div className="py-2 font-mono text-xs text-[#9CA3AF]">
                     No field differences to display.
                   </div>
                 ) : (
-                  <div className="overflow-x-auto border border-[#8A6D3B]/35 rounded-sm">
+                  <div className="overflow-x-auto border-t border-[#8A6D3B]/35">
                     <table className="w-full text-left border-collapse font-mono text-xs">
                       <thead>
                         <tr className="bg-[#0B0E14] border-b border-[#8A6D3B]/35 text-[10px] uppercase text-[#9CA3AF]">
@@ -1039,14 +1038,14 @@ export function AdminAuditClient({
                             </td>
                             <td className="py-2.5 px-3 align-top whitespace-nowrap">
                               <span
-                                className={`px-1.5 py-0.5 rounded-sm text-[10px] uppercase font-bold ${
+                                className={`text-[10px] uppercase font-bold ${
                                   row.status === "added"
-                                    ? "bg-emerald-950/80 text-emerald-300 border border-emerald-500/40"
+                                    ? "text-emerald-300"
                                     : row.status === "removed"
-                                    ? "bg-red-950/80 text-red-300 border border-red-500/40"
+                                    ? "text-red-300"
                                     : row.status === "modified"
-                                    ? "bg-amber-950/80 text-amber-300 border border-amber-500/40"
-                                    : "bg-[#111726] text-[#9CA3AF]"
+                                    ? "text-amber-300"
+                                    : "text-[#9CA3AF]"
                                 }`}
                               >
                                 {row.status}
@@ -1064,42 +1063,42 @@ export function AdminAuditClient({
                     </table>
                   </div>
                 )}
-              </div>
+              </HairlineSection>
 
               {/* Side-by-Side Raw JSON Snapshots */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-[#0B0E14] border border-[#8A6D3B]/35 rounded-sm p-3">
+              <HairlineSection className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
                   <div className="font-mono text-[10px] uppercase text-red-300 font-semibold mb-2">
                     before_state_json (Prior Snapshot)
                   </div>
-                  <pre className="font-mono text-[11px] text-[#E5E0D8] overflow-x-auto max-h-64 whitespace-pre-wrap break-all">
+                  <pre className="font-mono text-[11px] text-[#E5E0D8] bg-[#0B0E14] p-3 overflow-x-auto max-h-64 whitespace-pre-wrap break-all">
                     {selectedEntry.beforeState
                       ? JSON.stringify(selectedEntry.beforeState, null, 2)
                       : "null (Created new entity — no prior state)"}
                   </pre>
                 </div>
 
-                <div className="bg-[#0B0E14] border border-[#8A6D3B]/35 rounded-sm p-3">
+                <div>
                   <div className="font-mono text-[10px] uppercase text-emerald-300 font-semibold mb-2">
                     after_state_json (Post-Mutation Snapshot)
                   </div>
-                  <pre className="font-mono text-[11px] text-[#E5E0D8] overflow-x-auto max-h-64 whitespace-pre-wrap break-all">
+                  <pre className="font-mono text-[11px] text-[#E5E0D8] bg-[#0B0E14] p-3 overflow-x-auto max-h-64 whitespace-pre-wrap break-all">
                     {selectedEntry.afterState
                       ? JSON.stringify(selectedEntry.afterState, null, 2)
                       : "null (Entity deleted)"}
                   </pre>
                 </div>
-              </div>
+              </HairlineSection>
 
               {/* Deterministic Replay Command Payload */}
-              <div className="bg-[#0B0E14] border border-[#8A6D3B]/35 rounded-sm p-3">
+              <HairlineSection>
                 <div className="font-mono text-[10px] uppercase text-[#9CA3AF] font-semibold mb-1">
                   Deterministic Replay Command (replay_command_json)
                 </div>
-                <pre className="font-mono text-[11px] text-[#9CA3AF] overflow-x-auto whitespace-pre-wrap">
+                <pre className="font-mono text-[11px] text-[#9CA3AF] bg-[#0B0E14] p-3 overflow-x-auto whitespace-pre-wrap">
                   {JSON.stringify(selectedEntry.replayCommand, null, 2)}
                 </pre>
-              </div>
+              </HairlineSection>
             </div>
           )}
         </div>

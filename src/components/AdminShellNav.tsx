@@ -212,7 +212,7 @@ export function AdminShellNav({
             </div>
 
             {/* Right: Single Compact Ledger Status Badge + Actor Email/Role + Public Site + Sign Out */}
-            <div className="flex flex-wrap items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-3.5">
               <Link
                 href="/admin/audit"
                 title={`All ${
@@ -234,7 +234,7 @@ export function AdminShellNav({
                 </span>
               </Link>
 
-              <div className="bg-[#111726] border border-[#8A6D3B]/45 px-3 py-1 flex items-center gap-2">
+              <div className="flex items-center gap-2 border-l border-[#8A6D3B]/35 pl-3">
                 <span className="text-xs font-sans text-[#F3EFE6]">
                   {actor.email}
                 </span>
@@ -249,7 +249,7 @@ export function AdminShellNav({
 
               <a
                 href="https://thecabcall.com"
-                className="px-3 py-1 bg-[#111726]/80 border border-[#8A6D3B]/45 hover:border-[#C5A059] text-xs font-display uppercase tracking-wider text-[#F3EFE6] hover:text-[#C5A059] transition-all duration-200 ease-out"
+                className="text-xs font-display uppercase tracking-wider text-[#94A3B8] hover:text-[#C5A059] transition-colors"
               >
                 Public Site ↗
               </a>
@@ -257,7 +257,7 @@ export function AdminShellNav({
               <button
                 type="button"
                 onClick={handleSignOut}
-                className="px-3 py-1 bg-[#111726]/80 hover:bg-red-950/60 border border-[#8A6D3B]/45 hover:border-red-500/50 text-[#94A3B8] hover:text-red-200 text-xs font-display uppercase tracking-wider transition-all duration-200 ease-out cursor-pointer"
+                className="text-[#94A3B8] hover:text-red-300 text-xs font-display uppercase tracking-wider transition-colors cursor-pointer"
               >
                 Sign Out
               </button>
@@ -302,11 +302,11 @@ export function AdminShellNav({
         {/* Contextual Secondary Sub-Navigation Bar for Settings & Audit */}
         {activePrimaryTab.id === "settings" && (
           <div className="border-t border-[#8A6D3B]/35 bg-[#111726]/90">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-wrap items-center justify-between gap-2">
               <div
                 role="navigation"
                 aria-label="Settings & Audit Sub-Navigation"
-                className="flex flex-wrap items-center gap-2"
+                className="flex flex-wrap items-center gap-4"
               >
                 {SETTINGS_SUB_NAV_ITEMS.map((sub) => {
                   const isSubActive =
@@ -317,10 +317,10 @@ export function AdminShellNav({
                       key={sub.href}
                       href={sub.href}
                       aria-current={isSubActive ? "page" : undefined}
-                      className={`px-3 py-1 text-xs font-display tracking-wider uppercase border transition-all duration-200 ease-out ${
+                      className={`py-2.5 text-xs font-display tracking-wider uppercase border-b-2 transition-all duration-200 ease-out ${
                         isSubActive
-                          ? "bg-[#C5A059]/15 border-[#C5A059] text-[#F3EFE6] font-semibold"
-                          : "bg-[#0B0E14]/60 border-[#8A6D3B]/35 text-[#94A3B8] hover:text-[#F3EFE6] hover:border-[#C5A059]/60"
+                          ? "border-[#C5A059] text-[#F3EFE6] font-semibold"
+                          : "border-transparent text-[#94A3B8] hover:text-[#F3EFE6] hover:border-[#C5A059]/60"
                       }`}
                     >
                       {sub.label}
@@ -328,7 +328,7 @@ export function AdminShellNav({
                   );
                 })}
               </div>
-              <span className="font-serif italic text-xs text-[#94A3B8] hidden md:inline">
+              <span className="font-serif italic text-xs text-[#94A3B8] hidden md:inline py-2">
                 Governance, team invitations &amp; public syndication endpoints
               </span>
             </div>

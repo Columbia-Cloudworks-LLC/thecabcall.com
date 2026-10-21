@@ -120,7 +120,7 @@ export function AdminOverviewClient({
 
   // Admin-only custom case submission state
   const [showCustomCaseForm, setShowCustomCaseForm] = useState(false);
-  const [customSource, setCustomSource] = useState("REUTERS // INFRASTRUCTURE");
+  const [customSource, setCustomSource] = useState("Reuters Infrastructure");
   const [customTitle, setCustomTitle] = useState("");
   const [customDesc, setCustomDesc] = useState("");
   const [customUrl, setCustomUrl] = useState("");
@@ -406,10 +406,11 @@ export function AdminOverviewClient({
 
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2.5">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 font-display text-[10px] uppercase tracking-widest">
+            <span className="inline-flex items-center gap-1.5 text-emerald-300 font-display text-[10px] uppercase tracking-widest font-semibold">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
               Editorial Desk Ready
             </span>
+            <span className="text-[#8A6D3B]">•</span>
             <span className="font-serif italic text-xs text-[#C5A059]">
               Latest Broadcast: Ep #{systemHealth.latestEpisodeNumber} —{" "}
               {systemHealth.latestEpisodeTitle}
@@ -425,18 +426,18 @@ export function AdminOverviewClient({
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 shrink-0">
+        <div className="flex flex-wrap items-center gap-4 shrink-0">
+          <Link
+            href="/admin/episodes"
+            className="text-xs font-display uppercase tracking-wider text-[#94A3B8] hover:text-[#C5A059] transition-colors"
+          >
+            Podcast Studio →
+          </Link>
           <Link
             href="/admin/incidents"
             className="bg-[#C5A059] hover:bg-[#d4b26a] text-[#0B0E14] font-display text-xs font-bold uppercase tracking-wider px-4 py-2.5 transition-all duration-200 ease-out"
           >
             Editorial &amp; Feeds →
-          </Link>
-          <Link
-            href="/admin/episodes"
-            className="px-4 py-2.5 border border-[#8A6D3B]/55 hover:border-[#C5A059] bg-[#0B0E14]/70 text-xs font-display uppercase tracking-wider text-[#F3EFE6] transition-all duration-200 ease-out"
-          >
-            Podcast Studio →
           </Link>
         </div>
       </div>
@@ -548,15 +549,15 @@ export function AdminOverviewClient({
           >
             {isLedgerValid ? "Verified" : "Alert"}
           </div>
-          <div className="font-serif text-xs text-emerald-300/90 mt-1">
-            Verified ({auditTotal} records)
+          <div className="font-serif text-xs text-[#94A3B8] mt-1">
+            {auditTotal} chained records
           </div>
         </Link>
       </div>
 
-      {/* Plain-English Quick-Action Cards */}
-      <div className="relative bg-[#111726] border border-[#8A6D3B]/45 p-6 space-y-5 shadow-xl">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#8A6D3B]/30 pb-4">
+      {/* Plain-English Quick-Action Strip (De-nested: Max 1 Border Depth) */}
+      <div className="relative bg-[#111726] border border-[#8A6D3B]/45 shadow-xl overflow-hidden">
+        <div className="p-5 sm:p-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#8A6D3B]/35">
           <div>
             <h2 className="font-display text-lg text-[#F3EFE6] tracking-wide">
               Editorial Actions
@@ -581,7 +582,7 @@ export function AdminOverviewClient({
               <button
                 type="button"
                 onClick={() => setShowCustomCaseForm((prev) => !prev)}
-                className="px-3 py-1.5 border border-[#C5A059]/60 bg-[#0B0E14] hover:border-[#C5A059] font-display text-[11px] uppercase tracking-wider text-[#C5A059] transition-all duration-200 ease-out cursor-pointer"
+                className="font-display text-[11px] uppercase tracking-wider text-[#C5A059] hover:text-[#F3EFE6] underline-offset-4 hover:underline transition-colors cursor-pointer"
               >
                 {showCustomCaseForm
                   ? "Hide Custom Story Form"
@@ -591,13 +592,13 @@ export function AdminOverviewClient({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Card 1: Fetch Latest News */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-[#8A6D3B]/35">
+          {/* Action 1: Fetch Latest News */}
           <button
             type="button"
             disabled={!canRunPipelines || runningAction !== null}
             onClick={handleRunIngest}
-            className="group relative flex flex-col justify-between text-left p-5 bg-[#0B0E14]/85 hover:bg-[#0B0E14] border border-[#8A6D3B]/45 hover:border-[#C5A059] transition-all duration-200 ease-out disabled:opacity-50 cursor-pointer"
+            className="group flex flex-col justify-between text-left p-5 hover:bg-[#0B0E14]/65 transition-all duration-200 ease-out disabled:opacity-50 cursor-pointer"
           >
             <div>
               <div className="font-display text-[10px] uppercase tracking-[0.16em] text-[#C5A059]">
@@ -618,12 +619,12 @@ export function AdminOverviewClient({
             </div>
           </button>
 
-          {/* Card 2: Synthesize Case Briefs */}
+          {/* Action 2: Synthesize Case Briefs */}
           <button
             type="button"
             disabled={!canRunPipelines || runningAction !== null}
             onClick={handleRunSynthesize}
-            className="group relative flex flex-col justify-between text-left p-5 bg-[#0B0E14]/85 hover:bg-[#0B0E14] border border-[#8A6D3B]/45 hover:border-[#C5A059] transition-all duration-200 ease-out disabled:opacity-50 cursor-pointer"
+            className="group flex flex-col justify-between text-left p-5 hover:bg-[#0B0E14]/65 transition-all duration-200 ease-out disabled:opacity-50 cursor-pointer"
           >
             <div>
               <div className="font-display text-[10px] uppercase tracking-[0.16em] text-[#C5A059]">
@@ -644,12 +645,12 @@ export function AdminOverviewClient({
             </div>
           </button>
 
-          {/* Card 3: Generate Weekly Episode */}
+          {/* Action 3: Generate Weekly Episode */}
           <button
             type="button"
             disabled={!canRunPipelines || runningAction !== null}
             onClick={handleGenerateEpisode}
-            className="group relative flex flex-col justify-between text-left p-5 bg-[#0B0E14]/85 hover:bg-[#0B0E14] border border-[#8A6D3B]/45 hover:border-[#C5A059] transition-all duration-200 ease-out disabled:opacity-50 cursor-pointer"
+            className="group flex flex-col justify-between text-left p-5 hover:bg-[#0B0E14]/65 transition-all duration-200 ease-out disabled:opacity-50 cursor-pointer"
           >
             <div>
               <div className="font-display text-[10px] uppercase tracking-[0.16em] text-[#C5A059]">
@@ -670,12 +671,12 @@ export function AdminOverviewClient({
             </div>
           </button>
 
-          {/* Card 4: Verify Ledger */}
+          {/* Action 4: Verify Ledger */}
           <button
             type="button"
             disabled={runningAction !== null}
             onClick={handleVerifyChain}
-            className="group relative flex flex-col justify-between text-left p-5 bg-[#0B0E14]/85 hover:bg-[#0B0E14] border border-[#8A6D3B]/45 hover:border-[#C5A059] transition-all duration-200 ease-out disabled:opacity-50 cursor-pointer"
+            className="group flex flex-col justify-between text-left p-5 hover:bg-[#0B0E14]/65 transition-all duration-200 ease-out disabled:opacity-50 cursor-pointer"
           >
             <div>
               <div className="font-display text-[10px] uppercase tracking-[0.16em] text-[#C5A059]">
@@ -697,11 +698,11 @@ export function AdminOverviewClient({
           </button>
         </div>
 
-        {/* Optional Custom Story Submission Form */}
+        {/* Optional Custom Story Submission Form (Hairline separated, zero inner border box) */}
         {showCustomCaseForm && canRunPipelines && (
           <form
             onSubmit={handleSubmitCustomCase}
-            className="mt-4 pt-5 border-t border-[#8A6D3B]/35 space-y-4 bg-[#0B0E14]/90 p-5 border border-[#8A6D3B]/40"
+            className="p-5 sm:p-6 border-t border-[#8A6D3B]/35 space-y-4 bg-[#0B0E14]/60"
           >
             <div className="flex items-center justify-between">
               <div>
@@ -727,7 +728,7 @@ export function AdminOverviewClient({
                   required
                   value={customSource}
                   onChange={(e) => setCustomSource(e.target.value)}
-                  placeholder="e.g. REUTERS // INFRASTRUCTURE"
+                  placeholder="e.g. Reuters Infrastructure"
                   className="w-full bg-[#111726] border border-[#8A6D3B]/45 px-3 py-2 text-xs text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
                 />
               </div>
@@ -769,7 +770,7 @@ export function AdminOverviewClient({
                 value={customDesc}
                 onChange={(e) => setCustomDesc(e.target.value)}
                 placeholder="Provide a multi-sentence factual summary of the event..."
-                className="w-full bg-[#111726] border border-[#8A6D3B]/45 p-3 font-serif text-sm text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
+                className="w-full max-w-prose bg-[#111726] border border-[#8A6D3B]/45 p-3 font-serif text-sm text-[#F3EFE6] focus:border-[#C5A059] focus:outline-none"
               />
             </div>
 
@@ -798,11 +799,15 @@ export function AdminOverviewClient({
             <h2 className="font-display text-lg sm:text-xl text-[#F3EFE6] mt-0.5">
               Recent Activity &amp; Pipeline Runs
             </h2>
+            <p className="font-serif text-xs text-[#94A3B8] mt-1">
+              All editorial actions and automated runs below are cryptographically
+              verified in the audit ledger.
+            </p>
           </div>
 
           <Link
             href="/admin/audit"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#0B0E14] border border-[#8A6D3B]/50 hover:border-[#C5A059] font-display text-xs uppercase tracking-wider text-[#C5A059] hover:text-[#F3EFE6] transition-all duration-200 ease-out"
+            className="font-display text-xs uppercase tracking-wider text-[#C5A059] hover:text-[#F3EFE6] transition-colors shrink-0"
           >
             View Full Audit Ledger →
           </Link>
@@ -831,16 +836,12 @@ export function AdminOverviewClient({
                 )}
               </div>
 
-              <div className="flex items-center gap-3 shrink-0">
-                <span className="font-mono text-[11px] text-[#94A3B8]">
-                  {entry.timestamp.replace("T", " ").slice(0, 16)} UTC
-                </span>
-
+              <div className="flex items-center gap-4 shrink-0">
                 <span
                   title={`Actor: ${entry.actorEmail} (${entry.actorRole}) • SHA-256: ${entry.entryHash} • Prev: ${entry.prevHash}`}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-950/50 border border-emerald-500/40 text-emerald-300 font-sans text-[11px] cursor-help"
+                  className="font-mono text-[11px] text-[#94A3B8] cursor-help"
                 >
-                  ✓ Verified
+                  {entry.timestamp.replace("T", " ").slice(0, 16)} UTC
                 </span>
 
                 <Link
@@ -855,40 +856,47 @@ export function AdminOverviewClient({
             </div>
           ))}
 
-          {recentRunItems.map((run) => (
-            <div
-              key={run.id}
-              className="p-4 sm:px-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-[#0B0E14]/25 hover:bg-[#0B0E14]/50 transition-colors"
-            >
-              <div className="space-y-1 min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="px-2 py-0.5 bg-[#0B0E14] border border-[#8A6D3B]/45 font-display text-[10px] uppercase tracking-wider text-[#C5A059]">
-                    Automated Run
-                  </span>
-                  <span className="font-display text-xs font-semibold text-[#F3EFE6]">
-                    {formatRunTypeReadable(run.runType)}
+          {recentRunItems.map((run) => {
+            const isRunError =
+              run.status === "degraded" || run.status === "critical";
+            return (
+              <div
+                key={run.id}
+                className="p-4 sm:px-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-[#0B0E14]/25 hover:bg-[#0B0E14]/50 transition-colors"
+              >
+                <div className="space-y-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-[#C5A059] font-semibold">
+                      Automated Run
+                    </span>
+                    <span className="text-xs text-[#8A6D3B]">•</span>
+                    <span className="font-display text-xs font-semibold text-[#F3EFE6]">
+                      {formatRunTypeReadable(run.runType)}
+                    </span>
+                    {isRunError && (
+                      <span className="px-2 py-0.5 bg-red-950/70 border border-red-500/40 text-red-300 font-display text-[10px] uppercase tracking-wider font-bold">
+                        Error
+                      </span>
+                    )}
+                  </div>
+                  <p className="font-serif text-xs text-[#94A3B8] line-clamp-1">
+                    Reviewed {run.itemsEvaluated} stories ({run.itemsAccepted}{" "}
+                    accepted, {run.itemsRejectedNoise} filtered as noise) —{" "}
+                    {run.notes}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3 shrink-0">
+                  <span
+                    title={`Run ID: ${run.id} • Status: ${run.status} • Classifier Latency: ${run.avgClassifierLatencyMs}ms`}
+                    className="font-mono text-[11px] text-[#94A3B8] cursor-help"
+                  >
+                    {run.startedAt.replace("T", " ").slice(0, 16)} UTC
                   </span>
                 </div>
-                <p className="font-serif text-xs text-[#94A3B8] line-clamp-1">
-                  Reviewed {run.itemsEvaluated} stories ({run.itemsAccepted}{" "}
-                  accepted, {run.itemsRejectedNoise} filtered as noise) —{" "}
-                  {run.notes}
-                </p>
               </div>
-
-              <div className="flex items-center gap-3 shrink-0">
-                <span className="font-mono text-[11px] text-[#94A3B8]">
-                  {run.startedAt.replace("T", " ").slice(0, 16)} UTC
-                </span>
-                <span
-                  title={`Run ID: ${run.id} • Status: ${run.status} • Classifier Latency: ${run.avgClassifierLatencyMs}ms`}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-950/50 border border-emerald-500/40 text-emerald-300 font-sans text-[11px] cursor-help"
-                >
-                  ✓ Verified
-                </span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

@@ -3145,8 +3145,95 @@ async function runVerificationSuite() {
     "  ✓ Objective 20 (Issue #49) Unseen Public Pages Flattening (/archive, /tools/[slug], /failures/[slug], /incidents/[slug]) verified."
   );
 
+  // -------------------------------------------------------------------------
+  // 21. OBJECTIVE 21 (ISSUE #50): ADMIN PORTAL KRUG "DON'T MAKE ME THINK" DISCIPLINE (admin.thecabcall.com)
+  // -------------------------------------------------------------------------
   console.log(
-    "\n=== ALL 20 DEFENSIVE HARDENING, CRAFT PROSE, KRUG USABILITY, MASTHEAD, PODCAST ARCHIVE, ADMIN STUDY, EPIC #44 IA SCALE & BROADSHEET PRIMITIVES OBJECTIVES PASSED (100%) ==="
+    "\n[21/21] Verifying Objective 21 (Issue #50): Admin Portal Krug 'Don\\'t Make Me Think' Discipline & UI/UX Flattening..."
+  );
+
+  const adminLoginSource = fs.readFileSync(
+    path.join(process.cwd(), "src/components/AdminLoginClient.tsx"),
+    "utf8"
+  );
+  const adminUsersSource = fs.readFileSync(
+    path.join(process.cwd(), "src/components/AdminUsersClient.tsx"),
+    "utf8"
+  );
+  const adminAuditSource = fs.readFileSync(
+    path.join(process.cwd(), "src/components/AdminAuditClient.tsx"),
+    "utf8"
+  );
+  const adminPublishingSource = fs.readFileSync(
+    path.join(process.cwd(), "src/app/admin/publishing/page.tsx"),
+    "utf8"
+  );
+
+  // 1. Zero // telemetry dual-subtitles across all Admin components
+  for (const [adminFileName, adminContent] of [
+    ["AdminLoginClient.tsx", adminLoginSource],
+    ["AdminShellNav.tsx", adminShellNavSource],
+    ["AdminOverviewClient.tsx", adminOverviewSource],
+    ["AdminIncidentsClient.tsx", adminIncidentsSource],
+    ["AdminFeedsClient.tsx", adminFeedsSource],
+    ["AdminFiltersClient.tsx", adminFiltersSource],
+    ["AdminEpisodesClient.tsx", adminEpisodesSource],
+    ["AdminUsersClient.tsx", adminUsersSource],
+    ["AdminAuditClient.tsx", adminAuditSource],
+    ["admin/publishing/page.tsx", adminPublishingSource],
+  ] as const) {
+    assert.equal(
+      /[A-Z0-9]\s+\/\/\s+[A-Z0-9]/.test(adminContent),
+      false,
+      `Issue #50: ${adminFileName} must not contain any ' // ' telemetry dual-subtitles`
+    );
+  }
+
+  // 2. AdminOverviewClient.tsx: de-nested Editorial Actions & no repetitive ✓ Verified pills in Recent Activity rows
+  assert.equal(
+    adminOverviewSource.includes("✓ Verified"),
+    false,
+    "Issue #50: AdminOverviewClient.tsx must remove repetitive green '✓ Verified' pills from Recent Activity rows"
+  );
+  assert.ok(
+    adminOverviewSource.includes("divide-x divide-[#8A6D3B]/35"),
+    "Issue #50: AdminOverviewClient.tsx must flatten Editorial Actions into a hairline-divided grid"
+  );
+
+  // 3. AdminEpisodesClient.tsx & AdminIncidentsClient.tsx: Format Paragraphs helper, max-w-prose, and HairlineSection
+  assert.ok(
+    adminEpisodesSource.includes("formatTranscriptParagraphs") &&
+      adminEpisodesSource.includes("Format Paragraphs") &&
+      adminEpisodesSource.includes("max-w-prose") &&
+      adminEpisodesSource.includes("HairlineSection"),
+    "Issue #50: AdminEpisodesClient.tsx must include Format Paragraphs button, max-w-prose, and HairlineSection"
+  );
+  assert.ok(
+    adminIncidentsSource.includes("formatTranscriptParagraphs") &&
+      adminIncidentsSource.includes("Format Paragraphs") &&
+      adminIncidentsSource.includes("max-w-prose") &&
+      adminIncidentsSource.includes("HairlineSection"),
+    "Issue #50: AdminIncidentsClient.tsx must include Format Paragraphs button, max-w-prose, and HairlineSection"
+  );
+
+  // 4. AdminAuditClient.tsx & admin/publishing/page.tsx flattening
+  assert.ok(
+    adminAuditSource.includes("HairlineSection") &&
+      adminAuditSource.includes("Ledger Chain Verified"),
+    "Issue #50: AdminAuditClient.tsx must use HairlineSection in the Event Inspector and display 'Ledger Chain Verified'"
+  );
+  assert.ok(
+    adminPublishingSource.includes("Inspect Feed ↗") &&
+      !adminPublishingSource.includes("Open Feed ↗"),
+    "Issue #50: admin/publishing/page.tsx must unify syndication feed cards around a single 'Inspect Feed ↗' action"
+  );
+
+  console.log(
+    "  ✓ Objective 21 (Issue #50) Admin Portal Krug 'Don\\'t Make Me Think' Flattening, Format Paragraphs Helpers, and De-Nested Inspectors verified."
+  );
+
+  console.log(
+    "\n=== ALL 21 DEFENSIVE HARDENING, CRAFT PROSE, KRUG USABILITY, MASTHEAD, PODCAST ARCHIVE, ADMIN STUDY, EPIC #44 IA SCALE & EPIC #45 KRUG UI/UX FLATTENING OBJECTIVES PASSED (100%) ==="
   );
 }
 

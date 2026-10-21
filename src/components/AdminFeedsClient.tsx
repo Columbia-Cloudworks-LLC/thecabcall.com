@@ -431,7 +431,7 @@ export function AdminFeedsClient({
                 Test a feed URL below, then add it to the monitored rotation.
               </p>
             </div>
-            <span className="px-2.5 py-0.5 bg-[#0B0E14] border border-[#8A6D3B]/45 font-display text-[10px] uppercase tracking-wider text-[#C5A059]">
+            <span className="font-display text-[10px] uppercase tracking-wider text-[#C5A059]">
               {activeFeedsCount} of {feeds.length} Active
             </span>
           </div>
@@ -565,10 +565,8 @@ export function AdminFeedsClient({
             </div>
             {previewResult && (
               <span
-                className={`px-2.5 py-0.5 border font-display text-[10px] uppercase tracking-wider font-semibold ${
-                  previewResult.ok
-                    ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-300"
-                    : "bg-red-950/60 border-red-500/40 text-red-300"
+                className={`font-display text-[10px] uppercase tracking-wider font-semibold ${
+                  previewResult.ok ? "text-emerald-300" : "text-red-300"
                 }`}
               >
                 {previewResult.ok
@@ -579,7 +577,7 @@ export function AdminFeedsClient({
           </div>
 
           {!previewResult ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-center py-10 px-4 border border-dashed border-[#8A6D3B]/40 bg-[#0B0E14]/50">
+            <div className="flex-1 flex flex-col items-center justify-center text-center py-10 px-4">
               <div className="font-serif text-sm text-[#94A3B8] max-w-md">
                 Enter an RSS or Atom URL on the left and click{" "}
                 <span className="text-[#C5A059] font-semibold">
@@ -593,15 +591,15 @@ export function AdminFeedsClient({
               </div>
             </div>
           ) : !previewResult.ok ? (
-            <div className="p-4 border border-red-500/40 bg-red-950/30 text-xs text-red-200 space-y-2">
+            <div className="pt-3 border-t border-red-500/40 text-xs text-red-200 space-y-2">
               <div className="font-display uppercase tracking-wider font-bold">
                 Unable to Read Feed: {previewResult.url}
               </div>
               <div className="font-serif">{previewResult.error}</div>
             </div>
           ) : (
-            <div className="space-y-3 overflow-y-auto max-h-[340px] pr-1">
-              <div className="flex items-center justify-between bg-[#0B0E14] border border-[#8A6D3B]/40 px-3 py-2 text-xs">
+            <div className="divide-y divide-[#8A6D3B]/25 overflow-y-auto max-h-[340px] pr-1">
+              <div className="flex items-center justify-between pb-2.5 text-xs">
                 <div className="truncate">
                   <span className="text-[#94A3B8]">Channel: </span>
                   <span className="font-display text-[#C5A059] font-semibold">
@@ -624,7 +622,7 @@ export function AdminFeedsClient({
               {previewResult.items.map((item, idx) => (
                 <div
                   key={item.urlHash || idx}
-                  className="p-3 bg-[#0B0E14] border border-[#8A6D3B]/35 space-y-1.5"
+                  className="py-3 space-y-1.5"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <a
@@ -690,10 +688,10 @@ export function AdminFeedsClient({
                       disabled={!canMutate}
                       onClick={() => handleToggleFeedEnabled(feed)}
                       title="Click to toggle Active / Paused"
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 border font-display text-[10px] uppercase tracking-wider font-semibold cursor-pointer transition-colors ${
+                      className={`inline-flex items-center gap-1.5 font-display text-[10px] uppercase tracking-wider font-semibold cursor-pointer transition-colors ${
                         feed.enabled
-                          ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-300 hover:border-emerald-400"
-                          : "bg-[#0B0E14] border-[#8A6D3B]/40 text-[#94A3B8]"
+                          ? "text-emerald-300 hover:text-emerald-200"
+                          : "text-[#94A3B8] hover:text-[#F3EFE6]"
                       }`}
                     >
                       <span>{feed.enabled ? "●" : "⏸"}</span>
@@ -720,9 +718,9 @@ export function AdminFeedsClient({
                       {feed.focusArea}
                     </div>
                     {feed.domainSectorOverride && (
-                      <span className="inline-block mt-1 px-2 py-0.5 bg-[#0B0E14] border border-[#8A6D3B]/45 font-display text-[10px] uppercase tracking-wider text-[#C5A059]">
+                      <div className="mt-0.5 font-display text-[10px] uppercase tracking-wider text-[#C5A059]">
                         {feed.domainSectorOverride}
-                      </span>
+                      </div>
                     )}
                   </td>
 
@@ -761,34 +759,34 @@ export function AdminFeedsClient({
                   </td>
 
                   <td className="py-3.5 px-4 text-right">
-                    <div className="inline-flex items-center gap-1.5 font-display text-[10px] uppercase tracking-wider">
+                    <div className="inline-flex items-center gap-3 font-display text-[10px] uppercase tracking-wider">
+                      {canMutate && (
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(feed)}
+                          className="px-2.5 py-1 bg-[#0B0E14] hover:border-[#C5A059] border border-[#8A6D3B]/45 text-[#F3EFE6] cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => handleTestUrl(feed.url)}
-                        className="px-2.5 py-1 bg-[#0B0E14] hover:border-[#C5A059] border border-[#8A6D3B]/45 text-[#C5A059] cursor-pointer"
+                        className="text-[#94A3B8] hover:text-[#C5A059] cursor-pointer transition-colors"
                       >
                         Preview
                       </button>
                       {canMutate && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => openEditModal(feed)}
-                            className="px-2.5 py-1 bg-[#0B0E14] hover:border-[#C5A059] border border-[#8A6D3B]/45 text-[#F3EFE6] cursor-pointer"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setDeletingFeed(feed);
-                              setDeleteReason("");
-                            }}
-                            className="px-2.5 py-1 bg-red-950/40 hover:bg-red-900/60 border border-red-500/40 text-red-200 cursor-pointer"
-                          >
-                            Remove
-                          </button>
-                        </>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeletingFeed(feed);
+                            setDeleteReason("");
+                          }}
+                          className="text-[#94A3B8] hover:text-red-300 cursor-pointer transition-colors"
+                        >
+                          Remove
+                        </button>
                       )}
                     </div>
                   </td>

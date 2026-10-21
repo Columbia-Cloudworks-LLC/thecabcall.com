@@ -714,7 +714,7 @@
 # Epic #45: Krug "Don't Make Me Think" Global UI/UX Flattening & Readability Overhaul (`thecabcall.com` + `admin.thecabcall.com`) (Issues #46 – #51)
 
 - **GitHub Epic:** [#45](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/45)
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Objective:** Bring the clean, flat, effortlessly scannable broadsheet hierarchy of the homepage (`The Trestleboard`) to every public page, dynamic hub, case brief, and `admin.thecabcall.com` view by enforcing four global rules: (1) **Max 1 Border Depth** (no nested bordered boxes), (2) **1 Eyebrow + 1 Heading Maximum** (no triple-stacked headers or `//` dual-subtitles inside cards), (3) **One Primary Action Per Card**, and (4) **Never Repeat Identical Metadata** across cards or rows.
 
 ### Issue #46 (Sub-Issue 1): Podcast Page (`/podcast`) — Transcript Formatting, Paragraph Segmentation & Drawer Flattening
@@ -739,7 +739,7 @@
 
 ### Issue #50 (Sub-Issue 5): `admin.thecabcall.com` — Apply Krug "Don't Make Me Think" Discipline Across the Admin Portal
 - **GitHub Issue:** [#50](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/50)
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Target Files:** `src/components/AdminOverviewClient.tsx`, `src/components/AdminIncidentsClient.tsx`, `src/components/AdminEpisodesClient.tsx`, `src/components/AdminFeedsClient.tsx`, `src/components/AdminFiltersClient.tsx`, `src/components/AdminAuditClient.tsx`, `src/components/AdminUsersClient.tsx`, `src/components/AdminLoginClient.tsx`, `src/app/admin/publishing/page.tsx`
 
 ### Issue #51 (Sub-Issue 6): Global CSS & Component Primitives Enforcement — Max 1 Border Depth & Flat Broadsheet Primitives
