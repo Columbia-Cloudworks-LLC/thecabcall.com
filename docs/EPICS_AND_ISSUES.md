@@ -81,6 +81,14 @@
 - [x] **Issue #42 ([GitHub Issue #42](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/42)): [UX Refactor] Streamline `/rubric` into a Clean Methodology Codex & Visual Directory (`RubricCodexClient.tsx`, `RubricInspectorDrawer.tsx`, `src/app/rubric/page.tsx`)**
 - [x] **Issue #43 ([GitHub Issue #43](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/43)): [Scale & Data] Archive Scalability Refactor: Server-Side Pagination, URL State, 6×6 Brass Heatmap & Zero Horizontal Overflow (`migrations/0010_archive_pagination_indexes.sql`, `d1-bridge.ts`, `worker.ts`, `KnowledgeGraphClient.tsx`, `src/app/archive/page.tsx`)**
 
+### Krug "Don't Make Me Think" Global UI/UX Flattening & Readability Overhaul Epic ([GitHub Issue #45](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/45) — Issues #46 to #51)
+- [ ] **Issue #46 ([GitHub Issue #46](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/46)): Podcast Page (`/podcast`) — Transcript Formatting, Paragraph Segmentation & Drawer Flattening**
+- [ ] **Issue #47 ([GitHub Issue #47](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/47)): Working Tools & Rubric Page (`/rubric`) — 50% Card Diet & Redundancy Removal**
+- [ ] **Issue #48 ([GitHub Issue #48](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/48)): About & Feeds Page (`/about`, `/status`, `/feeds`) — Collapse the 51-Card Wall, De-Nest Pillars & Slim Feed Cards**
+- [ ] **Issue #49 ([GitHub Issue #49](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/49)): Unseen Public Pages Audit & Flattening (`/archive`, `/tools/[slug]`, `/failures/[slug]`, `/incidents/[slug]`)**
+- [ ] **Issue #50 ([GitHub Issue #50](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/50)): `admin.thecabcall.com` — Apply Krug "Don't Make Me Think" Discipline Across the Admin Portal**
+- [x] **Issue #51 ([GitHub Issue #51](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/51)): Global CSS & Component Primitives Enforcement — Max 1 Border Depth & Flat Broadsheet Primitives (`src/app/globals.css`, `src/components/MasonicEngravings.tsx`, `src/components/ui/BroadsheetPrimitives.tsx`, `src/components/TrestleboardClient.tsx`, `src/components/IncidentCard.tsx`)**
+
 ---
 
 # Epic #1: Repository Baseline, Clean Build & Git Synchronization
@@ -701,6 +709,41 @@
 - **Status:** `[x] Completed`
 - **Target Files:** `migrations/0010_archive_pagination_indexes.sql`, `src/lib/d1-bridge.ts`, `src/lib/store.ts`, `src/worker.ts`, `src/components/KnowledgeGraphClient.tsx`, `src/app/archive/page.tsx`, `src/app/knowledge-graph/page.tsx`, `src/app/podcast/page.tsx`, `next.config.ts`, `src/middleware.ts`
 
+---
 
+# Epic #45: Krug "Don't Make Me Think" Global UI/UX Flattening & Readability Overhaul (`thecabcall.com` + `admin.thecabcall.com`) (Issues #46 – #51)
 
+- **GitHub Epic:** [#45](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/45)
+- **Status:** `[ ] Pending`
+- **Objective:** Bring the clean, flat, effortlessly scannable broadsheet hierarchy of the homepage (`The Trestleboard`) to every public page, dynamic hub, case brief, and `admin.thecabcall.com` view by enforcing four global rules: (1) **Max 1 Border Depth** (no nested bordered boxes), (2) **1 Eyebrow + 1 Heading Maximum** (no triple-stacked headers or `//` dual-subtitles inside cards), (3) **One Primary Action Per Card**, and (4) **Never Repeat Identical Metadata** across cards or rows.
+
+### Issue #46 (Sub-Issue 1): Podcast Page (`/podcast`) — Transcript Formatting, Paragraph Segmentation & Drawer Flattening
+- **GitHub Issue:** [#46](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/46)
+- **Status:** `[ ] Pending`
+- **Target Files:** `src/components/PodcastArchiveClient.tsx`, `src/app/podcast/page.tsx`, `src/lib/episode-metadata.ts`, `scripts/import-legacy-episodes.ts`
+
+### Issue #47 (Sub-Issue 2): Working Tools & Rubric Page (`/rubric`) — 50% Card Diet & Redundancy Removal
+- **GitHub Issue:** [#47](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/47)
+- **Status:** `[ ] Pending`
+- **Target Files:** `src/components/RubricCodexClient.tsx`, `src/components/RubricInspectorDrawer.tsx`, `src/app/rubric/page.tsx`
+
+### Issue #48 (Sub-Issue 3): About & Feeds Page (`/about`, `/status`, `/feeds`) — Collapse the 51-Card Wall, De-Nest Pillars & Slim Feed Cards
+- **GitHub Issue:** [#48](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/48)
+- **Status:** `[ ] Pending`
+- **Target Files:** `src/components/SystemStatusClient.tsx`, `src/app/status/page.tsx`, `src/app/feeds/page.tsx`, `src/app/about/page.tsx`
+
+### Issue #49 (Sub-Issue 4): Unseen Public Pages Audit & Flattening (`/archive`, `/tools/[slug]`, `/failures/[slug]`, `/incidents/[slug]`)
+- **GitHub Issue:** [#49](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/49)
+- **Status:** `[ ] Pending`
+- **Target Files:** `src/components/KnowledgeGraphClient.tsx`, `src/components/WorkingToolHubClient.tsx`, `src/components/FailureModeHubClient.tsx`, `src/components/IncidentBriefClient.tsx`
+
+### Issue #50 (Sub-Issue 5): `admin.thecabcall.com` — Apply Krug "Don't Make Me Think" Discipline Across the Admin Portal
+- **GitHub Issue:** [#50](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/50)
+- **Status:** `[ ] Pending`
+- **Target Files:** `src/components/AdminOverviewClient.tsx`, `src/components/AdminIncidentsClient.tsx`, `src/components/AdminEpisodesClient.tsx`, `src/components/AdminFeedsClient.tsx`, `src/components/AdminFiltersClient.tsx`, `src/components/AdminAuditClient.tsx`, `src/components/AdminUsersClient.tsx`, `src/components/AdminLoginClient.tsx`, `src/app/admin/publishing/page.tsx`
+
+### Issue #51 (Sub-Issue 6): Global CSS & Component Primitives Enforcement — Max 1 Border Depth & Flat Broadsheet Primitives
+- **GitHub Issue:** [#51](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/51)
+- **Status:** `[x] Completed`
+- **Target Files:** `src/app/globals.css`, `src/components/MasonicEngravings.tsx`, `src/components/ui/BroadsheetPrimitives.tsx`, `src/components/TrestleboardClient.tsx`, `src/components/IncidentCard.tsx`
 

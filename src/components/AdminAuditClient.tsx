@@ -8,6 +8,7 @@ import type {
   AuditLedgerEntry,
   AuditReplayResult,
 } from "@/pipeline/audit";
+import { HeroCornerBrackets } from "./ui/BroadsheetPrimitives";
 
 interface AdminAuditClientProps {
   actor: AuthenticatedAdminActor;
@@ -487,14 +488,7 @@ export function AdminAuditClient({
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* 1. Cryptographic Chain Verifier Banner */}
       <div className="relative bg-[#111726] border border-[#8A6D3B]/45 rounded-md p-6 space-y-4 shadow-lg">
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute top-0 left-0 w-2.5 h-2.5 border-t border-l border-[#C5A059]/60"
-        />
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute top-0 right-0 w-2.5 h-2.5 border-t border-r border-[#C5A059]/60"
-        />
+        <HeroCornerBrackets size="sm" />
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2.5">

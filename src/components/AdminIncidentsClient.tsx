@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AdminFeedsClient } from "./AdminFeedsClient";
 import { AdminFiltersClient } from "./AdminFiltersClient";
+import { HeroCornerBrackets } from "./ui/BroadsheetPrimitives";
 import type { AuthenticatedAdminActor } from "@/pipeline/auth";
 import type {
   AuditChainVerificationResult,
@@ -647,10 +648,7 @@ export function AdminIncidentsClient({
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* Unified "Editorial & Feeds" Workspace Header + Segmented Control Bar */}
       <div className="relative bg-[#111726] border border-[#8A6D3B]/45 p-6 shadow-xl space-y-5">
-        <span className="pointer-events-none absolute top-1.5 left-1.5 w-2.5 h-2.5 border-t border-l border-[#C5A059]/75" />
-        <span className="pointer-events-none absolute top-1.5 right-1.5 w-2.5 h-2.5 border-t border-r border-[#C5A059]/75" />
-        <span className="pointer-events-none absolute bottom-1.5 left-1.5 w-2.5 h-2.5 border-b border-l border-[#C5A059]/75" />
-        <span className="pointer-events-none absolute bottom-1.5 right-1.5 w-2.5 h-2.5 border-b border-r border-[#C5A059]/75" />
+        <HeroCornerBrackets size="sm" />
 
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="space-y-1.5">
@@ -793,9 +791,6 @@ export function AdminIncidentsClient({
         <div className="space-y-6">
           {/* Automated Editorial Tone & Media Rules */}
           <div className="relative bg-[#111726] border border-[#8A6D3B]/45 p-6 space-y-5 shadow-xl">
-            <span className="pointer-events-none absolute top-1.5 left-1.5 w-2 h-2 border-t border-l border-[#C5A059]/65" />
-            <span className="pointer-events-none absolute bottom-1.5 right-1.5 w-2 h-2 border-b border-r border-[#C5A059]/65" />
-
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-[#8A6D3B]/35 pb-4">
               <div>
                 <h2 className="font-display text-base sm:text-lg text-[#F3EFE6] tracking-wide">
@@ -1050,9 +1045,6 @@ export function AdminIncidentsClient({
               </div>
             ) : (
               <div className="relative bg-[#111726] border border-[#8A6D3B]/45 p-6 space-y-6 shadow-xl">
-                <span className="pointer-events-none absolute top-1.5 left-1.5 w-2.5 h-2.5 border-t border-l border-[#C5A059]/75" />
-                <span className="pointer-events-none absolute top-1.5 right-1.5 w-2.5 h-2.5 border-t border-r border-[#C5A059]/75" />
-
                 {/* Selected Story Header */}
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 border-b border-[#8A6D3B]/35 pb-4">
                   <div className="space-y-1">

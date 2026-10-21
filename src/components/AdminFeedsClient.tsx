@@ -422,9 +422,6 @@ export function AdminFeedsClient({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left: Add New Feed Form */}
         <div className="lg:col-span-6 relative bg-[#111726] border border-[#8A6D3B]/45 p-6 space-y-4 shadow-xl">
-          <span className="pointer-events-none absolute top-1.5 left-1.5 w-2 h-2 border-t border-l border-[#C5A059]/65" />
-          <span className="pointer-events-none absolute bottom-1.5 right-1.5 w-2 h-2 border-b border-r border-[#C5A059]/65" />
-
           <div className="flex items-center justify-between border-b border-[#8A6D3B]/35 pb-3">
             <div>
               <h2 className="font-display text-base sm:text-lg text-[#F3EFE6] tracking-wide">
@@ -557,9 +554,6 @@ export function AdminFeedsClient({
 
         {/* Right: Live RSS/Atom Feed Preview Inspector */}
         <div className="lg:col-span-6 relative bg-[#111726] border border-[#8A6D3B]/45 p-6 flex flex-col justify-between space-y-4 shadow-xl">
-          <span className="pointer-events-none absolute top-1.5 left-1.5 w-2 h-2 border-t border-l border-[#C5A059]/65" />
-          <span className="pointer-events-none absolute bottom-1.5 right-1.5 w-2 h-2 border-b border-r border-[#C5A059]/65" />
-
           <div className="flex items-center justify-between border-b border-[#8A6D3B]/35 pb-3">
             <div>
               <h2 className="font-display text-base sm:text-lg text-[#F3EFE6] tracking-wide">

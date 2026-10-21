@@ -10,6 +10,7 @@ import type {
 } from "@/pipeline/audit";
 import type { AdminEpisodeRecord } from "@/pipeline/rollup";
 import type { TelemetryArticleRow } from "@/pipeline/synthesize";
+import { HeroCornerBrackets } from "./ui/BroadsheetPrimitives";
 
 interface AdminEpisodesClientProps {
   actor: AuthenticatedAdminActor;
@@ -710,10 +711,7 @@ export function AdminEpisodesClient({
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* Podcast Studio Header Banner */}
       <div className="relative bg-[#111726] border border-[#8A6D3B]/45 p-6 shadow-xl">
-        <span className="pointer-events-none absolute top-1.5 left-1.5 w-2.5 h-2.5 border-t border-l border-[#C5A059]/75" />
-        <span className="pointer-events-none absolute top-1.5 right-1.5 w-2.5 h-2.5 border-t border-r border-[#C5A059]/75" />
-        <span className="pointer-events-none absolute bottom-1.5 left-1.5 w-2.5 h-2.5 border-b border-l border-[#C5A059]/75" />
-        <span className="pointer-events-none absolute bottom-1.5 right-1.5 w-2.5 h-2.5 border-b border-r border-[#C5A059]/75" />
+        <HeroCornerBrackets size="sm" />
 
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="space-y-1.5">

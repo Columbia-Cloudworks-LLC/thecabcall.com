@@ -23,10 +23,13 @@ import {
 import { useTelemetry } from "./TelemetryContext";
 import { IncidentCard } from "./IncidentCard";
 import {
-  BrassSectionDivider,
   EpisodeArtworkEmblem,
   MasonSquareWatermark,
 } from "./MasonicEngravings";
+import {
+  HeroCornerBrackets,
+  SectionHeader,
+} from "./ui/BroadsheetPrimitives";
 
 interface TrestleboardClientProps {
   initialIncidents: Array<PublicIncidentDto | IncidentArticle>;
@@ -153,16 +156,9 @@ export function TrestleboardClient({
       <section
         id="weekly-brief"
         aria-label="The Weekly Trestleboard & Podcast Feature"
-        className="relative bg-[#111726] border border-[#C5A059]/65 shadow-[0_16px_48px_rgba(0,0,0,0.65)] scroll-mt-20"
+        className="relative bg-[#111726] border border-[#C5A059]/50 shadow-[0_16px_48px_rgba(0,0,0,0.65)] scroll-mt-20"
       >
-        {/* Double-line brass hairline inner border */}
-        <div className="pointer-events-none absolute inset-1.5 border border-[#8A6D3B]/55" />
-
-        {/* Four Burnished Brass Corner Brackets */}
-        <span className="pointer-events-none absolute top-1 left-1 w-3.5 h-3.5 border-t-2 border-l-2 border-[#C5A059]" />
-        <span className="pointer-events-none absolute top-1 right-1 w-3.5 h-3.5 border-t-2 border-r-2 border-[#C5A059]" />
-        <span className="pointer-events-none absolute bottom-1 left-1 w-3.5 h-3.5 border-b-2 border-l-2 border-[#C5A059]" />
-        <span className="pointer-events-none absolute bottom-1 right-1 w-3.5 h-3.5 border-b-2 border-r-2 border-[#C5A059]" />
+        <HeroCornerBrackets size="md" />
 
         <div className="relative z-10 flex flex-col lg:flex-row">
           {/* Left Column (65% Width) — Pattern of the Week & Active Docket */}
@@ -353,31 +349,25 @@ export function TrestleboardClient({
       </section>
 
       {/* C. ACTIVE DISPATCHES SECTION HEADER & EDITORIAL FILTER RIBBON */}
-      <BrassSectionDivider />
-
       <section
         id="active-dispatches"
         aria-label="Active Dispatches // The Trestleboard"
-        className="mb-9 pb-6 border-b border-[#8A6D3B]/40 scroll-mt-20 space-y-5"
+        className="mt-10 mb-9 pb-6 border-b border-[#8A6D3B]/40 scroll-mt-20 space-y-5"
       >
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 pb-4 border-b border-[#8A6D3B]/35">
-          <div>
-            <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#C5A059]">
-              VERIFIED CASE LEDGER
-            </div>
-            <h2 className="font-display text-lg sm:text-xl tracking-[0.08em] uppercase text-[#F3EFE6] mt-0.5">
-              ACTIVE DISPATCHES // THE TRESTLEBOARD
-            </h2>
-          </div>
-          <p className="font-mono text-xs text-[#94A3B8]">
-            Showing{" "}
-            <span className="text-[#C5A059] font-semibold">
-              {filteredIncidents.length}
-            </span>{" "}
-            verified incident{" "}
-            {filteredIncidents.length === 1 ? "brief" : "briefs"}
-          </p>
-        </div>
+        <SectionHeader
+          eyebrow="VERIFIED CASE LEDGER"
+          title="ACTIVE DISPATCHES // THE TRESTLEBOARD"
+          action={
+            <p className="font-mono text-xs text-[#94A3B8]">
+              Showing{" "}
+              <span className="text-[#C5A059] font-semibold">
+                {filteredIncidents.length}
+              </span>{" "}
+              verified incident{" "}
+              {filteredIncidents.length === 1 ? "brief" : "briefs"}
+            </p>
+          }
+        />
 
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-center gap-3.5 sm:gap-5">
           {/* 1. Working Tool Selector */}
@@ -454,14 +444,8 @@ export function TrestleboardClient({
       {filteredIncidents.length === 0 ? (
         <div
           role="status"
-          className="relative bg-[#111726] border border-[#C5A059]/75 p-10 text-center space-y-4 shadow-[0_12px_36px_rgba(0,0,0,0.55)]"
+          className="relative bg-[#111726] border border-[#C5A059]/45 p-10 text-center space-y-4 shadow-[0_12px_36px_rgba(0,0,0,0.55)]"
         >
-          <div className="pointer-events-none absolute inset-1.5 border border-[#8A6D3B]/45" />
-          <span className="pointer-events-none absolute top-1 left-1 w-3 h-3 border-t-2 border-l-2 border-[#C5A059]" />
-          <span className="pointer-events-none absolute top-1 right-1 w-3 h-3 border-t-2 border-r-2 border-[#C5A059]" />
-          <span className="pointer-events-none absolute bottom-1 left-1 w-3 h-3 border-b-2 border-l-2 border-[#C5A059]" />
-          <span className="pointer-events-none absolute bottom-1 right-1 w-3 h-3 border-b-2 border-r-2 border-[#C5A059]" />
-
           <div className="relative z-10 space-y-3 max-w-lg mx-auto">
             <p className="font-display text-lg text-[#F3EFE6]">
               No Active Incidents Match the Selected Filter Combination
@@ -497,14 +481,8 @@ export function TrestleboardClient({
           {leadPostMortemIncident && (
             <article
               aria-label="Lead Post-Mortem Analysis"
-              className="relative bg-[#111726] border border-[#C5A059]/60 p-6 sm:p-8 lg:p-10 shadow-[0_14px_40px_rgba(0,0,0,0.6)]"
+              className="relative bg-[#111726] border border-[#C5A059]/45 p-6 sm:p-8 lg:p-10 shadow-[0_14px_40px_rgba(0,0,0,0.6)]"
             >
-              <div className="pointer-events-none absolute inset-1.5 border border-[#8A6D3B]/45" />
-              <span className="pointer-events-none absolute top-1 left-1 w-3.5 h-3.5 border-t-2 border-l-2 border-[#C5A059]" />
-              <span className="pointer-events-none absolute top-1 right-1 w-3.5 h-3.5 border-t-2 border-r-2 border-[#C5A059]" />
-              <span className="pointer-events-none absolute bottom-1 left-1 w-3.5 h-3.5 border-b-2 border-l-2 border-[#C5A059]" />
-              <span className="pointer-events-none absolute bottom-1 right-1 w-3.5 h-3.5 border-b-2 border-r-2 border-[#C5A059]" />
-
               <div className="relative z-10 space-y-4">
                 <div className="pb-3.5 border-b border-[#8A6D3B]/45 font-mono text-xs uppercase tracking-[0.16em] text-[#94A3B8] flex items-center justify-between">
                   <div>
@@ -594,7 +572,7 @@ export function TrestleboardClient({
           <div className="pt-6 flex justify-center">
             <Link
               href="/knowledge-graph"
-              className="relative inline-flex items-center justify-center px-8 py-4 bg-[#111726] border border-[#C5A059] text-[#F3EFE6] hover:bg-[#C5A059] hover:text-[#0B0E14] font-display text-xs sm:text-sm uppercase tracking-[0.15em] transition-all shadow-[inset_0_0_0_3px_#0B0E14,0_8px_24px_rgba(0,0,0,0.5)]"
+              className="relative inline-flex items-center justify-center px-8 py-4 bg-[#111726] border border-[#C5A059] text-[#F3EFE6] hover:bg-[#C5A059] hover:text-[#0B0E14] font-display text-xs sm:text-sm uppercase tracking-[0.15em] transition-all shadow-[0_8px_24px_rgba(0,0,0,0.5)]"
             >
               Explore the Full Archive &amp; Knowledge Graph →
             </Link>

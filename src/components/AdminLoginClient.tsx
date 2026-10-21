@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { HeroCornerBrackets } from "./ui/BroadsheetPrimitives";
 
 interface AdminLoginClientProps {
   ownerEmailHint?: string;
@@ -95,23 +96,7 @@ export function AdminLoginClient({
   return (
     <div className="min-h-[82vh] flex items-center justify-center px-4 py-12 bg-[#0B0E14]">
       <div className="relative w-full max-w-xl bg-[#111726] border border-[#8A6D3B]/55 rounded-md shadow-2xl overflow-hidden">
-        {/* Corner Trestleboard Accents */}
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-[#C5A059]/70"
-        />
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-[#C5A059]/70"
-        />
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-[#C5A059]/70"
-        />
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-[#C5A059]/70"
-        />
+        <HeroCornerBrackets size="md" />
 
         {/* Top Security Banner */}
         <div className="bg-[#0B0E14] border-b border-[#8A6D3B]/40 px-6 py-4 flex items-start gap-3">

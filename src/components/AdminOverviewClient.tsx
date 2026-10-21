@@ -9,6 +9,7 @@ import type {
   AuditLedgerEntry,
 } from "@/pipeline/audit";
 import type { PipelineRunRecord } from "@/lib/types";
+import { HeroCornerBrackets } from "./ui/BroadsheetPrimitives";
 
 interface AdminOverviewClientProps {
   actor: AuthenticatedAdminActor;
@@ -401,10 +402,7 @@ export function AdminOverviewClient({
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       {/* The Editor's Study Overview Hero */}
       <div className="relative bg-[#111726] border border-[#8A6D3B]/45 p-6 sm:p-7 shadow-xl flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-        <span className="pointer-events-none absolute top-1.5 left-1.5 w-2.5 h-2.5 border-t border-l border-[#C5A059]/75" />
-        <span className="pointer-events-none absolute top-1.5 right-1.5 w-2.5 h-2.5 border-t border-r border-[#C5A059]/75" />
-        <span className="pointer-events-none absolute bottom-1.5 left-1.5 w-2.5 h-2.5 border-b border-l border-[#C5A059]/75" />
-        <span className="pointer-events-none absolute bottom-1.5 right-1.5 w-2.5 h-2.5 border-b border-r border-[#C5A059]/75" />
+        <HeroCornerBrackets size="sm" />
 
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2.5">
@@ -558,11 +556,6 @@ export function AdminOverviewClient({
 
       {/* Plain-English Quick-Action Cards */}
       <div className="relative bg-[#111726] border border-[#8A6D3B]/45 p-6 space-y-5 shadow-xl">
-        <span className="pointer-events-none absolute top-1.5 left-1.5 w-2.5 h-2.5 border-t border-l border-[#C5A059]/70" />
-        <span className="pointer-events-none absolute top-1.5 right-1.5 w-2.5 h-2.5 border-t border-r border-[#C5A059]/70" />
-        <span className="pointer-events-none absolute bottom-1.5 left-1.5 w-2.5 h-2.5 border-b border-l border-[#C5A059]/70" />
-        <span className="pointer-events-none absolute bottom-1.5 right-1.5 w-2.5 h-2.5 border-b border-r border-[#C5A059]/70" />
-
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#8A6D3B]/30 pb-4">
           <div>
             <h2 className="font-display text-lg text-[#F3EFE6] tracking-wide">
@@ -606,8 +599,6 @@ export function AdminOverviewClient({
             onClick={handleRunIngest}
             className="group relative flex flex-col justify-between text-left p-5 bg-[#0B0E14]/85 hover:bg-[#0B0E14] border border-[#8A6D3B]/45 hover:border-[#C5A059] transition-all duration-200 ease-out disabled:opacity-50 cursor-pointer"
           >
-            <span className="pointer-events-none absolute top-1 left-1 w-2 h-2 border-t border-l border-[#C5A059]/60" />
-            <span className="pointer-events-none absolute bottom-1 right-1 w-2 h-2 border-b border-r border-[#C5A059]/60" />
             <div>
               <div className="font-display text-[10px] uppercase tracking-[0.16em] text-[#C5A059]">
                 Newsroom Intake
@@ -634,8 +625,6 @@ export function AdminOverviewClient({
             onClick={handleRunSynthesize}
             className="group relative flex flex-col justify-between text-left p-5 bg-[#0B0E14]/85 hover:bg-[#0B0E14] border border-[#8A6D3B]/45 hover:border-[#C5A059] transition-all duration-200 ease-out disabled:opacity-50 cursor-pointer"
           >
-            <span className="pointer-events-none absolute top-1 left-1 w-2 h-2 border-t border-l border-[#C5A059]/60" />
-            <span className="pointer-events-none absolute bottom-1 right-1 w-2 h-2 border-b border-r border-[#C5A059]/60" />
             <div>
               <div className="font-display text-[10px] uppercase tracking-[0.16em] text-[#C5A059]">
                 Editorial Drafting
@@ -662,8 +651,6 @@ export function AdminOverviewClient({
             onClick={handleGenerateEpisode}
             className="group relative flex flex-col justify-between text-left p-5 bg-[#0B0E14]/85 hover:bg-[#0B0E14] border border-[#8A6D3B]/45 hover:border-[#C5A059] transition-all duration-200 ease-out disabled:opacity-50 cursor-pointer"
           >
-            <span className="pointer-events-none absolute top-1 left-1 w-2 h-2 border-t border-l border-[#C5A059]/60" />
-            <span className="pointer-events-none absolute bottom-1 right-1 w-2 h-2 border-b border-r border-[#C5A059]/60" />
             <div>
               <div className="font-display text-[10px] uppercase tracking-[0.16em] text-[#C5A059]">
                 Podcast Production
@@ -690,8 +677,6 @@ export function AdminOverviewClient({
             onClick={handleVerifyChain}
             className="group relative flex flex-col justify-between text-left p-5 bg-[#0B0E14]/85 hover:bg-[#0B0E14] border border-[#8A6D3B]/45 hover:border-[#C5A059] transition-all duration-200 ease-out disabled:opacity-50 cursor-pointer"
           >
-            <span className="pointer-events-none absolute top-1 left-1 w-2 h-2 border-t border-l border-[#C5A059]/60" />
-            <span className="pointer-events-none absolute bottom-1 right-1 w-2 h-2 border-b border-r border-[#C5A059]/60" />
             <div>
               <div className="font-display text-[10px] uppercase tracking-[0.16em] text-[#C5A059]">
                 Provenance &amp; Audit
@@ -805,9 +790,6 @@ export function AdminOverviewClient({
 
       {/* 5-Item Plain-English "Recent Activity & Pipeline Runs" Feed */}
       <div className="relative bg-[#111726] border border-[#8A6D3B]/45 shadow-xl overflow-hidden">
-        <span className="pointer-events-none absolute top-1.5 left-1.5 w-2.5 h-2.5 border-t border-l border-[#C5A059]/70" />
-        <span className="pointer-events-none absolute top-1.5 right-1.5 w-2.5 h-2.5 border-t border-r border-[#C5A059]/70" />
-
         <div className="p-5 sm:p-6 border-b border-[#8A6D3B]/35 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
             <div className="font-display text-[10px] uppercase tracking-[0.18em] text-[#C5A059]">

@@ -38,19 +38,33 @@
   background-image: url("data:image/svg+xml,%3Csvg width='48' height='48' viewBox='0 0 48 48' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23C5A059' fill-opacity='0.038'%3E%3Cpath d='M0 0h24v24H0V0zm24 24h24v24H24V24z'/%3E%3C/g%3E%3C/svg%3E");
 }
 
-/* Ornate double-line brass frame utility */
+/* Single-line broadsheet brass frame utility (Max 1 Border Depth — Issue #51) */
 .tracing-board-frame {
   position: relative;
-  border: 1px solid rgba(148, 163, 184, 0.3);
+  border: 1px solid rgba(197, 160, 89, 0.35);
   background-color: #111726;
 }
 
-.tracing-board-frame::before {
-  content: "";
-  position: absolute;
-  inset: 5px;
-  border: 1px solid rgba(197, 160, 89, 0.45);
-  pointer-events: none;
+/* CSS Guardrail: Prevent accidental nested frame borders (Box-in-a-Box Prevention) */
+.tracing-board-frame .tracing-board-frame,
+.admin-study-card .admin-study-card,
+.tracing-board-frame .admin-study-card,
+.admin-study-card .tracing-board-frame {
+  border-width: 0;
+  border-top: 1px solid rgba(138, 109, 59, 0.3);
+  box-shadow: none;
+}
+
+/* Standardized Broadsheet Hairline Section & Directory List Utilities (Issue #51) */
+.broadsheet-hairline-section {
+  border-top: 1px solid rgba(138, 109, 59, 0.3);
+  padding-top: 1.25rem;
+}
+
+.broadsheet-directory-item {
+  border-bottom: 1px solid rgba(138, 109, 59, 0.25);
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
 }
 
 /* Sticky Tier-2 Navigation Ledger Bar */

@@ -125,52 +125,39 @@ export function SquareAndCompassesCrest({
 }
 
 export function BrassSectionDivider({ label }: { label?: string }) {
-  return (
-    <div className="relative flex items-center justify-center my-8 select-none">
-      <div className="flex-grow border-t border-[#8A6D3B]/50" />
-      <div className="mx-4 flex items-center gap-2.5 text-[#C5A059]">
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 20 20"
-          fill="none"
-          className="opacity-90"
-        >
-          <polygon
-            points="10,1 19,10 10,19 1,10"
-            stroke="#C5A059"
-            strokeWidth="1.2"
-          />
-          <polygon
-            points="10,4.5 15.5,10 10,15.5 4.5,10"
-            stroke="#8A6D3B"
-            strokeWidth="0.8"
-          />
-          <circle cx="10" cy="10" r="2" fill="#C5A059" />
-        </svg>
-        {label && (
-          <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-[#C5A059]/90">
-            {label}
-          </span>
-        )}
-        {label && (
+  if (!label) {
+    return (
+      <div
+        className="relative flex items-center justify-center my-6 select-none"
+        aria-hidden="true"
+      >
+        <div className="flex-grow border-t border-[#8A6D3B]/35" />
+        <div className="mx-3 text-[#C5A059]/75">
           <svg
-            width="16"
-            height="16"
+            width="12"
+            height="12"
             viewBox="0 0 20 20"
             fill="none"
-            className="opacity-90"
+            className="opacity-80"
           >
             <polygon
-              points="10,1 19,10 10,19 1,10"
+              points="10,2 18,10 10,18 2,10"
               stroke="#C5A059"
               strokeWidth="1.2"
             />
-            <circle cx="10" cy="10" r="2" fill="#C5A059" />
+            <circle cx="10" cy="10" r="1.8" fill="#C5A059" />
           </svg>
-        )}
+        </div>
+        <div className="flex-grow border-t border-[#8A6D3B]/35" />
       </div>
-      <div className="flex-grow border-t border-[#8A6D3B]/50" />
+    );
+  }
+
+  return (
+    <div className="pt-6 mt-6 border-t border-[#8A6D3B]/35 flex items-center gap-2 select-none">
+      <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-[#C5A059]">
+        {label}
+      </span>
     </div>
   );
 }
@@ -770,14 +757,6 @@ export function EpisodeArtworkEmblem({
       className={`relative flex flex-col items-center justify-between bg-[#0B0E14] p-2 select-none overflow-hidden ${className}`}
       aria-label={`Episode #${episodeNumber} Copperplate Emblem`}
     >
-      {/* Inner double-rule brass frame */}
-      <div className="pointer-events-none absolute inset-1.5 border border-[#8A6D3B]/45" />
-      {/* Corner brass ticks */}
-      <span className="pointer-events-none absolute top-1 left-1 w-2 h-2 border-t border-l border-[#C5A059]" />
-      <span className="pointer-events-none absolute top-1 right-1 w-2 h-2 border-t border-r border-[#C5A059]" />
-      <span className="pointer-events-none absolute bottom-1 left-1 w-2 h-2 border-b border-l border-[#C5A059]" />
-      <span className="pointer-events-none absolute bottom-1 right-1 w-2 h-2 border-b border-r border-[#C5A059]" />
-
       {/* Top micro header */}
       <span className="relative z-10 font-mono text-[8px] uppercase tracking-[0.18em] text-[#8A6D3B] pt-0.5">
         {series === "weekly_rollup" ? "CAB LEDGER" : "THE CAB CALL"}

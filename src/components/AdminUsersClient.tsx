@@ -13,6 +13,7 @@ import type {
   AuditChainVerificationResult,
   AuditLedgerEntry,
 } from "@/pipeline/audit";
+import { HeroCornerBrackets } from "./ui/BroadsheetPrimitives";
 
 interface AdminUsersClientProps {
   actor: AuthenticatedAdminActor;
@@ -340,14 +341,7 @@ export function AdminUsersClient({
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* Top Section Header */}
       <div className="relative bg-[#111726] border border-[#8A6D3B]/45 rounded-md p-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 shadow-lg">
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute top-0 left-0 w-2.5 h-2.5 border-t border-l border-[#C5A059]/60"
-        />
-        <span
-          aria-hidden="true"
-          className="pointer-events-none absolute top-0 right-0 w-2.5 h-2.5 border-t border-r border-[#C5A059]/60"
-        />
+        <HeroCornerBrackets size="sm" />
         <div className="space-y-1.5">
           <div className="font-mono text-xs uppercase tracking-widest text-[#C5A059] font-semibold">
             SETTINGS &amp; AUDIT // TEAM &amp; ACCESS

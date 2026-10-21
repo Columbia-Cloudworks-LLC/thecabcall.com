@@ -60,15 +60,6 @@ export function IncidentCard({
 
   return (
     <article className="group relative bg-[#111726]/90 border border-[#8A6D3B]/45 p-6 sm:p-7 transition-all duration-300 hover:border-[#C5A059]/80 hover:shadow-[0_12px_36px_rgba(0,0,0,0.65)] flex flex-col justify-between">
-      {/* Subtle Inset Hairline Rule */}
-      <div className="pointer-events-none absolute inset-1.5 border border-[#8A6D3B]/20 group-hover:border-[#C5A059]/35 transition-colors" />
-
-      {/* Burnished Brass Corner Brackets */}
-      <span className="pointer-events-none absolute top-1 left-1 w-2.5 h-2.5 border-t border-l border-[#C5A059]/60 group-hover:border-[#C5A059] transition-colors" />
-      <span className="pointer-events-none absolute top-1 right-1 w-2.5 h-2.5 border-t border-r border-[#C5A059]/60 group-hover:border-[#C5A059] transition-colors" />
-      <span className="pointer-events-none absolute bottom-1 left-1 w-2.5 h-2.5 border-b border-l border-[#C5A059]/60 group-hover:border-[#C5A059] transition-colors" />
-      <span className="pointer-events-none absolute bottom-1 right-1 w-2.5 h-2.5 border-b border-r border-[#C5A059]/60 group-hover:border-[#C5A059] transition-colors" />
-
       <div className="relative z-10">
         {/* Metadata Header: Dateline on left, optional PINNED badge on right */}
         <div className="pb-3 mb-3.5 border-b border-[#8A6D3B]/35 font-mono text-[11px] uppercase tracking-[0.14em] text-[#94A3B8] flex items-center justify-between gap-2">

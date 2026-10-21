@@ -2846,8 +2846,65 @@ async function runVerificationSuite() {
   console.log(
     "  ✓ Objective 16 Weekly Brief Synthesis Deduplication, Taxonomy Unification, Pure Typographic Card Grid & Anti-Hallucination Guardrails verified."
   );
+
+  // -------------------------------------------------------------------------
+  // 17. OBJECTIVE 17 (ISSUE #51): GLOBAL CSS & BROADSHEET PRIMITIVES ENFORCEMENT
+  // -------------------------------------------------------------------------
   console.log(
-    "\n=== ALL 16 DEFENSIVE HARDENING, CRAFT PROSE, KRUG USABILITY, MASTHEAD, PODCAST ARCHIVE, ADMIN STUDY, EPIC #44 IA SCALE & BROADSHEET REFACTOR OBJECTIVES PASSED (100%) ==="
+    "\n[17/17] Verifying Objective 17 (Issue #51): Global CSS & Component Primitives Enforcement (Max 1 Border Depth & Flat Broadsheet Primitives)..."
+  );
+
+  assert.equal(
+    globalsCssSource.includes(".tracing-board-frame::before"),
+    false,
+    "Issue #51: globals.css must remove .tracing-board-frame::before inset double-border"
+  );
+  assert.ok(
+    globalsCssSource.includes("border: 1px solid rgba(197, 160, 89, 0.35)") &&
+      globalsCssSource.includes(".tracing-board-frame .tracing-board-frame"),
+    "Issue #51: globals.css must define a single crisp hairline border on .tracing-board-frame and a nested frame guardrail rule"
+  );
+
+  const broadsheetPrimitivesSource = fs.readFileSync(
+    path.join(process.cwd(), "src/components/ui/BroadsheetPrimitives.tsx"),
+    "utf8"
+  );
+  for (const requiredPrimitive of [
+    "export function SectionHeader",
+    "export function BroadsheetCard",
+    "export function InteractiveCardLink",
+    "export function HairlineSection",
+    "export function DirectoryList",
+    "export function HeroCornerBrackets",
+  ]) {
+    assert.ok(
+      broadsheetPrimitivesSource.includes(requiredPrimitive),
+      `Issue #51: BroadsheetPrimitives.tsx must export ${requiredPrimitive}`
+    );
+  }
+
+  assert.equal(
+    incidentCardSource.includes("inset-1.5 border"),
+    false,
+    "Issue #51: IncidentCard.tsx must not render an inner inset-1.5 double-border"
+  );
+  assert.equal(
+    trestleboardClientSource.includes("inset-1.5 border"),
+    false,
+    "Issue #51: TrestleboardClient.tsx must not render inner inset-1.5 double-borders"
+  );
+  assert.ok(
+    trestleboardClientSource.includes("HeroCornerBrackets") &&
+      trestleboardClientSource.includes("SectionHeader"),
+    "Issue #51: TrestleboardClient.tsx must use shared HeroCornerBrackets and SectionHeader primitives"
+  );
+
+  console.log(
+    "  ✓ Objective 17 (Issue #51) Global CSS Single-Border Frame, Nested Frame Guardrail & Shared Broadsheet Primitives verified."
+  );
+
+  console.log(
+    "\n=== ALL 17 DEFENSIVE HARDENING, CRAFT PROSE, KRUG USABILITY, MASTHEAD, PODCAST ARCHIVE, ADMIN STUDY, EPIC #44 IA SCALE & BROADSHEET PRIMITIVES OBJECTIVES PASSED (100%) ==="
   );
 }
 
