@@ -9,7 +9,6 @@ import {
   Table as TableIcon,
   RotateCcw,
   ArrowUpRight,
-  Info,
   Newspaper,
   ExternalLink,
 } from "lucide-react";
@@ -44,8 +43,10 @@ import {
 } from "@/lib/archive-pagination";
 import { IncidentArticle } from "@/lib/types";
 import { IncidentCard } from "./IncidentCard";
-import { BrassSectionDivider } from "./MasonicEngravings";
-import { useTelemetry } from "./TelemetryContext";
+import {
+  InteractiveCardLink,
+  SectionHeader,
+} from "./ui/BroadsheetPrimitives";
 
 export interface KnowledgeGraphClientProps {
   incidents: Array<PublicIncidentDto | IncidentArticle>;
@@ -59,7 +60,6 @@ export function KnowledgeGraphClient({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { openRubricInspector } = useTelemetry();
 
   // Normalize full corpus for instant URL-synchronized pagination & 6x6 matrix aggregation
   const validIncidents = useMemo(
@@ -249,67 +249,57 @@ export function KnowledgeGraphClient({
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Masthead & View Switcher */}
-      <div className="tracing-board-frame p-6 sm:p-8">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div>
-            <span className="font-mono text-xs uppercase tracking-[0.2em] text-[#C5A059]">
-              THE ARCHIVE // STRUCTURAL INSPECTION &amp; MASTER CASE LEDGER
-            </span>
-            <h1 className="font-display text-2xl sm:text-3xl text-[#F3EFE6] mt-1">
-              Moral Working Tools × Structural Failure Modes Archive
-            </h1>
-            <p className="font-serif text-sm sm:text-base text-[#94A3B8] mt-1 max-w-3xl">
-              Cross-reference verified post-incident dispatches across Axis I (The Six Working Tools of Freemasonry), Axis II (Structural Failure Modes), and Axis III (Civic &amp; Industrial Sectors).
-            </p>
-          </div>
-
-          {/* View Mode Toggle (Master Case Ledger Table / Case Cards / Monitored Publications) */}
-          <div className="flex flex-wrap items-center gap-2 shrink-0 font-mono text-xs">
-            <button
-              type="button"
-              onClick={() => updateArchiveUrl({ view: "table" })}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 border cursor-pointer transition-colors ${
-                viewMode === "table"
-                  ? "bg-[#C5A059] text-[#0B0E14] border-[#C5A059] font-bold"
-                  : "bg-[#0B0E14] text-[#94A3B8] border-[#8A6D3B]/50 hover:text-[#F3EFE6]"
-              }`}
-            >
-              <TableIcon className="w-3.5 h-3.5" />
-              <span>Case Ledger</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => updateArchiveUrl({ view: "cards" })}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 border cursor-pointer transition-colors ${
-                viewMode === "cards"
-                  ? "bg-[#C5A059] text-[#0B0E14] border-[#C5A059] font-bold"
-                  : "bg-[#0B0E14] text-[#94A3B8] border-[#8A6D3B]/50 hover:text-[#F3EFE6]"
-              }`}
-            >
-              <LayoutGrid className="w-3.5 h-3.5" />
-              <span>Case Cards</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => updateArchiveUrl({ view: "sources" })}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 border cursor-pointer transition-colors ${
-                viewMode === "sources"
-                  ? "bg-[#C5A059] text-[#0B0E14] border-[#C5A059] font-bold"
-                  : "bg-[#0B0E14] text-[#94A3B8] border-[#8A6D3B]/50 hover:text-[#F3EFE6]"
-              }`}
-            >
-              <Newspaper className="w-3.5 h-3.5" />
-              <span>Monitored Publications ({archivePage.sourceCounts.length})</span>
-            </button>
-          </div>
-        </div>
+      {/* Flat Top Explorer Container (Max 1 Border Depth — no outer box wrapping bordered matrix & filter controls) */}
+      <section className="space-y-6">
+        <SectionHeader
+          as="h1"
+          eyebrow="THE ARCHIVE · STRUCTURAL INSPECTION & MASTER CASE LEDGER"
+          title="Moral Working Tools × Structural Failure Modes Archive"
+          subtitle="Cross-reference verified post-incident dispatches across Axis I (The Six Working Tools of Freemasonry), Axis II (Structural Failure Modes), and Axis III (Civic & Industrial Sectors)."
+          action={
+            <div className="flex flex-wrap items-center gap-2 shrink-0 font-mono text-xs">
+              <button
+                type="button"
+                onClick={() => updateArchiveUrl({ view: "table" })}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 border cursor-pointer transition-colors ${
+                  viewMode === "table"
+                    ? "bg-[#C5A059] text-[#0B0E14] border-[#C5A059] font-bold"
+                    : "bg-[#0B0E14] text-[#94A3B8] border-[#8A6D3B]/50 hover:text-[#F3EFE6]"
+                }`}
+              >
+                <TableIcon className="w-3.5 h-3.5" />
+                <span>Case Ledger</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => updateArchiveUrl({ view: "cards" })}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 border cursor-pointer transition-colors ${
+                  viewMode === "cards"
+                    ? "bg-[#C5A059] text-[#0B0E14] border-[#C5A059] font-bold"
+                    : "bg-[#0B0E14] text-[#94A3B8] border-[#8A6D3B]/50 hover:text-[#F3EFE6]"
+                }`}
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>Case Cards</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => updateArchiveUrl({ view: "sources" })}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 border cursor-pointer transition-colors ${
+                  viewMode === "sources"
+                    ? "bg-[#C5A059] text-[#0B0E14] border-[#C5A059] font-bold"
+                    : "bg-[#0B0E14] text-[#94A3B8] border-[#8A6D3B]/50 hover:text-[#F3EFE6]"
+                }`}
+              >
+                <Newspaper className="w-3.5 h-3.5" />
+                <span>Monitored Publications ({archivePage.sourceCounts.length})</span>
+              </button>
+            </div>
+          }
+        />
 
         {/* Interactive 6x6 Cross-Reference Matrix with Brass Heatmap Shading */}
-        <div
-          id="matrix"
-          className="mt-6 pt-6 border-t border-[#8A6D3B]/35 scroll-mt-24"
-        >
+        <div id="matrix" className="scroll-mt-24">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3 font-mono text-xs">
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-[#C5A059] uppercase tracking-wider">
@@ -498,7 +488,7 @@ export function KnowledgeGraphClient({
         </div>
 
         {/* Search, Sector (Axis III) & Publication Source Filter Bar */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mt-6 pt-5 border-t border-[#8A6D3B]/35">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 pt-5 border-t border-[#8A6D3B]/35">
           {/* Search Input (5 cols) */}
           <form
             onSubmit={(e) => {
@@ -575,7 +565,7 @@ export function KnowledgeGraphClient({
             </select>
           </div>
         </div>
-      </div>
+      </section>
 
       {/* Top Pagination & Status Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 bg-[#111726]/90 border border-[#8A6D3B]/45 font-mono text-xs">
@@ -620,52 +610,33 @@ export function KnowledgeGraphClient({
 
       {/* Results Display: Monitored Publications / Streamlined 6-Column Table / Case Cards */}
       {viewMode === "sources" ? (
-        <section aria-label="Monitored Publications Directory" className="space-y-4">
-          <BrassSectionDivider
-            label={`MONITORED PUBLICATIONS DIRECTORY (${archivePage.sourceCounts.length} ACTIVE FEEDS)`}
+        <section aria-label="Monitored Publications Directory" className="space-y-5">
+          <SectionHeader
+            eyebrow="Syndication Directory"
+            title={`Monitored Publications (${archivePage.sourceCounts.length} Active Feeds)`}
+            subtitle="Select any publication card to filter the Master Case Ledger by source."
           />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {archivePage.sourceCounts.map((src) => (
-              <div
+              <InteractiveCardLink
                 key={src.sourceFeed}
-                className="tracing-board-frame bg-[#111726]/95 p-5 flex flex-col justify-between space-y-4"
-              >
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between font-mono text-xs">
-                    <span className="text-[#C5A059] uppercase tracking-wider">
-                      Monitored Feed
-                    </span>
-                    <span className="px-2 py-0.5 bg-[#0B0E14] border border-[#8A6D3B]/40 text-[#F3EFE6]">
-                      {src.count} {src.count === 1 ? "Dispatch" : "Dispatches"}
-                    </span>
-                  </div>
-                  <h2 className="font-display text-xl text-[#F3EFE6]">
-                    {src.friendlyName}
-                  </h2>
-                  <p className="font-mono text-[11px] text-[#94A3B8]">
-                    Feed Key: {src.sourceFeed}
-                  </p>
-                  {src.latestPublishedAt && (
-                    <p className="font-mono text-[11px] text-[#94A3B8]">
-                      Latest Verified Case: {formatFriendlyDate(src.latestPublishedAt)}
-                    </p>
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    updateArchiveUrl({
-                      source: src.sourceFeed,
-                      view: "table",
-                      page: 1,
-                    })
-                  }
-                  className="w-full py-2 px-3 bg-[#C5A059] text-[#0B0E14] font-mono text-xs font-bold uppercase tracking-wider hover:bg-[#d6b36a] transition-colors cursor-pointer"
-                >
-                  Inspect {src.count} {src.friendlyName} Dispatches →
-                </button>
-              </div>
+                onClick={() =>
+                  updateArchiveUrl({
+                    source: src.sourceFeed,
+                    view: "table",
+                    page: 1,
+                  })
+                }
+                eyebrow="Monitored Feed"
+                badge={`${src.count} ${src.count === 1 ? "Dispatch" : "Dispatches"}`}
+                title={src.friendlyName}
+                subtitle={
+                  src.latestPublishedAt
+                    ? `Latest Verified Case: ${formatFriendlyDate(src.latestPublishedAt)}`
+                    : `Feed Key: ${src.sourceFeed}`
+                }
+                ctaLabel={`Inspect ${src.count} ${src.friendlyName} Dispatches`}
+              />
             ))}
           </div>
         </section>
@@ -767,59 +738,33 @@ export function KnowledgeGraphClient({
                       </div>
                     </td>
 
-                    {/* Col 4: Consolidated Working Tools (1° Primary + 2° Secondary) */}
+                    {/* Col 4: Consolidated Working Tools (1° Primary + 2° Secondary — un-boxed typographic links) */}
                     <td className="py-3.5 px-3">
                       <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-1">
-                          <Link
-                            href={getWorkingToolHref(inc.primaryTool)}
-                            className="inline-flex items-center px-2 py-0.5 bg-[#0B0E14] border border-[#C5A059]/70 text-[#C5A059] hover:bg-[#C5A059]/15 text-[11px] leading-tight"
-                          >
-                            1° {inc.primaryTool}
-                          </Link>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              openRubricInspector({ tool: inc.primaryTool })
-                            }
-                            title={`Inspect ${inc.primaryTool} in Drawer`}
-                            className="p-1 text-[#C5A059]/75 hover:text-[#C5A059] cursor-pointer"
-                          >
-                            <Info className="w-3 h-3" />
-                          </button>
-                        </div>
+                        <Link
+                          href={getWorkingToolHref(inc.primaryTool)}
+                          className="text-[#C5A059] hover:underline font-medium text-[11px] leading-tight"
+                        >
+                          1° {inc.primaryTool}
+                        </Link>
                         <Link
                           href={getWorkingToolHref(inc.secondaryTool)}
-                          className="text-[10px] text-[#94A3B8] hover:text-[#C5A059] transition-colors pl-0.5"
+                          className="text-[10px] text-[#94A3B8] hover:text-[#C5A059] transition-colors"
                         >
                           2° {inc.secondaryTool}
                         </Link>
                       </div>
                     </td>
 
-                    {/* Col 5: Concise Failure Mode Pill with Controlled Wrapping */}
+                    {/* Col 5: Concise Failure Mode Link (un-boxed typographic link) */}
                     <td className="py-3.5 px-3">
-                      <div className="flex items-start gap-1">
-                        <Link
-                          href={getFailureModeHref(inc.sreFailureMode)}
-                          title={fmSpec.summary}
-                          className="inline-block px-2 py-1 bg-[#0B0E14] border border-[#F59E0B]/50 text-[#F59E0B] hover:bg-[#F59E0B]/15 text-[11px] leading-snug break-words"
-                        >
-                          {fmSpec.craftShortLabel}
-                        </Link>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            openRubricInspector({
-                              failureMode: inc.sreFailureMode,
-                            })
-                          }
-                          title={`Inspect ${fmSpec.craftShortLabel} in Drawer`}
-                          className="p-1 text-[#F59E0B]/75 hover:text-[#F59E0B] cursor-pointer shrink-0"
-                        >
-                          <Info className="w-3 h-3" />
-                        </button>
-                      </div>
+                      <Link
+                        href={getFailureModeHref(inc.sreFailureMode)}
+                        title={fmSpec.summary}
+                        className="text-[#F59E0B] hover:underline text-[11px] leading-snug break-words"
+                      >
+                        {fmSpec.craftShortLabel}
+                      </Link>
                     </td>
 
                     {/* Col 6: Inspect */}

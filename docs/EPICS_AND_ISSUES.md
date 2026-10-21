@@ -85,7 +85,7 @@
 - [x] **Issue #46 ([GitHub Issue #46](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/46)): Podcast Page (`/podcast`) — Transcript Formatting, Paragraph Segmentation & Drawer Flattening**
 - [x] **Issue #47 ([GitHub Issue #47](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/47)): Working Tools & Rubric Page (`/rubric`) — 50% Card Diet & Redundancy Removal**
 - [x] **Issue #48 ([GitHub Issue #48](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/48)): About & Feeds Page (`/about`, `/status`, `/feeds`) — Collapse the 51-Card Wall, De-Nest Pillars & Slim Feed Cards**
-- [ ] **Issue #49 ([GitHub Issue #49](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/49)): Unseen Public Pages Audit & Flattening (`/archive`, `/tools/[slug]`, `/failures/[slug]`, `/incidents/[slug]`)**
+- [x] **Issue #49 ([GitHub Issue #49](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/49)): Unseen Public Pages Audit & Flattening (`/archive`, `/tools/[slug]`, `/failures/[slug]`, `/incidents/[slug]`)**
 - [ ] **Issue #50 ([GitHub Issue #50](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/50)): `admin.thecabcall.com` — Apply Krug "Don't Make Me Think" Discipline Across the Admin Portal**
 - [x] **Issue #51 ([GitHub Issue #51](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/51)): Global CSS & Component Primitives Enforcement — Max 1 Border Depth & Flat Broadsheet Primitives (`src/app/globals.css`, `src/components/MasonicEngravings.tsx`, `src/components/ui/BroadsheetPrimitives.tsx`, `src/components/TrestleboardClient.tsx`, `src/components/IncidentCard.tsx`)**
 
@@ -734,7 +734,7 @@
 
 ### Issue #49 (Sub-Issue 4): Unseen Public Pages Audit & Flattening (`/archive`, `/tools/[slug]`, `/failures/[slug]`, `/incidents/[slug]`)
 - **GitHub Issue:** [#49](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/49)
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Target Files:** `src/components/KnowledgeGraphClient.tsx`, `src/components/WorkingToolHubClient.tsx`, `src/components/FailureModeHubClient.tsx`, `src/components/IncidentBriefClient.tsx`
 
 ### Issue #50 (Sub-Issue 5): `admin.thecabcall.com` — Apply Krug "Don't Make Me Think" Discipline Across the Admin Portal

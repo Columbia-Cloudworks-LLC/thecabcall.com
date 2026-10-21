@@ -3065,8 +3065,88 @@ async function runVerificationSuite() {
     "  ✓ Objective 19 (Issue #48) About & Feeds 4-Column Typographic Directory, De-Nested Pillars, Slim Feed Cards, and Flattened Methodology Lists verified."
   );
 
+  // -------------------------------------------------------------------------
+  // 20. OBJECTIVE 20 (ISSUE #49): UNSEEN PUBLIC PAGES AUDIT & FLATTENING (/archive, /tools/[slug], /failures/[slug], /incidents/[slug])
+  // -------------------------------------------------------------------------
   console.log(
-    "\n=== ALL 19 DEFENSIVE HARDENING, CRAFT PROSE, KRUG USABILITY, MASTHEAD, PODCAST ARCHIVE, ADMIN STUDY, EPIC #44 IA SCALE & BROADSHEET PRIMITIVES OBJECTIVES PASSED (100%) ==="
+    "\n[20/20] Verifying Objective 20 (Issue #49): Unseen Public Pages Audit & Flattening (/archive, /tools/[slug], /failures/[slug], /incidents/[slug])..."
+  );
+
+  const workingToolHubSource = fs.readFileSync(
+    path.join(process.cwd(), "src/components/WorkingToolHubClient.tsx"),
+    "utf8"
+  );
+  const failureModeHubSource = fs.readFileSync(
+    path.join(process.cwd(), "src/components/FailureModeHubClient.tsx"),
+    "utf8"
+  );
+
+  // 1. /archive (KnowledgeGraphClient.tsx):
+  // - Uses SectionHeader & InteractiveCardLink in Monitored Publications view
+  // - Removes BrassSectionDivider and nested bordered table badges / Info buttons
+  assert.ok(
+    knowledgeGraphSource.includes("SectionHeader") &&
+      knowledgeGraphSource.includes("InteractiveCardLink"),
+    "Issue #49: KnowledgeGraphClient.tsx must use SectionHeader and InteractiveCardLink primitives"
+  );
+  assert.equal(
+    knowledgeGraphSource.includes("BrassSectionDivider") ||
+      knowledgeGraphSource.includes("openRubricInspector"),
+    false,
+    "Issue #49: KnowledgeGraphClient.tsx must remove BrassSectionDivider and secondary [i] button clutter inside table rows"
+  );
+
+  // 2. /tools/[slug] & /failures/[slug] (WorkingToolHubClient.tsx & FailureModeHubClient.tsx):
+  // - Removes concentric inner borders around hero copperplate engravings
+  // - Replaces nested bordered callout boxes in 3-part essay cards with hairline border-b subtitles
+  // - Un-boxes outer Related Podcast Episodes section and uses InteractiveCardLink
+  assert.equal(
+    workingToolHubSource.includes("border border-[#D4AF37]/40 bg-slate-950/90") ||
+      workingToolHubSource.includes("border border-amber-500/20 rounded px-3 py-2") ||
+      workingToolHubSource.includes("border border-slate-800/90 bg-slate-950/60"),
+    false,
+    "Issue #49: WorkingToolHubClient.tsx must remove concentric engraving borders, nested telemetry boxes, and nested essay callout boxes"
+  );
+  assert.equal(
+    failureModeHubSource.includes("border-amber-500/40 bg-slate-950/90") ||
+      failureModeHubSource.includes("border border-amber-500/20 rounded px-3 py-2") ||
+      failureModeHubSource.includes("border border-slate-800/90 bg-slate-950/60"),
+    false,
+    "Issue #49: FailureModeHubClient.tsx must remove concentric engraving borders, nested telemetry boxes, and nested essay callout boxes"
+  );
+  assert.ok(
+    workingToolHubSource.includes("InteractiveCardLink") &&
+      workingToolHubSource.includes("SectionHeader") &&
+      failureModeHubSource.includes("InteractiveCardLink") &&
+      failureModeHubSource.includes("SectionHeader"),
+    "Issue #49: WorkingToolHubClient.tsx and FailureModeHubClient.tsx must use SectionHeader and InteractiveCardLink"
+  );
+
+  // 3. /incidents/[slug] (IncidentBriefClient.tsx):
+  // - Un-boxes Left Diagnostic Sidebar (hairline border-t dividers instead of 4 inner bordered boxes)
+  // - Strips // dual-subtitles and uses I. Plain Facts & Context, II. Noise vs. Structural Signal, III. Socratic Verification
+  // - De-nests Section II and Section III (no inset-2 border, no inner bordered question cards or Q1/Q2 boxes)
+  assert.ok(
+    incidentBriefSource.includes("I. Plain Facts &amp; Context") &&
+      incidentBriefSource.includes("II. Noise vs. Structural Signal") &&
+      incidentBriefSource.includes("III. Socratic Verification"),
+    "Issue #49: IncidentBriefClient.tsx must display clean Section I, II, and III eyebrows without // dual-subtitles"
+  );
+  assert.equal(
+    incidentBriefSource.includes("III. THE TRESTLEBOARD INQUIRY // SOCRATIC VERIFICATION") ||
+      incidentBriefSource.includes("inset-2 border") ||
+      incidentBriefSource.includes("border border-[#EF4444]/40") ||
+      incidentBriefSource.includes("border border-[#10B981]/45"),
+    false,
+    "Issue #49: IncidentBriefClient.tsx must remove // telemetry dual-subtitles, inset-2 double borders, and nested Section II/III boxes"
+  );
+
+  console.log(
+    "  ✓ Objective 20 (Issue #49) Unseen Public Pages Flattening (/archive, /tools/[slug], /failures/[slug], /incidents/[slug]) verified."
+  );
+
+  console.log(
+    "\n=== ALL 20 DEFENSIVE HARDENING, CRAFT PROSE, KRUG USABILITY, MASTHEAD, PODCAST ARCHIVE, ADMIN STUDY, EPIC #44 IA SCALE & BROADSHEET PRIMITIVES OBJECTIVES PASSED (100%) ==="
   );
 }
 
