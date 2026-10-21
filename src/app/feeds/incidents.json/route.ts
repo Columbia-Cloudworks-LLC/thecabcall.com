@@ -1,18 +1,18 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import {
-  formatCraftLedgerEntry,
-  formatFriendlySourceName,
   isRenderablePublicIncident,
   mapDtoToCraftLexicon,
   projectPublicIncidentDto,
 } from "@/lib/dto";
-import { deduplicateSignalAgainstFacts } from "@/lib/sanitize";
+import {
+  getOutboundFeedConfigBySlugBridge,
+  renderIncidentsJsonFeed,
+} from "@/lib/publishing";
 import { ensureD1Snapshot, getAllIncidents } from "@/lib/store";
-import { getSreFailureModeSpec } from "@/lib/taxonomy";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   await ensureD1Snapshot(true);
   const rawIncidents = getAllIncidents();
   const incidents = rawIncidents
@@ -21,65 +21,33 @@ export async function GET() {
     .map((inc) => mapDtoToCraftLexicon(inc))
     .filter((inc) => isRenderablePublicIncident(inc));
 
-  const siteUrl = "https://thecabcall.com";
+  const slugParam = req.nextUrl.searchParams.get("feed") || "incidents-json";
+  const toolParam = req.nextUrl.searchParams.get("tool");
+  const config = await getOutboundFeedConfigBySlugBridge(slugParam);
 
-  const feed = {
-    version: "https://jsonfeed.org/version/1.1",
-    title: "Change Advisory Board — The Trestleboard Case Ledger",
-    home_page_url: siteUrl,
-    feed_url: `${siteUrl}/feeds/incidents.json`,
-    description:
-      "Craftsman's Briefs examining current events through Site Reliability Engineering failure analysis and the Six Working Tools of Freemasonry.",
-    language: "en-US",
-    authors: [
+  if (config && !config.enabled) {
+    return NextResponse.json(
       {
-        name: "Change Advisory Board",
-        url: `${siteUrl}/status`,
+        version: "https://jsonfeed.org/version/1.1",
+        title: "Feed Paused",
+        description:
+          "This syndication feed is temporarily paused by the Change Advisory Board.",
+        items: [],
       },
-    ],
-    items: incidents.map((inc) => {
-      const briefUrl = `${siteUrl}/incidents/${inc.slug}`;
-      const failureSpec = getSreFailureModeSpec(inc.sreFailureMode);
-      const ledgerLabel = formatCraftLedgerEntry(inc.incidentCode);
-      const friendlySource = formatFriendlySourceName(inc.sourceFeed);
-      const dedupedSignal = deduplicateSignalAgainstFacts(
-        [inc.socraticBrief, inc.executiveSummary],
-        inc.proportionalityCheck.structuralSignal,
-        inc.primaryTool,
-        inc.sreFailureMode,
-        inc.secondaryTool
-      );
+      {
+        status: 503,
+        headers: {
+          "Content-Type": "application/feed+json; charset=utf-8",
+          "Cache-Control": "no-store, max-age=0",
+        },
+      }
+    );
+  }
 
-      const contentText = [
-        `${ledgerLabel} — ${inc.title}`,
-        `Primary Working Tool: ${inc.primaryTool} | Secondary Working Tool: ${inc.secondaryTool} | Failure Mode: ${failureSpec.craftTitle}`,
-        "",
-        "I. WHAT HAPPENED (THE PLAIN FACTS)",
-        inc.socraticBrief,
-        "",
-        `II. THE DIAGNOSTIC LENS (${inc.primaryTool} & ${failureSpec.craftTitle})`,
-        `Partisan Heat & Spin (The Noise): ${inc.proportionalityCheck.noiseOverblown}`,
-        `The Actual Foundation (The Signal): ${dedupedSignal}`,
-        "",
-        "III. QUESTIONS FOR FAIR & CONSISTENT JUDGMENT",
-        `1. ${inc.questions[0]}`,
-        `2. ${inc.questions[1]}`,
-        "",
-        `Original ${friendlySource} Article: ${inc.sourceUrl}`,
-      ].join("\n");
-
-      return {
-        id: briefUrl,
-        url: briefUrl,
-        external_url: inc.sourceUrl,
-        title: inc.title,
-        summary: inc.executiveSummary,
-        content_text: contentText,
-        date_published: inc.publishedAt,
-        tags: [inc.primaryTool, inc.secondaryTool, failureSpec.craftTitle, inc.domainSector],
-      };
-    }),
-  };
+  const feed = renderIncidentsJsonFeed(incidents, config, {
+    toolFilter: toolParam,
+    selfPath: "/feeds/incidents.json",
+  });
 
   return NextResponse.json(feed, {
     status: 200,

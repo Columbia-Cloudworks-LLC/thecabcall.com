@@ -102,6 +102,16 @@ import {
   getSystemPostureSummary,
   getWorkingToolHubData,
 } from "../src/lib/store.ts";
+import { verifyAuditChainIntegrity } from "../src/pipeline/audit.ts";
+import {
+  createOutboundFeed,
+  deleteOutboundFeed,
+  listOutboundFeeds,
+  renderIncidentsJsonFeed,
+  renderIncidentsRssXml,
+  renderPodcastRssXml,
+  updateOutboundFeed,
+} from "../src/pipeline/publishing.ts";
 import worker, { type ExecutionContextLike } from "../src/worker.ts";
 
 function createInMemoryD1Database(): {
@@ -3232,8 +3242,210 @@ async function runVerificationSuite() {
     "  ✓ Objective 21 (Issue #50) Admin Portal Krug 'Don\\'t Make Me Think' Flattening, Format Paragraphs Helpers, and De-Nested Inspectors verified."
   );
 
+  // -------------------------------------------------------------------------
+  // 22. OBJECTIVE 22 (ISSUE #12): OUTBOUND PUBLISHED FEEDS & SYNDICATION STUDIO (/admin/publishing, /feed.xml, /feeds/incidents.*)
+  // -------------------------------------------------------------------------
   console.log(
-    "\n=== ALL 21 DEFENSIVE HARDENING, CRAFT PROSE, KRUG USABILITY, MASTHEAD, PODCAST ARCHIVE, ADMIN STUDY, EPIC #44 IA SCALE & EPIC #45 KRUG UI/UX FLATTENING OBJECTIVES PASSED (100%) ==="
+    "\n[22/22] Verifying Objective 22 (Issue #12): Outbound Published Feeds & Syndication Studio (D1 Schema, Audit Ledger & XML/JSON Feed Toggles)..."
+  );
+
+  const adminPublishingClientSource = fs.readFileSync(
+    path.join(process.cwd(), "src/components/AdminPublishingClient.tsx"),
+    "utf8"
+  );
+  assert.equal(
+    /[A-Z0-9]\s+\/\/\s+[A-Z0-9]/.test(adminPublishingClientSource),
+    false,
+    "Issue #12/#50: AdminPublishingClient.tsx must not contain any ' // ' telemetry dual-subtitles"
+  );
+  assert.ok(
+    adminPublishingClientSource.includes("HairlineSection") &&
+      adminPublishingClientSource.includes("HeroCornerBrackets") &&
+      adminPublishingClientSource.includes("Inspect Feed ↗"),
+    "Issue #12: AdminPublishingClient.tsx must use HairlineSection, HeroCornerBrackets, and 'Inspect Feed ↗'"
+  );
+
+  const seededOutboundFeeds = await listOutboundFeeds(db);
+  assert.equal(
+    seededOutboundFeeds.length,
+    3,
+    "Issue #12: 0007_outbound_published_feeds.sql must seed 3 baseline feeds (podcast-rss, incidents-rss, incidents-json)"
+  );
+  assert.deepEqual(
+    seededOutboundFeeds.map((f) => f.slug),
+    ["podcast-rss", "incidents-rss", "incidents-json"],
+    "Issue #12: Baseline outbound feed slugs must be podcast-rss, incidents-rss, and incidents-json"
+  );
+
+  // Update incidents-rss and verify audit_ledger records outbound_feed.update
+  const updateFeedRes = await updateOutboundFeed(
+    db,
+    {
+      idOrSlug: "incidents-rss",
+      title: "The CAB Call — De-Alarmed Case Briefs Feed",
+      maxItems: 25,
+      useDeescalatedTitles: true,
+      includeOriginalTitleNote: true,
+      includeAttachedImages: true,
+      includeFullSocraticBrief: true,
+      includeAuditLedgerFooter: true,
+      reason: "Verification test update for Issue #12",
+    },
+    {
+      actorEmail: "owner@thecabcall.com",
+      actorRole: "owner",
+      authMethod: "google_oauth",
+    }
+  );
+  assert.equal(
+    updateFeedRes.feed.title,
+    "The CAB Call — De-Alarmed Case Briefs Feed"
+  );
+  assert.equal(updateFeedRes.feed.maxItems, 25);
+  assert.equal(updateFeedRes.auditEntry.actionType, "outbound_feed.update");
+  assert.equal(updateFeedRes.auditEntry.targetType, "outbound_feed");
+  assert.equal(updateFeedRes.auditEntry.targetId, "incidents-rss");
+
+  // Create custom filtered outbound feed and verify outbound_feed.create
+  const createFeedRes = await createOutboundFeed(
+    db,
+    {
+      slug: "incidents-the-square",
+      title: "The CAB Call — The Square Case Briefs",
+      description: "Filtered feed for The Square",
+      filterWorkingTool: "The Square",
+      reason: "Verification test create for Issue #12",
+    },
+    {
+      actorEmail: "owner@thecabcall.com",
+      actorRole: "owner",
+      authMethod: "google_oauth",
+    }
+  );
+  assert.equal(createFeedRes.feed.slug, "incidents-the-square");
+  assert.equal(createFeedRes.feed.filterWorkingTool, "The Square");
+  assert.equal(createFeedRes.auditEntry.actionType, "outbound_feed.create");
+
+  // Delete custom feed and verify outbound_feed.delete + chain integrity
+  const deleteFeedRes = await deleteOutboundFeed(
+    db,
+    "incidents-the-square",
+    "Clean up test feed",
+    {
+      actorEmail: "owner@thecabcall.com",
+      actorRole: "owner",
+      authMethod: "google_oauth",
+    }
+  );
+  assert.equal(deleteFeedRes.deletedSlug, "incidents-the-square");
+  assert.equal(deleteFeedRes.auditEntry.actionType, "outbound_feed.delete");
+
+  const chainCheckAfterPublishing = await verifyAuditChainIntegrity(db);
+  assert.equal(
+    chainCheckAfterPublishing.valid,
+    true,
+    "Issue #12: SHA-256 audit ledger chain must remain 100% valid after outbound_feed mutations"
+  );
+
+  // Verify XML & JSON Feed rendering with de-alarmed titles, provenance notes, <media:content>, and audit footer
+  const sampleSyndicatedIncident: PublicIncidentDto = {
+    id: "d1-inc-901",
+    incidentCode: "#CAB-2026-0901",
+    slug: "regional-substation-relay-trip-d1-901",
+    sourceFeed: "NPR Top News",
+    title: "Regional Substation Relay Trip Delays Commuter Rail Corridor",
+    originalTitle: "SHOCKING GRID MELTDOWN PARALYZES COMMUTER RAIL!",
+    titleRewritten: true,
+    titleRewriteReason: "Neutralized alarmist all-caps source headline",
+    sourceUrl: "https://www.npr.org/2026/10/21/substation-relay-trip",
+    publishedAt: "2026-10-21T12:00:00.000Z",
+    domainSector: "Infrastructure & Supply Chain",
+    primaryTool: "The Square",
+    secondaryTool: "24-Inch Gauge",
+    sreFailureMode: "Single Point of Failure (SPOF) / Untested Failover",
+    executiveSummary:
+      "A protective relay trip at a regional substation halted commuter rail signaling for three hours on Wednesday morning. Backup battery inverters failed to engage automatically because transfer switch firmware had not been tested under load.",
+    socraticBrief:
+      "A protective relay trip at a regional traction power substation halted commuter rail signaling across three interlocking zones on Wednesday morning. While the transit authority maintained dual-feed power contracts, the automatic transfer switch failed to cut over when primary voltage sagged.",
+    proportionalityCheck: {
+      noiseOverblown:
+        "Cable commentary framing the three-hour delay as a total collapse of regional infrastructure ignores that physical track and rolling stock remained undamaged.",
+      structuralSignal:
+        "Standby failover mechanisms that are only verified on paper rather than under live load conditions create a hidden single point of failure during routine utility faults.",
+    },
+    questions: [
+      "When was our primary automatic transfer switch last tested under an unannounced live load drop?",
+      "Which backup dependencies share the same control-plane firmware as the primary path?",
+    ],
+    imageUrl: "/media/card-d1-901.svg",
+    imageAlt: "Substation relay telemetry blueprint",
+    imageCaption: "Blueprint Card · The Square",
+  };
+
+  const rssXmlDeescalated = renderIncidentsRssXml(
+    [sampleSyndicatedIncident],
+    updateFeedRes.feed
+  );
+  assert.ok(
+    rssXmlDeescalated.includes('xmlns:media="http://search.yahoo.com/mrss/"') &&
+      rssXmlDeescalated.includes(
+        "<title>Regional Substation Relay Trip Delays Commuter Rail Corridor</title>"
+      ) &&
+      rssXmlDeescalated.includes("Original source headline:") &&
+      rssXmlDeescalated.includes(
+        "SHOCKING GRID MELTDOWN PARALYZES COMMUTER RAIL!"
+      ) &&
+      rssXmlDeescalated.includes(
+        '<media:content url="https://thecabcall.com/media/card-d1-901.svg"'
+      ) &&
+      rssXmlDeescalated.includes("Immutable Audit Trail Verification:"),
+    "Issue #12: renderIncidentsRssXml must emit <media:content>, de-alarmed title, original headline provenance note, and audit verification footer"
+  );
+
+  const rssXmlRawTitle = renderIncidentsRssXml([sampleSyndicatedIncident], {
+    ...updateFeedRes.feed,
+    useDeescalatedTitles: false,
+    includeAttachedImages: false,
+    includeFullSocraticBrief: false,
+  });
+  assert.ok(
+    rssXmlRawTitle.includes(
+      "<title>SHOCKING GRID MELTDOWN PARALYZES COMMUTER RAIL!</title>"
+    ) && !rssXmlRawTitle.includes("<media:content"),
+    "Issue #12: renderIncidentsRssXml must switch to originalTitle when useDeescalatedTitles=false and omit <media:content> when includeAttachedImages=false"
+  );
+
+  const jsonFeedPayload = renderIncidentsJsonFeed(
+    [sampleSyndicatedIncident],
+    seededOutboundFeeds[2]
+  ) as {
+    version: string;
+    items: Array<Record<string, unknown>>;
+  };
+  assert.equal(jsonFeedPayload.version, "https://jsonfeed.org/version/1.1");
+  assert.equal(jsonFeedPayload.items.length, 1);
+  assert.equal(
+    jsonFeedPayload.items[0].title,
+    "Regional Substation Relay Trip Delays Commuter Rail Corridor"
+  );
+  assert.equal(
+    jsonFeedPayload.items[0].image,
+    "https://thecabcall.com/media/card-d1-901.svg"
+  );
+
+  const podcastXml = renderPodcastRssXml(INITIAL_EPISODES.slice(0, 2), seededOutboundFeeds[0]);
+  assert.ok(
+    podcastXml.includes("<itunes:subtitle>") &&
+      podcastXml.includes("<enclosure url="),
+    "Issue #12: renderPodcastRssXml must render dynamic channel metadata and audio enclosures"
+  );
+
+  console.log(
+    "  ✓ Objective 22 (Issue #12) Outbound Published Feeds & Syndication Studio (D1 Schema, Audit Ledger & XML/JSON Feed Toggles) verified."
+  );
+
+  console.log(
+    "\n=== ALL 22 DEFENSIVE HARDENING, CRAFT PROSE, KRUG USABILITY, MASTHEAD, PODCAST ARCHIVE, ADMIN STUDY, EPIC #44 IA SCALE, EPIC #45 KRUG UI/UX FLATTENING & ISSUE #12 SYNDICATION STUDIO OBJECTIVES PASSED (100%) ==="
   );
 }
 

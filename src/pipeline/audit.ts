@@ -27,7 +27,9 @@ export type AuditActionType =
   | "incident.attach_image"
   | "incident.override_brief"
   | "incident.status_change"
+  | "outbound_feed.create"
   | "outbound_feed.update"
+  | "outbound_feed.delete"
   | "pipeline_transform.update"
   | "audit.replay"
   | string;

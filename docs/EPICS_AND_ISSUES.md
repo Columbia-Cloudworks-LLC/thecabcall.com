@@ -18,9 +18,9 @@
 | **System-2 Synthesis (Gemini 2.5 Flash)** | Live on Cloudflare Edge & working locally | `src/pipeline/synthesize.ts` |
 | **Friday 5-Min Podcast Rollup + TTS Audio + 21 Legacy Episodes** | Live on Cloudflare Edge & R2 (`cabcall-audio`) | `src/pipeline/rollup.ts`, `scripts/import-legacy-episodes.ts` |
 | **Cloudflare Worker Entrypoint & Crons** | Deployed (`https://thecabcall.thecabcall.workers.dev`) | `src/worker.ts`, `wrangler.jsonc` |
-| **D1 SQLite Schema & Migrations** | Applied to remote `cabcall-db` (`094cf69c-0fe3-409b-a871-06f3610a28a6`) & local `.wrangler` | `migrations/0001_init.sql` – `migrations/0007_legacy_episodes_artwork_and_disclaimer.sql` |
-| **Database & Audio Bridge** | Live Cloud Worker Bridge (`/api/snapshot` + R2 audio & `/media/*`) with local `.wrangler` fallback | `src/lib/d1-bridge.ts`, `src/lib/store.ts`, `src/lib/episodes.ts`, `src/lib/feeds-filters.ts`, `src/lib/incidents.ts` |
-| **Admin Governance, Auth & Audit Ledger** | Issues #6, #7, #8, #9, #10 & #11 (Audit Ledger, Admin OAuth/Magic-Link Auth & Invites, Command Center Shell & Audit Replay Studio, Podcast Episode & R2 Audio Studio, Dynamic Feeds & Filters Studio, Editorial Pipeline & Incident Studio) live in Production; Issue #12 planned below | `migrations/0003_audit_ledger.sql` – `migrations/0007_legacy_episodes_artwork_and_disclaimer.sql`, `src/pipeline/audit.ts`, `src/pipeline/auth.ts`, `src/pipeline/ingest.ts`, `src/pipeline/rollup.ts`, `src/pipeline/editorial.ts`, `src/lib/audit.ts`, `src/lib/auth.ts`, `src/lib/episodes.ts`, `src/lib/feeds-filters.ts`, `src/lib/incidents.ts`, `src/app/admin/` |
+| **D1 SQLite Schema & Migrations** | Applied to remote `cabcall-db` (`094cf69c-0fe3-409b-a871-06f3610a28a6`) & local `.wrangler` | `migrations/0001_init.sql` – `migrations/0010_archive_pagination_indexes.sql` |
+| **Database & Audio Bridge** | Live Cloud Worker Bridge (`/api/snapshot` + R2 audio & `/media/*`) with local `.wrangler` fallback | `src/lib/d1-bridge.ts`, `src/lib/store.ts`, `src/lib/episodes.ts`, `src/lib/feeds-filters.ts`, `src/lib/incidents.ts`, `src/lib/publishing.ts` |
+| **Admin Governance, Auth & Audit Ledger** | Issues #6, #7, #8, #9, #10, #11 & #12 (Audit Ledger, Admin OAuth/Magic-Link Auth & Invites, Command Center Shell & Audit Replay Studio, Podcast Episode & R2 Audio Studio, Dynamic Feeds & Filters Studio, Editorial Pipeline & Incident Studio, Outbound Published Feeds & Syndication Studio) live in Production | `migrations/0003_audit_ledger.sql` – `migrations/0010_archive_pagination_indexes.sql`, `src/pipeline/audit.ts`, `src/pipeline/auth.ts`, `src/pipeline/ingest.ts`, `src/pipeline/rollup.ts`, `src/pipeline/editorial.ts`, `src/pipeline/publishing.ts`, `src/lib/audit.ts`, `src/lib/auth.ts`, `src/lib/episodes.ts`, `src/lib/feeds-filters.ts`, `src/lib/incidents.ts`, `src/lib/publishing.ts`, `src/app/admin/` |
 
 ---
 
@@ -42,7 +42,7 @@
 - [x] **Issue #9 ([GitHub Issue #9](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/9)): Podcast Episode Admin Studio — Delete Episodes, Purge R2 Audio, Edit Transcripts & Generate New Episodes (`/admin/episodes`)**
 - [x] **Issue #10 ([GitHub Issue #10](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/10)): Dynamic Inbound RSS Feed & Triage Filter Management (`/admin/feeds` & `/admin/filters`)**
 - [x] **Issue #11 ([GitHub Issue #11](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/11)): Editorial Pipeline & Incident Studio — De-Alarmist Title Rewriting, Image Attachment Pipeline & Brief Overrides (`/admin/incidents` & `/admin/transforms`)**
-- [ ] **Issue #12 ([GitHub Issue #12](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/12)): Outbound Published Feeds & Syndication Studio — Customize Podcast RSS & Publish De-Alarmed Incident Feeds (`/admin/publishing`, `/feed.xml` & `/feeds/incidents.*`)**
+- [x] **Issue #12 ([GitHub Issue #12](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/12)): Outbound Published Feeds & Syndication Studio — Customize Podcast RSS & Publish De-Alarmed Incident Feeds (`/admin/publishing`, `/feed.xml` & `/feeds/incidents.*`)**
 
 ### Krug Usability ('Don't Make Me Think') & Craft Lexicon Overhaul Epic ([GitHub Issue #20](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/20) — Issues #13 to #19)
 - [x] **Issue #13 ([GitHub Issue #13](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/13)): [Lexicon] Replace 'Tech Bro / NASA Terminal' UI Labels with Plain-Spoken Craft Terminology (`mapDtoToCraftLexicon`)**
@@ -512,7 +512,7 @@
 
 ## Issue #12 (Epic 6.7): Outbound Published Feeds & Syndication Studio (`/admin/publishing`, `/feed.xml` & `/feeds/incidents.*`)
 - **GitHub Issue:** [#12](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/12)
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Objective:** Give the Admin full control over all feeds that `thecabcall.com` publishes to the outside world—allowing you to modify the podcast RSS feed (`/feed.xml`) metadata and rules, and publishing new syndicated **Incident Brief Feeds** (`/feeds/incidents.xml` RSS 2.0, `/feeds/incidents.json` JSON Feed) where you can choose whether subscribers receive de-alarmed titles, attached incident images (`<media:content>` / `<enclosure>`), full Socratic briefs or executive summaries, and optional inline audit provenance links.
 - **Automated Steps for Antigravity:**
   1. **D1 Migration (`migrations/0007_outbound_published_feeds.sql`):**
