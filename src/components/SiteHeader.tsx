@@ -78,7 +78,9 @@ export function isNavItemActive(
       normalizedPath === "/status" ||
       normalizedPath.startsWith("/status/") ||
       normalizedPath === "/feeds" ||
-      normalizedPath.startsWith("/feeds/")
+      normalizedPath.startsWith("/feeds/") ||
+      normalizedPath === "/about" ||
+      normalizedPath.startsWith("/about/")
     );
   }
   return (

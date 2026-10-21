@@ -29,7 +29,6 @@ export default async function SystemStatusPage() {
     .map((f) => ({
       name: formatFriendlySourceName(f.name) === "Source" ? f.name : f.name,
       category: f.focusArea || "Public Infrastructure & Institutional Governance",
-      cadence: "Scheduled Automated Poll",
     }));
 
   const validIncidents = getAllIncidents()

@@ -3,7 +3,6 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import {
-  BookOpen,
   Check,
   Compass,
   Copy,
@@ -14,46 +13,188 @@ import {
   Scale,
   ShieldCheck,
 } from "lucide-react";
-import { SRE_FAILURE_MODES, WORKING_TOOLS } from "@/lib/taxonomy";
+import { SquareAndCompassesCrest } from "./MasonicEngravings";
 import {
-  BrassSectionDivider,
-  SquareAndCompassesCrest,
-  WorkingToolEngraving,
-} from "./MasonicEngravings";
+  HeroCornerBrackets,
+  SectionHeader,
+} from "./ui/BroadsheetPrimitives";
 
 export interface PublicSourcedFeedInfo {
   name: string;
   category: string;
-  cadence: string;
+  cadence?: string;
 }
 
-const DEFAULT_SYNDICATED_SOURCED_FEEDS: PublicSourcedFeedInfo[] = [
-  {
-    name: "NPR News",
-    category: "National & Civic Infrastructure",
-    cadence: "Concurrent Scheduled Poll",
-  },
-  {
-    name: "PBS NewsHour",
-    category: "Public Policy & Institutional Governance",
-    cadence: "Concurrent Scheduled Poll",
-  },
-  {
-    name: "New York Times",
-    category: "National & Global Dispatches",
-    cadence: "Concurrent Scheduled Poll",
-  },
-  {
-    name: "Wall Street Journal",
-    category: "Markets, Supply Chain & Enterprise Operations",
-    cadence: "Concurrent Scheduled Poll",
-  },
-  {
-    name: "Ars Technica",
-    category: "Systems Engineering, Cloud & Security",
-    cadence: "Concurrent Scheduled Poll",
-  },
+export type PublicationBeatCategory =
+  | "Wire & Mainstream"
+  | "Tech, Cyber & Science"
+  | "Policy, Law & Markets"
+  | "Journals & Commentary";
+
+export const PUBLICATION_BEAT_ORDER: PublicationBeatCategory[] = [
+  "Wire & Mainstream",
+  "Tech, Cyber & Science",
+  "Policy, Law & Markets",
+  "Journals & Commentary",
 ];
+
+export const DEFAULT_SYNDICATED_SOURCED_FEEDS: PublicSourcedFeedInfo[] = [
+  // 1. Wire & Mainstream
+  { name: "NPR Top News", category: "Broad US Top Stories" },
+  { name: "PBS NewsHour Nation", category: "Institutional & Policy" },
+  { name: "NYT HomePage", category: "Mainstream Agenda-Setting" },
+  { name: "BBC News (World)", category: "International / Center" },
+  { name: "ProPublica", category: "Investigative / Public Accountability" },
+  { name: "The Guardian (World)", category: "International / Center-Left" },
+  { name: "Al Jazeera English", category: "Global South / International" },
+  { name: "Defense One", category: "US National Security & Military" },
+  { name: "The Conversation (US)", category: "Academic & Research-Driven News" },
+  { name: "Reuters (via Google News)", category: "Global Wire" },
+
+  // 2. Tech, Cyber & Science
+  { name: "Ars Technica", category: "Tech, Infrastructure & Security" },
+  { name: "Krebs on Security", category: "Deep-Dive Cybercrime & Infrastructure Breaches" },
+  { name: "Schneier on Security", category: "Security Engineering, Cryptography & Policy" },
+  { name: "The Register", category: "Enterprise IT, Cloud Outages & Regulatory Analysis" },
+  { name: "IEEE Spectrum", category: "Hard Engineering, Energy Grid & Robotics" },
+  { name: "MIT Technology Review", category: "Emerging Tech, AI Governance & Biotech" },
+  { name: "Quanta Magazine", category: "Pure Science, Mathematics & Complex Systems" },
+  { name: "BleepingComputer", category: "Zero-Day Exploits, Ransomware & Outage News" },
+
+  // 3. Policy, Law & Markets
+  { name: "WSJ US Business", category: "Corporate, Supply Chain & Fed" },
+  { name: "SCOTUSblog", category: "Supreme Court & Constitutional Law" },
+  { name: "Lawfare", category: "Hard National Security, Cybersecurity & Law" },
+  { name: "Roll Call", category: "Legislative Process & Capitol Hill Mechanics" },
+  { name: "The Hill (News)", category: "Bipartisan Beltway Reporting" },
+  { name: "Politico (Policy & Politics)", category: "Executive Branch & Campaign Mechanics" },
+  { name: "Foreign Affairs", category: "Deep Geopolitical Strategy (CFR)" },
+  { name: "Foreign Policy", category: "Global Statecraft & Diplomacy" },
+  { name: "The Economist (World)", category: "Macroeconomics & Global News" },
+  { name: "Financial Times (World)", category: "Global Markets & Sovereign Finance" },
+  { name: "Calculated Risk", category: "Data-Heavy US Housing & Macro Indicators" },
+  { name: "Marginal Revolution", category: "Economics & Institutional Incentives" },
+  { name: "Cato Institute", category: "Constitutional & Market Policy Think Tank" },
+  { name: "American Enterprise Institute", category: "Market & Regulatory Policy Think Tank" },
+  { name: "The Volokh Conspiracy", category: "Constitutional Law & Legal Theory" },
+  { name: "City Journal (Manhattan Inst.)", category: "Urban Policy, Governance & Municipal Systems" },
+
+  // 4. Journals & Commentary
+  { name: "Reason Magazine", category: "Free Markets & Civil Liberties" },
+  { name: "National Review", category: "Constitutional & Institutional Conservative" },
+  { name: "The American Conservative", category: "Main Street & Non-Interventionist Critique" },
+  { name: "The Dispatch", category: "Center-Right Fact-Focused Reporting" },
+  { name: "The Atlantic", category: "Institutional & Cultural Analysis" },
+  { name: "The American Prospect", category: "Public Policy & Political Economy" },
+  { name: "Mother Jones", category: "Investigative & Accountability Journalism" },
+  { name: "Vox", category: "Policy Explainers & Institutional Mechanics" },
+  { name: "The Intercept", category: "National Security, Surveillance & Accountability" },
+  { name: "Jacobin", category: "Labor, Industrial & Class Analysis" },
+  { name: "Aeon Magazine", category: "Philosophy, Psychology & History Essays" },
+  { name: "Noema Magazine (Berggruen)", category: "Governance, Philosophy & Planetary Systems" },
+  { name: "UnHerd", category: "Heterodox Political & Cultural Commentary" },
+  { name: "Compact Magazine", category: "Post-Liberal & Civic Critique" },
+  { name: "Quillette", category: "Free Inquiry, Science & Culture" },
+  { name: "Astral Codex Ten", category: "Systems, Psychiatry & Meta-Science" },
+  { name: "The New Atlantis", category: "Ethics & Philosophy of Technology and Science" },
+];
+
+const WIRE_AND_MAINSTREAM_NAMES = new Set([
+  "npr top news",
+  "npr news",
+  "pbs newshour nation",
+  "pbs newshour",
+  "nyt homepage",
+  "new york times",
+  "bbc news (world)",
+  "propublica",
+  "the guardian (world)",
+  "al jazeera english",
+  "defense one",
+  "the conversation (us)",
+  "reuters (via google news)",
+  "reuters",
+  "associated press",
+]);
+
+const TECH_CYBER_SCIENCE_NAMES = new Set([
+  "ars technica",
+  "krebs on security",
+  "schneier on security",
+  "the register",
+  "ieee spectrum",
+  "mit technology review",
+  "quanta magazine",
+  "bleepingcomputer",
+]);
+
+const POLICY_LAW_MARKETS_NAMES = new Set([
+  "wsj us business",
+  "wall street journal",
+  "scotusblog",
+  "lawfare",
+  "roll call",
+  "the hill (news)",
+  "politico (policy & politics)",
+  "foreign affairs",
+  "foreign policy",
+  "the economist (world)",
+  "financial times (world)",
+  "calculated risk",
+  "marginal revolution",
+  "cato institute",
+  "american enterprise institute",
+  "the volokh conspiracy",
+  "city journal (manhattan inst.)",
+]);
+
+export function categorizePublicationBeat(
+  name: string,
+  descriptor: string
+): PublicationBeatCategory {
+  const normName = name.trim().toLowerCase();
+  const normDesc = descriptor.trim().toLowerCase();
+
+  if (WIRE_AND_MAINSTREAM_NAMES.has(normName)) {
+    return "Wire & Mainstream";
+  }
+  if (TECH_CYBER_SCIENCE_NAMES.has(normName)) {
+    return "Tech, Cyber & Science";
+  }
+  if (POLICY_LAW_MARKETS_NAMES.has(normName)) {
+    return "Policy, Law & Markets";
+  }
+
+  if (
+    /\b(cyber|security|tech|engineering|science|quantum|robotics|ransomware|cloud|biotech|math)\b/i.test(
+      normDesc
+    ) &&
+    !/\b(national security|lawfare|intercept|philosophy of technology)\b/i.test(
+      `${normName} ${normDesc}`
+    )
+  ) {
+    return "Tech, Cyber & Science";
+  }
+
+  if (
+    /\b(wire|top stories|mainstream|international|world|investigative|broadcast)\b/i.test(
+      normDesc
+    ) &&
+    !/\b(economist|financial times|mother jones)\b/i.test(normName)
+  ) {
+    return "Wire & Mainstream";
+  }
+
+  if (
+    /\b(court|constitutional|law|legislative|capitol|beltway|markets|macro|finance|housing|supply chain|fed|diplomacy|geopolitical|think tank|urban policy)\b/i.test(
+      normDesc
+    )
+  ) {
+    return "Policy, Law & Markets";
+  }
+
+  return "Journals & Commentary";
+}
 
 interface SystemStatusClientProps {
   sourcedFeeds?: PublicSourcedFeedInfo[];
@@ -65,10 +206,7 @@ interface SystemStatusClientProps {
 
 export function SystemStatusClient({
   sourcedFeeds = DEFAULT_SYNDICATED_SOURCED_FEEDS,
-  publishedBriefCount = 12,
-  publishedEpisodeCount = 4,
   latestEpisodeTitle = "The Friday CAB Weekly Brief",
-  latestEpisodeNumber = 43,
 }: SystemStatusClientProps) {
   const [copiedFeedKey, setCopiedFeedKey] = useState<string | null>(null);
 
@@ -83,63 +221,61 @@ export function SystemStatusClient({
   const outboundPublishedFeeds = [
     {
       key: "podcast-rss",
-      badge: "PODCAST AUDIO & TRANSCRIPTS // RSS 2.0 + ITUNES",
       title: "The CAB Call Podcast Feed",
       path: "/feed.xml",
       fullUrl: "https://thecabcall.com/feed.xml",
-      formatLabel: "application/rss+xml (Audio Enclosures)",
-      cadence: "Published Every Friday + Legacy Deep-Dive Archive",
-      countLabel: `${publishedEpisodeCount} Published Episodes (Latest: Ep. #${latestEpisodeNumber})`,
       description:
-        "Delivers the 5-minute Friday CAB Weekly Brief spoken retrospectives (~750 words) and the full-length Legacy Deep-Dive Archive. Includes direct MP3 enclosures, chapter markers, and complete three-part transcripts.",
-      readers: "Apple Podcasts, Spotify, Overcast, Pocket Casts, AntennaPod",
+        "Delivers our weekly spoken retrospectives and deep-dive conversational episodes with direct audio enclosures and full transcripts.",
       icon: Radio,
-      browseHref: "/archive",
-      browseLabel: "Browse Podcast Archive →",
     },
     {
       key: "incidents-rss",
-      badge: "TRESTLEBOARD CASE BRIEFS // RSS 2.0 FULL TEXT",
       title: "The Craftsman's Brief Syndication Feed",
       path: "/feeds/incidents.xml",
       fullUrl: "https://thecabcall.com/feeds/incidents.xml",
-      formatLabel: "application/rss+xml (Full HTML Content)",
-      cadence: "Continuous Syndication on Case Verification",
-      countLabel: `${publishedBriefCount} Verified Case Briefs on The Trestleboard`,
       description:
-        "Full-text RSS 2.0 feed of every verified Craftsman's Brief published to The Trestleboard—complete with Plain Facts, Partisan Heat & Spin vs. Actual Foundation diagnostics, and Socratic verification questions.",
-      readers: "NetNewsWire, Feedly, Inoreader, Readwise Reader, NewsBlur",
+        "Full-text RSS 2.0 feed of every verified Craftsman's Brief published to The Trestleboard, including plain facts, structural signal, and Socratic questions.",
       icon: Rss,
-      browseHref: "/",
-      browseLabel: "Read The Trestleboard →",
     },
     {
       key: "incidents-json",
-      badge: "STRUCTURED CASE LEDGER // JSON FEED 1.1",
       title: "The Trestleboard JSON Feed",
       path: "/feeds/incidents.json",
       fullUrl: "https://thecabcall.com/feeds/incidents.json",
-      formatLabel: "application/feed+json (JSON Feed 1.1)",
-      cadence: "Continuous Syndication on Case Verification",
-      countLabel: `${publishedBriefCount} Structured Case Records`,
       description:
-        "Machine-readable JSON Feed 1.1 edition of The Trestleboard Case Ledger, tagged by Primary Working Tool, Secondary Working Tool, Shop-Floor Failure Mode, and civic sector for modern feed readers and research archives.",
-      readers: "JSON Feed 1.1 Readers, Feedbin, Tapestry & Archival Scripts",
+        "Machine-readable JSON Feed 1.1 edition of The Trestleboard Case Ledger tagged by Working Tool, Failure Mode, and civic sector.",
       icon: FileJson,
-      browseHref: "/knowledge-graph",
-      browseLabel: "Explore The Archive →",
     },
   ];
 
+  const groupedFeedsByBeat: Record<
+    PublicationBeatCategory,
+    PublicSourcedFeedInfo[]
+  > = {
+    "Wire & Mainstream": [],
+    "Tech, Cyber & Science": [],
+    "Policy, Law & Markets": [],
+    "Journals & Commentary": [],
+  };
+
+  for (const feed of sourcedFeeds) {
+    const beat = categorizePublicationBeat(feed.name, feed.category);
+    groupedFeedsByBeat[beat].push(feed);
+  }
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-12">
       {/* 1. Masthead & Philosophy Hero */}
-      <div id="mission" className="tracing-board-frame p-6 sm:p-10 mb-10 scroll-mt-20">
+      <section
+        id="mission"
+        className="tracing-board-frame p-6 sm:p-10 relative scroll-mt-20"
+      >
+        <HeroCornerBrackets size="md" />
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           <div className="lg:col-span-8 space-y-4">
             <div className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-[0.2em] text-[#C5A059]">
               <Compass className="w-4 h-4" />
-              <span>ABOUT &amp; FEEDS // MISSION, PHILOSOPHY &amp; SYNDICATION LEDGER</span>
+              <span>About &amp; Feeds · Mission, Philosophy &amp; Syndication Ledger</span>
             </div>
 
             <h1 className="font-display text-2xl sm:text-4xl text-[#F3EFE6] leading-tight">
@@ -155,13 +291,13 @@ export function SystemStatusClient({
             </p>
           </div>
 
-          {/* Right Colophon Summary Card */}
-          <div className="lg:col-span-4 bg-[#0B0E14] border border-[#C5A059]/60 p-6 space-y-4">
-            <div className="flex items-center gap-3 pb-3 border-b border-[#8A6D3B]/40">
+          {/* Right Colophon Summary (Flattened via hairline rule — zero nested box) */}
+          <div className="lg:col-span-4 border-t lg:border-t-0 lg:border-l border-[#8A6D3B]/35 pt-6 lg:pt-0 lg:pl-8 space-y-4">
+            <div className="flex items-center gap-3 pb-3 border-b border-[#8A6D3B]/35">
               <SquareAndCompassesCrest className="w-10 h-10 shrink-0" />
               <div>
                 <div className="font-mono text-[10px] uppercase tracking-widest text-[#C5A059]">
-                  BROADSHEET COLOPHON
+                  Broadsheet Colophon
                 </div>
                 <div className="font-display text-base text-[#F3EFE6]">
                   The CAB Call Charter
@@ -173,42 +309,42 @@ export function SystemStatusClient({
               &ldquo;Meet on the Level. Act by the Plumb. Part upon the Square.&rdquo;
             </p>
 
-            <div className="space-y-2.5 pt-1 text-xs font-serif text-[#94A3B8]">
+            <dl className="space-y-2.5 pt-1 text-xs font-serif text-[#94A3B8]">
               <div className="flex items-start justify-between gap-2 border-b border-[#8A6D3B]/25 pb-2">
-                <span className="font-mono uppercase text-[11px] text-[#C5A059]">
+                <dt className="font-mono uppercase text-[11px] text-[#C5A059]">
                   Editorial Posture
-                </span>
-                <span className="text-[#F3EFE6] text-right">
+                </dt>
+                <dd className="text-[#F3EFE6] text-right">
                   Blameless Structural Inspection
-                </span>
+                </dd>
               </div>
               <div className="flex items-start justify-between gap-2 border-b border-[#8A6D3B]/25 pb-2">
-                <span className="font-mono uppercase text-[11px] text-[#C5A059]">
+                <dt className="font-mono uppercase text-[11px] text-[#C5A059]">
                   Moral Architecture
-                </span>
-                <span className="text-[#F3EFE6] text-right">
+                </dt>
+                <dd className="text-[#F3EFE6] text-right">
                   The Six Working Tools
-                </span>
+                </dd>
               </div>
               <div className="flex items-start justify-between gap-2 border-b border-[#8A6D3B]/25 pb-2">
-                <span className="font-mono uppercase text-[11px] text-[#C5A059]">
+                <dt className="font-mono uppercase text-[11px] text-[#C5A059]">
                   Systems Discipline
-                </span>
-                <span className="text-[#F3EFE6] text-right">
+                </dt>
+                <dd className="text-[#F3EFE6] text-right">
                   Site Reliability Engineering
-                </span>
+                </dd>
               </div>
               <div className="flex items-start justify-between gap-2">
-                <span className="font-mono uppercase text-[11px] text-[#C5A059]">
+                <dt className="font-mono uppercase text-[11px] text-[#C5A059]">
                   Published Feeds
-                </span>
-                <span className="text-[#F3EFE6] text-right">
+                </dt>
+                <dd className="text-[#F3EFE6] text-right">
                   Podcast RSS, Briefs RSS &amp; JSON
-                </span>
+                </dd>
               </div>
-            </div>
+            </dl>
 
-            <div className="pt-2 flex flex-col gap-2">
+            <div className="pt-2">
               <a
                 href="#published-feeds"
                 className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-[#C5A059] text-[#0B0E14] font-mono text-xs font-bold uppercase tracking-wider hover:bg-[#d6b36a] transition-colors"
@@ -216,133 +352,97 @@ export function SystemStatusClient({
                 <Rss className="w-3.5 h-3.5" />
                 <span>View All Published Feeds</span>
               </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 2. The Point & Philosophy of the Website (Two De-Nested Pillars) */}
+      <section className="space-y-6">
+        <SectionHeader
+          eyebrow="The Philosophy · Operative Craft Meets Site Reliability"
+          title="Two Diagnostic Lenses for Civic & Institutional Failures"
+        />
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Pillar I: Why Freemasonry's Working Tools? */}
+          <div className="tracing-board-frame p-6 sm:p-8 flex flex-col justify-between space-y-5">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-[#8A6D3B]/35 pb-3">
+                <div>
+                  <span className="font-mono text-xs text-[#C5A059] uppercase tracking-wider">
+                    Pillar I · Moral Architecture
+                  </span>
+                  <h3 className="font-display text-xl sm:text-2xl text-[#F3EFE6] mt-0.5">
+                    The Six Working Tools as Civic Instruments
+                  </h3>
+                </div>
+                <Scale className="w-6 h-6 text-[#C5A059] shrink-0" />
+              </div>
+
+              <p className="font-serif text-sm sm:text-base text-[#F3EFE6]/90 leading-relaxed">
+                Operative stonemasons built cathedrals and civic halls that stood for centuries because they did not trust guesswork. Every stone was tried against physical instruments—the Gauge, the Gavel, the Plumb, the Square, the Level, and the Trowel—before it was trusted to bear weight.
+              </p>
+
+              <p className="font-serif text-sm text-[#94A3B8] leading-relaxed">
+                Speculative Freemasonry preserved those six instruments as a practical philosophy for human conduct and institutional stewardship. On <strong className="text-[#F3EFE6]">The CAB Call</strong>, the Working Tools are never treated as dusty museum curiosities or esoteric trivia; they are used as active diagnostic lenses to ask whether leaders and institutions are budgeting their time honestly, stripping away reactive vices, standing upright when convenient shortcuts beckon, squaring their public promises with their actual deeds, meeting citizens on the level of shared accountability, and spreading the mortar of civic trust.
+              </p>
+            </div>
+
+            <div className="pt-4 border-t border-[#8A6D3B]/30">
               <Link
                 href="/rubric"
-                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-[#111726] border border-[#8A6D3B]/60 text-[#F3EFE6] font-mono text-xs uppercase tracking-wider hover:border-[#C5A059] transition-colors"
+                className="inline-flex items-center gap-1.5 font-mono text-xs uppercase tracking-wider text-[#C5A059] hover:text-[#F3EFE6] transition-colors"
               >
-                <BookOpen className="w-3.5 h-3.5 text-[#C5A059]" />
-                <span>Explore Working Tools &amp; Rubric</span>
+                <span>Explore the Working Tools &amp; Fault Taxonomy →</span>
               </Link>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* 2. The Point & Philosophy of the Website (Two Pillars) */}
-      <BrassSectionDivider label="THE PHILOSOPHY // OPERATIVE CRAFT MEETS SITE RELIABILITY" />
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-12">
-        {/* Pillar I: Why Freemasonry's Working Tools? */}
-        <div className="tracing-board-frame p-6 sm:p-8 space-y-4">
-          <div className="flex items-center justify-between border-b border-[#8A6D3B]/35 pb-3">
-            <div>
-              <span className="font-mono text-xs text-[#C5A059] uppercase">
-                PILLAR I // SPECULATIVE &amp; OPERATIVE MASONRY
-              </span>
-              <h2 className="font-display text-xl sm:text-2xl text-[#F3EFE6] mt-0.5">
-                The Six Working Tools as Civic Instruments
-              </h2>
-            </div>
-            <Scale className="w-6 h-6 text-[#C5A059] shrink-0" />
-          </div>
-
-          <p className="font-serif text-sm sm:text-base text-[#F3EFE6]/90 leading-relaxed">
-            Operative stonemasons built cathedrals and civic halls that stood for centuries because they did not trust guesswork. Every stone was tried against physical instruments—the Gauge, the Gavel, the Plumb, the Square, the Level, and the Trowel—before it was trusted to bear weight.
-          </p>
-
-          <p className="font-serif text-sm text-[#94A3B8] leading-relaxed">
-            Speculative Freemasonry preserved those six instruments as a practical philosophy for human conduct and institutional stewardship. On <strong className="text-[#F3EFE6]">The CAB Call</strong>, the Working Tools are never treated as dusty museum curiosities or esoteric trivia; they are used as active diagnostic lenses to ask whether leaders and institutions are budgeting their time honestly, stripping away reactive vices, standing upright when convenient shortcuts beckon, squaring their public promises with their actual deeds, meeting citizens on the level of shared accountability, and spreading the mortar of civic trust.
-          </p>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-2">
-            {WORKING_TOOLS.map((tool) => (
-              <Link
-                key={tool.id}
-                href={`/knowledge-graph?tool=${encodeURIComponent(tool.id)}`}
-                className="p-3 bg-[#0B0E14] border border-[#8A6D3B]/45 hover:border-[#C5A059] transition-colors flex flex-col justify-between gap-2 group"
-              >
-                <div className="flex items-center gap-2">
-                  <WorkingToolEngraving
-                    tool={tool.id}
-                    className="w-6 h-6 shrink-0"
-                  />
-                  <span className="font-display text-xs text-[#F3EFE6] group-hover:text-[#C5A059] transition-colors">
-                    {tool.id}
+          {/* Pillar II: Why Site Reliability Engineering? */}
+          <div className="tracing-board-frame p-6 sm:p-8 flex flex-col justify-between space-y-5">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between border-b border-[#8A6D3B]/35 pb-3">
+                <div>
+                  <span className="font-mono text-xs text-[#C5A059] uppercase tracking-wider">
+                    Pillar II · Systems Reliability
                   </span>
+                  <h3 className="font-display text-xl sm:text-2xl text-[#F3EFE6] mt-0.5">
+                    Blameless Inspection Over Partisan Scapegoating
+                  </h3>
                 </div>
-                <span className="font-mono text-[10px] text-[#94A3B8]">
-                  {tool.moralLens}
-                </span>
-              </Link>
-            ))}
-          </div>
-        </div>
+                <ShieldCheck className="w-6 h-6 text-[#C5A059] shrink-0" />
+              </div>
 
-        {/* Pillar II: Why Site Reliability Engineering? */}
-        <div className="tracing-board-frame p-6 sm:p-8 space-y-4">
-          <div className="flex items-center justify-between border-b border-[#8A6D3B]/35 pb-3">
-            <div>
-              <span className="font-mono text-xs text-[#C5A059] uppercase">
-                PILLAR II // SITE RELIABILITY ENGINEERING
-              </span>
-              <h2 className="font-display text-xl sm:text-2xl text-[#F3EFE6] mt-0.5">
-                Blameless Inspection Over Partisan Scapegoating
-              </h2>
+              <p className="font-serif text-sm sm:text-base text-[#F3EFE6]/90 leading-relaxed">
+                When a complex distributed system suffers an outage, seasoned Site Reliability Engineers do not ask, <em>&ldquo;Who can we fire by sundown?&rdquo;</em> They ask, <em>&ldquo;What missing guardrail, untested backup, or silent drift allowed a single mistake to cascade across the system?&rdquo;</em>
+              </p>
+
+              <p className="font-serif text-sm text-[#94A3B8] leading-relaxed">
+                Public institutions, supply chains, courts, and municipal utilities fail along the exact same fault lines as large-scale engineering systems. By translating technical failure analysis into plain-spoken shop-floor concepts, every Craftsman&apos;s Brief diagnoses the structural root cause rather than amplifying the daily outrage cycle.
+              </p>
             </div>
-            <ShieldCheck className="w-6 h-6 text-[#C5A059] shrink-0" />
-          </div>
 
-          <p className="font-serif text-sm sm:text-base text-[#F3EFE6]/90 leading-relaxed">
-            When a complex distributed system suffers an outage, seasoned Site Reliability Engineers do not ask, <em>&ldquo;Who can we fire by sundown?&rdquo;</em> They ask, <em>&ldquo;What missing guardrail, untested backup, or silent drift allowed a single mistake to cascade across the system?&rdquo;</em>
-          </p>
-
-          <p className="font-serif text-sm text-[#94A3B8] leading-relaxed">
-            Public institutions, supply chains, courts, and municipal utilities fail along the exact same fault lines as large-scale engineering systems. By translating technical failure analysis into plain-spoken shop-floor concepts, every Craftsman&apos;s Brief diagnoses the structural root cause rather than amplifying the daily outrage cycle:
-          </p>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2">
-            {SRE_FAILURE_MODES.map((mode) => (
+            <div className="pt-4 border-t border-[#8A6D3B]/30">
               <Link
-                key={mode.id}
-                href={`/knowledge-graph?failure=${encodeURIComponent(mode.id)}`}
-                className="p-3 bg-[#0B0E14] border border-[#8A6D3B]/45 hover:border-[#C5A059] transition-colors space-y-1 group"
+                href="/rubric"
+                className="inline-flex items-center gap-1.5 font-mono text-xs uppercase tracking-wider text-[#C5A059] hover:text-[#F3EFE6] transition-colors"
               >
-                <div className="font-display text-xs text-[#F3EFE6] group-hover:text-[#C5A059] transition-colors">
-                  {mode.craftShortLabel}
-                </div>
-                <div className="font-mono text-[10px] text-[#C5A059]">
-                  {mode.id}
-                </div>
+                <span>Explore the Working Tools &amp; Fault Taxonomy →</span>
               </Link>
-            ))}
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* 3. All Currently Published Feeds (Outbound Syndication Ledger) */}
-      <div id="feeds" className="scroll-mt-20">
+      {/* 3. All Currently Published Feeds (Slimmed Outbound Syndication Cards) */}
+      <section id="feeds" className="scroll-mt-20 space-y-6">
         <div id="published-feeds" className="scroll-mt-20">
-          <BrassSectionDivider label="PUBLISHED SYNDICATION FEEDS // SUBSCRIBE & FOLLOW" />
-        </div>
-      </div>
-
-      <div className="tracing-board-frame p-6 sm:p-8 mb-12 space-y-6">
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 border-b border-[#8A6D3B]/40 pb-5">
-          <div>
-            <span className="font-mono text-xs uppercase tracking-[0.2em] text-[#C5A059]">
-              PUBLIC SYNDICATION DIRECTORY // OPEN PROTOCOLS (RSS 2.0 &amp; JSON FEED 1.1)
-            </span>
-            <h2 className="font-display text-2xl sm:text-3xl text-[#F3EFE6] mt-1">
-              Feeds Published by The Change Advisory Board
-            </h2>
-            <p className="font-serif text-sm sm:text-base text-[#94A3B8] mt-2 max-w-3xl leading-relaxed">
-              The Change Advisory Board publishes all audio retrospectives and written Craftsman&apos;s Briefs over open syndication feeds with zero paywalls, zero algorithmic tracking, and full text/transcript inclusion. Copy any feed URL below into your preferred podcast player or RSS reader.
-            </p>
-          </div>
-
-          <div className="font-mono text-xs text-[#C5A059] bg-[#0B0E14] border border-[#8A6D3B]/50 px-3.5 py-2 shrink-0">
-            READ-ONLY PUBLIC SYNDICATION
-          </div>
+          <SectionHeader
+            eyebrow="Published Syndication Feeds · RSS 2.0 & JSON Feed 1.1"
+            title="Feeds Published by The Change Advisory Board"
+            subtitle="All audio retrospectives and written Craftsman's Briefs are published over open syndication protocols with zero paywalls, zero algorithmic tracking, and full text inclusion."
+          />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -353,43 +453,24 @@ export function SystemStatusClient({
             return (
               <div
                 key={feed.key}
-                className="bg-[#0B0E14] border border-[#8A6D3B]/55 p-6 flex flex-col justify-between space-y-5"
+                className="tracing-board-frame p-6 flex flex-col justify-between space-y-5"
               >
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-[10px] uppercase tracking-wider text-[#C5A059] px-2 py-0.5 bg-[#111726] border border-[#C5A059]/40">
-                      {feed.badge}
-                    </span>
-                    <IconComponent className="w-4 h-4 text-[#C5A059] shrink-0" />
+                <div className="space-y-2.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="font-display text-xl text-[#F3EFE6]">
+                      {feed.title}
+                    </h3>
+                    <IconComponent className="w-4 h-4 text-[#C5A059] shrink-0 mt-1" />
                   </div>
-
-                  <h3 className="font-display text-xl text-[#F3EFE6]">
-                    {feed.title}
-                  </h3>
 
                   <p className="font-serif text-sm text-[#94A3B8] leading-relaxed">
                     {feed.description}
                   </p>
                 </div>
 
-                <div className="space-y-3 pt-3 border-t border-[#8A6D3B]/30">
-                  <div className="space-y-1 font-mono text-[11px]">
-                    <div className="flex items-center justify-between text-[#94A3B8]">
-                      <span>Format:</span>
-                      <span className="text-[#F3EFE6]">{feed.formatLabel}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-[#94A3B8]">
-                      <span>Volume:</span>
-                      <span className="text-[#C5A059]">{feed.countLabel}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-[#94A3B8]">
-                      <span>Cadence:</span>
-                      <span className="text-[#F3EFE6]">{feed.cadence}</span>
-                    </div>
-                  </div>
-
-                  {/* Copyable Feed URL Box */}
-                  <div className="flex items-center bg-[#111726] border border-[#8A6D3B]/50 p-1.5">
+                <div className="space-y-3 pt-4 border-t border-[#8A6D3B]/30">
+                  {/* Copyable Feed URL Bar */}
+                  <div className="flex items-center bg-[#0B0E14] border border-[#8A6D3B]/45 p-1.5">
                     <code className="font-mono text-xs text-[#F3EFE6] px-2 flex-1 truncate">
                       {feed.fullUrl}
                     </code>
@@ -412,261 +493,257 @@ export function SystemStatusClient({
                     </button>
                   </div>
 
-                  <div className="text-[11px] font-serif text-[#94A3B8]">
-                    <strong className="text-[#F3EFE6] font-mono uppercase text-[10px]">
-                      Works with:{" "}
-                    </strong>
-                    {feed.readers}
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 pt-1 font-mono text-xs">
+                  <div className="flex items-center justify-end">
                     <a
                       href={feed.path}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center gap-1.5 py-2 px-3 bg-[#111726] border border-[#C5A059]/60 text-[#C5A059] hover:bg-[#C5A059] hover:text-[#0B0E14] transition-colors"
+                      className="inline-flex items-center gap-1.5 font-mono text-xs uppercase tracking-wider text-[#C5A059] hover:text-[#F3EFE6] transition-colors"
                     >
-                      <span>Open {feed.path}</span>
+                      <span>Open Raw Feed →</span>
                       <ExternalLink className="w-3 h-3" />
                     </a>
-                    <Link
-                      href={feed.browseHref}
-                      className="inline-flex items-center justify-center py-2 px-3 bg-[#111726] border border-[#8A6D3B]/45 text-[#F3EFE6] hover:border-[#C5A059] transition-colors text-center"
-                    >
-                      {feed.browseLabel}
-                    </Link>
                   </div>
                 </div>
               </div>
             );
           })}
         </div>
+      </section>
 
-        {/* Inbound Monitored Publications (Read-Only Transparency Ledger) */}
-        <div className="pt-6 border-t border-[#8A6D3B]/40">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
-            <div>
-              <div className="font-mono text-xs uppercase tracking-wider text-[#C5A059]">
-                SOURCED INPUT LEDGER // MONITORED PUBLICATIONS ({sourcedFeeds.length} ACTIVE SOURCES)
-              </div>
-              <p className="font-serif text-xs sm:text-sm text-[#94A3B8] mt-0.5">
-                The Change Advisory Board polls the following publications on an automated schedule to identify candidate civic, infrastructure, and institutional events for structural inspection. Feed configuration and editorial triage are strictly governed by the Board&apos;s administrators.
+      {/* 4. Sourced Input Ledger (Compact 4-Column Typography Directory) */}
+      <section id="monitored-publications" className="scroll-mt-20 space-y-6">
+        <SectionHeader
+          eyebrow={`Sourced Input Ledger · ${sourcedFeeds.length} Active Sources`}
+          title="Monitored Upstream Publications"
+          subtitle="All monitored publications are polled on an automated schedule to identify candidate civic, infrastructure, and institutional events for structural inspection."
+        />
+
+        <div className="tracing-board-frame p-6 sm:p-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
+            {PUBLICATION_BEAT_ORDER.map((beat) => {
+              const items = groupedFeedsByBeat[beat];
+              return (
+                <div key={beat} className="space-y-3">
+                  <div className="flex items-baseline justify-between gap-2 pb-2.5 border-b border-[#C5A059]/45">
+                    <h3 className="font-mono text-xs uppercase tracking-[0.16em] text-[#C5A059] font-semibold">
+                      {beat}
+                    </h3>
+                    <span className="font-mono text-[11px] text-[#94A3B8]">
+                      {items.length}
+                    </span>
+                  </div>
+
+                  <ul className="divide-y divide-[#8A6D3B]/20" role="list">
+                    {items.map((feed) => (
+                      <li key={feed.name} className="py-2">
+                        <div className="font-display text-sm text-[#F3EFE6] leading-snug">
+                          {feed.name}
+                        </div>
+                        <div className="font-serif text-xs text-[#94A3B8] leading-snug mt-0.5">
+                          {feed.category}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* 5. How the Application Works & Anatomy of a Craftsman's Brief (Flattened Lists) */}
+      <section id="editorial-standards" className="scroll-mt-20 space-y-6">
+        <SectionHeader
+          eyebrow="Methodology & Brief Anatomy"
+          title="How Every Case Is Triaged & Synthesized"
+        />
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          {/* Left: Four-Stage Structural Inspection Discipline (7 cols, flattened typographic list) */}
+          <div className="lg:col-span-7 tracing-board-frame p-6 sm:p-8 space-y-4">
+            <div className="border-b border-[#8A6D3B]/35 pb-4">
+              <span className="font-mono text-xs text-[#C5A059] uppercase tracking-wider">
+                Editorial Methodology · Sourced Triage &amp; Socratic Review
+              </span>
+              <h3 className="font-display text-xl sm:text-2xl text-[#F3EFE6] mt-0.5">
+                Four-Stage Structural Inspection Discipline
+              </h3>
+              <p className="font-serif text-sm text-[#94A3B8] mt-1 leading-relaxed">
+                Every dispatch on The Trestleboard passes through a four-stage automated and editorial pipeline before publication.
               </p>
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-            {sourcedFeeds.map((feed) => (
-              <div
-                key={feed.name}
-                className="p-4 bg-[#0B0E14] border border-[#8A6D3B]/45 flex flex-col justify-between space-y-2"
-              >
+            <ol className="divide-y divide-[#8A6D3B]/30">
+              <li className="py-4 first:pt-1 flex gap-4">
+                <span className="font-mono text-xs font-bold text-[#C5A059] w-6 shrink-0 pt-1">
+                  I.
+                </span>
                 <div>
-                  <div className="font-display text-base text-[#F3EFE6]">
-                    {feed.name}
-                  </div>
-                  <p className="font-serif text-xs text-[#94A3B8] mt-1 leading-relaxed">
-                    {feed.category}
+                  <h4 className="font-display text-base text-[#F3EFE6]">
+                    Concurrent Sourced Ingestion &amp; Canonical De-duplication
+                  </h4>
+                  <p className="font-serif text-sm text-[#94A3B8] mt-1 leading-relaxed">
+                    Target dispatches are polled concurrently under strict byte and timeout bounds, stripped of unsafe markup and tracking parameters, and fingerprinted via canonical URL and GUID hashing.
                   </p>
                 </div>
-                <span className="font-mono text-[10px] uppercase tracking-wider text-[#C5A059] pt-2 border-t border-[#8A6D3B]/30">
-                  {feed.cadence}
+              </li>
+
+              <li className="py-4 flex gap-4">
+                <span className="font-mono text-xs font-bold text-[#C5A059] w-6 shrink-0 pt-1">
+                  II.
                 </span>
-              </div>
-            ))}
+                <div>
+                  <h4 className="font-display text-base text-[#F3EFE6]">
+                    Dual-Axis Structural Triage
+                  </h4>
+                  <p className="font-serif text-sm text-[#94A3B8] mt-1 leading-relaxed">
+                    Each candidate dispatch is evaluated for structural signal versus transient celebrity or horse-race commentary. High-signal events are paired with their primary Masonic Working Tool and Shop-Floor Failure Mode.
+                  </p>
+                </div>
+              </li>
+
+              <li className="py-4 flex gap-4">
+                <span className="font-mono text-xs font-bold text-[#C5A059] w-6 shrink-0 pt-1">
+                  III.
+                </span>
+                <div>
+                  <h4 className="font-display text-base text-[#F3EFE6]">
+                    Bounded Socratic Structural Inspection
+                  </h4>
+                  <p className="font-serif text-sm text-[#94A3B8] mt-1 leading-relaxed">
+                    Verified cases are synthesized into Craftsman&apos;s Briefs that establish the plain facts, separate partisan heat and spin from the actual structural foundation, and pose open Socratic questions for fair judgment.
+                  </p>
+                </div>
+              </li>
+
+              <li className="py-4 last:pb-1 flex gap-4">
+                <span className="font-mono text-xs font-bold text-[#C5A059] w-6 shrink-0 pt-1">
+                  IV.
+                </span>
+                <div>
+                  <h4 className="font-display text-base text-[#F3EFE6]">
+                    The Friday CAB Weekly Brief ({latestEpisodeTitle})
+                  </h4>
+                  <p className="font-serif text-sm text-[#94A3B8] mt-1 leading-relaxed">
+                    Every Friday, the week&rsquo;s anchor dispatches are distilled into a spoken retrospective and syndicated via the public RSS 2.0 podcast feed (<code>/feed.xml</code>).
+                  </p>
+                </div>
+              </li>
+            </ol>
           </div>
-        </div>
-      </div>
 
-      {/* 4. How the Application Works & Anatomy of a Craftsman's Brief */}
-      <div id="editorial-standards" className="scroll-mt-20">
-        <BrassSectionDivider label="HOW THIS APPLICATION WORKS // METHODOLOGY & BRIEF ANATOMY" />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-12">
-        {/* Left: Four-Stage Structural Inspection Discipline (7 cols, strictly read-only) */}
-        <div className="lg:col-span-7 tracing-board-frame p-6 sm:p-7 space-y-5">
-          <div className="border-b border-[#8A6D3B]/35 pb-4">
-            <span className="font-mono text-xs text-[#C5A059] uppercase">
-              EDITORIAL METHODOLOGY // SOURCED TRIAGE &amp; SOCRATIC REVIEW
-            </span>
-            <h2 className="font-display text-xl sm:text-2xl text-[#F3EFE6] mt-0.5">
-              Four-Stage Structural Inspection Discipline
-            </h2>
-            <p className="font-serif text-sm text-[#94A3B8] mt-1 leading-relaxed">
-              Every dispatch on The Trestleboard passes through a four-stage automated and editorial pipeline before publication.
-            </p>
-          </div>
-
-          <div className="space-y-4">
-            <div className="p-4 bg-[#0B0E14] border border-[#8A6D3B]/50 flex gap-4">
-              <div className="font-mono text-xs font-bold px-2.5 py-1 bg-[#111726] border border-[#C5A059] text-[#C5A059] h-fit">
-                I
-              </div>
-              <div>
-                <h3 className="font-display text-base text-[#F3EFE6]">
-                  Concurrent Sourced Ingestion &amp; Canonical De-duplication
+          {/* Right: Anatomy of a Craftsman's Brief (5 cols, flattened typographic list) */}
+          <div className="lg:col-span-5 tracing-board-frame p-6 sm:p-8 flex flex-col justify-between space-y-5">
+            <div className="space-y-4">
+              <div className="border-b border-[#8A6D3B]/35 pb-4">
+                <span className="font-mono text-xs text-[#C5A059] uppercase tracking-wider">
+                  How to Read The Trestleboard · Brief Structure
+                </span>
+                <h3 className="font-display text-xl sm:text-2xl text-[#F3EFE6] mt-0.5">
+                  Anatomy of a Craftsman&apos;s Brief
                 </h3>
                 <p className="font-serif text-sm text-[#94A3B8] mt-1 leading-relaxed">
-                  Target dispatches are polled concurrently on a scheduled cadence under strict byte and timeout bounds, stripped of unsafe markup and tracking parameters, and fingerprinted via canonical URL and GUID hashing.
+                  Every case published on The Trestleboard follows a strict three-part layout designed so you can inspect the facts and test the structure in under two minutes.
                 </p>
               </div>
+
+              <ol className="divide-y divide-[#8A6D3B]/30">
+                <li className="py-3.5 first:pt-1 space-y-1">
+                  <div className="font-mono text-xs text-[#C5A059] uppercase tracking-wider">
+                    I. What Happened (The Plain Facts)
+                  </div>
+                  <p className="font-serif text-sm text-[#F3EFE6]/90 leading-relaxed">
+                    A sober, multi-sentence account of the event—what broke, which institution or infrastructure was affected, and what concrete evidence is currently on the table—stripped of sensational adjectives.
+                  </p>
+                </li>
+
+                <li className="py-3.5 space-y-1">
+                  <div className="font-mono text-xs text-[#F59E0B] uppercase tracking-wider">
+                    II. Partisan Heat &amp; Spin vs. The Actual Foundation
+                  </div>
+                  <p className="font-serif text-sm text-[#F3EFE6]/90 leading-relaxed">
+                    Side-by-side diagnostic contrast isolating the loud emotional or partisan distraction (<em>The Noise</em>) from the underlying architectural or governance weakness (<em>The Signal</em>).
+                  </p>
+                </li>
+
+                <li className="py-3.5 last:pb-1 space-y-1">
+                  <div className="font-mono text-xs text-[#10B981] uppercase tracking-wider">
+                    III. Questions for Fair &amp; Consistent Judgment
+                  </div>
+                  <p className="font-serif text-sm text-[#F3EFE6]/90 leading-relaxed">
+                    Two open Socratic questions anchored in the case&apos;s Working Tool and Failure Mode. Rather than telling you what conclusion to reach, the Board asks what standard should apply to everyone on the level.
+                  </p>
+                </li>
+              </ol>
             </div>
 
-            <div className="p-4 bg-[#0B0E14] border border-[#C5A059]/60 flex gap-4">
-              <div className="font-mono text-xs font-bold px-2.5 py-1 bg-[#111726] border border-[#C5A059] text-[#C5A059] h-fit">
-                II
+            <div className="pt-4 border-t border-[#8A6D3B]/30 space-y-3">
+              <div className="font-mono text-[11px] uppercase tracking-wider text-[#C5A059]">
+                Editorial Independence &amp; Auditable Provenance
               </div>
-              <div>
-                <h3 className="font-display text-base text-[#F3EFE6]">
-                  Dual-Axis Structural Triage
-                </h3>
-                <p className="font-serif text-sm text-[#94A3B8] mt-1 leading-relaxed">
-                  Each candidate dispatch is evaluated for structural signal versus transient celebrity or horse-race commentary. High-signal events are paired with their primary Masonic Working Tool and Shop-Floor Failure Mode.
-                </p>
-              </div>
-            </div>
-
-            <div className="p-4 bg-[#0B0E14] border border-[#8A6D3B]/50 flex gap-4">
-              <div className="font-mono text-xs font-bold px-2.5 py-1 bg-[#111726] border border-[#C5A059] text-[#C5A059] h-fit">
-                III
-              </div>
-              <div>
-                <h3 className="font-display text-base text-[#F3EFE6]">
-                  Bounded Socratic Structural Inspection
-                </h3>
-                <p className="font-serif text-sm text-[#94A3B8] mt-1 leading-relaxed">
-                  Verified cases are synthesized into Craftsman&apos;s Briefs that establish the plain facts, separate partisan heat and spin from the actual structural foundation, and pose open Socratic questions for fair judgment.
-                </p>
-              </div>
-            </div>
-
-            <div className="p-4 bg-[#0B0E14] border border-[#8A6D3B]/50 flex gap-4">
-              <div className="font-mono text-xs font-bold px-2.5 py-1 bg-[#111726] border border-[#C5A059] text-[#C5A059] h-fit">
-                IV
-              </div>
-              <div>
-                <h3 className="font-display text-base text-[#F3EFE6]">
-                  The Friday CAB Weekly Brief ({latestEpisodeTitle})
-                </h3>
-                <p className="font-serif text-sm text-[#94A3B8] mt-1 leading-relaxed">
-                  Every Friday, the week&rsquo;s anchor dispatches are distilled into a 5-minute spoken retrospective (~750 words) and syndicated via the public RSS 2.0 podcast feed (<code>/feed.xml</code>).
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Right: Anatomy of a Craftsman's Brief (5 cols, replacing the old public submission form) */}
-        <div className="lg:col-span-5 tracing-board-frame p-6 sm:p-7 flex flex-col justify-between space-y-5">
-          <div className="space-y-4">
-            <div className="border-b border-[#8A6D3B]/35 pb-4">
-              <span className="font-mono text-xs text-[#C5A059] uppercase">
-                HOW TO READ THE TRESTLEBOARD // BRIEF STRUCTURE
-              </span>
-              <h2 className="font-display text-xl sm:text-2xl text-[#F3EFE6] mt-0.5">
-                Anatomy of a Craftsman&apos;s Brief
-              </h2>
-              <p className="font-serif text-sm text-[#94A3B8] mt-1 leading-relaxed">
-                Every case published on The Trestleboard follows a strict three-part layout designed so you can inspect the facts and test the structure in under two minutes.
+              <p className="font-serif text-xs text-[#94A3B8] leading-relaxed">
+                Public visitors cannot alter feeds, inject articles, or trigger pipeline runs. All feed curation, headline de-escalation, and episode publishing are restricted to authenticated Board administrators and recorded in an append-only SHA-256 cryptographic audit ledger.
               </p>
-            </div>
-
-            <div className="space-y-3.5">
-              <div className="p-4 bg-[#0B0E14] border-l-2 border-l-[#C5A059] border border-[#8A6D3B]/40 space-y-1">
-                <div className="font-mono text-xs text-[#C5A059] uppercase">
-                  SECTION I // WHAT HAPPENED (THE PLAIN FACTS)
-                </div>
-                <p className="font-serif text-sm text-[#F3EFE6]/90 leading-relaxed">
-                  A sober, multi-sentence account of the event—what broke, which institution or infrastructure was affected, and what concrete evidence is currently on the table—stripped of sensational adjectives.
-                </p>
-              </div>
-
-              <div className="p-4 bg-[#0B0E14] border-l-2 border-l-[#F59E0B] border border-[#8A6D3B]/40 space-y-1">
-                <div className="font-mono text-xs text-[#F59E0B] uppercase">
-                  SECTION II // PARTISAN HEAT &amp; SPIN vs. THE ACTUAL FOUNDATION
-                </div>
-                <p className="font-serif text-sm text-[#F3EFE6]/90 leading-relaxed">
-                  Side-by-side diagnostic contrast isolating the loud emotional or partisan distraction (<em>The Noise</em>) from the underlying architectural or governance weakness (<em>The Signal</em>).
-                </p>
-              </div>
-
-              <div className="p-4 bg-[#0B0E14] border-l-2 border-l-[#10B981] border border-[#8A6D3B]/40 space-y-1">
-                <div className="font-mono text-xs text-[#10B981] uppercase">
-                  SECTION III // QUESTIONS FOR FAIR &amp; CONSISTENT JUDGMENT
-                </div>
-                <p className="font-serif text-sm text-[#F3EFE6]/90 leading-relaxed">
-                  Two open Socratic questions anchored in the case&apos;s Working Tool and Failure Mode. Rather than telling you what conclusion to reach, the Board asks what standard should apply to everyone on the level.
-                </p>
+              <div className="pt-1">
+                <Link
+                  href="/"
+                  className="inline-flex items-center gap-1.5 font-mono text-xs uppercase tracking-wider text-[#C5A059] hover:text-[#F3EFE6] transition-colors"
+                >
+                  <span>Inspect The Trestleboard →</span>
+                </Link>
               </div>
             </div>
           </div>
+        </div>
+      </section>
 
-          <div className="p-4 bg-[#0B0E14] border border-[#8A6D3B]/50 space-y-3">
-            <div className="font-mono text-[11px] uppercase tracking-wider text-[#C5A059]">
-              EDITORIAL INDEPENDENCE &amp; AUDITABLE PROVENANCE
+      {/* 6. Governance Charter */}
+      <section className="space-y-6">
+        <SectionHeader
+          eyebrow="Editorial Governance Charter"
+          title="Three Non-Negotiable House Rules"
+        />
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="tracing-board-frame p-6 space-y-3">
+            <div className="font-mono text-xs text-[#C5A059] uppercase tracking-wider">
+              Charter Rule 01 · Zero Definitions
             </div>
-            <p className="font-serif text-xs text-[#94A3B8] leading-relaxed">
-              Public visitors cannot alter feeds, inject articles, or trigger pipeline runs. All feed curation, headline de-escalation, and episode publishing are restricted to authenticated Board administrators and recorded in an append-only SHA-256 cryptographic audit ledger.
+            <h3 className="font-display text-lg text-[#F3EFE6]">
+              Never Lecture the Craft
+            </h3>
+            <p className="font-serif text-sm text-[#94A3B8] leading-relaxed">
+              Weekly rollup scripts and Craftsman&apos;s Briefs are strictly forbidden from reciting monitorial textbook definitions of the Working Tools or basic engineering acronyms. Tools are invoked as operational verbs and diagnostic instruments that the reader experiences in action.
             </p>
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <Link
-                href="/"
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#C5A059] text-[#0B0E14] font-mono text-xs font-bold uppercase hover:bg-[#d6b36a] transition-colors"
-              >
-                <span>Inspect The Trestleboard</span>
-              </Link>
-              <Link
-                href="/knowledge-graph"
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-[#111726] border border-[#8A6D3B]/60 text-[#F3EFE6] font-mono text-xs uppercase hover:border-[#C5A059] transition-colors"
-              >
-                <span>Browse The Archive</span>
-              </Link>
+          </div>
+
+          <div className="tracing-board-frame p-6 space-y-3">
+            <div className="font-mono text-xs text-[#C5A059] uppercase tracking-wider">
+              Charter Rule 02 · Epistemic Humility
             </div>
+            <h3 className="font-display text-lg text-[#F3EFE6]">
+              The &ldquo;Pending Post-Mortem&rdquo; Rule
+            </h3>
+            <p className="font-serif text-sm text-[#94A3B8] leading-relaxed">
+              The Board never declares a partisan villain or predicts catastrophic outcomes. Ongoing stories are framed as active cases awaiting complete inspection—highlighting what evidence is still missing and what Socratic questions will prove whether the system is recovering.
+            </p>
+          </div>
+
+          <div className="tracing-board-frame p-6 space-y-3">
+            <div className="font-mono text-xs text-[#C5A059] uppercase tracking-wider">
+              Charter Rule 03 · Proportionality Check
+            </div>
+            <h3 className="font-display text-lg text-[#F3EFE6]">
+              Separate Noise from the Foundation
+            </h3>
+            <p className="font-serif text-sm text-[#94A3B8] leading-relaxed">
+              Every synthesized brief must explicitly separate one sensationalized detail the news cycle is overblowing (Partisan Heat &amp; Spin) from the underlying structural or architectural constraint (The Actual Foundation).
+            </p>
           </div>
         </div>
-      </div>
-
-      <BrassSectionDivider label="EDITORIAL GOVERNANCE CHARTER" />
-
-      {/* 5. Governance Charter */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="tracing-board-frame p-6 space-y-3">
-          <div className="font-mono text-xs text-[#C5A059] uppercase">
-            CHARTER RULE 01 // ZERO DEFINITIONS
-          </div>
-          <h3 className="font-display text-lg text-[#F3EFE6]">
-            Never Lecture the Craft
-          </h3>
-          <p className="font-serif text-sm text-[#94A3B8] leading-relaxed">
-            Weekly rollup scripts and Craftsman&apos;s Briefs are strictly forbidden from reciting monitorial textbook definitions of the Working Tools or basic engineering acronyms. Tools are invoked as operational verbs and diagnostic instruments that the reader experiences in action.
-          </p>
-        </div>
-
-        <div className="tracing-board-frame p-6 space-y-3">
-          <div className="font-mono text-xs text-[#C5A059] uppercase">
-            CHARTER RULE 02 // EPISTEMIC HUMILITY
-          </div>
-          <h3 className="font-display text-lg text-[#F3EFE6]">
-            The &ldquo;Pending Post-Mortem&rdquo; Rule
-          </h3>
-          <p className="font-serif text-sm text-[#94A3B8] leading-relaxed">
-            The Board never declares a partisan villain or predicts catastrophic outcomes. Ongoing stories are framed as active cases awaiting complete inspection—highlighting what evidence is still missing and what Socratic questions will prove whether the system is recovering.
-          </p>
-        </div>
-
-        <div className="tracing-board-frame p-6 space-y-3">
-          <div className="font-mono text-xs text-[#C5A059] uppercase">
-            CHARTER RULE 03 // PROPORTIONALITY CHECK
-          </div>
-          <h3 className="font-display text-lg text-[#F3EFE6]">
-            Separate Noise from the Foundation
-          </h3>
-          <p className="font-serif text-sm text-[#94A3B8] leading-relaxed">
-            Every synthesized brief must explicitly separate one sensationalized detail the news cycle is overblowing (Partisan Heat &amp; Spin) from the underlying structural or architectural constraint (The Actual Foundation).
-          </p>
-        </div>
-      </div>
+      </section>
     </div>
   );
 }

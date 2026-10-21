@@ -26,7 +26,9 @@ function Test-PublicLexiconAndUsability {
         "src/app/archive/page.tsx",
         "src/app/podcast/page.tsx",
         "src/app/rubric/page.tsx",
-        "src/app/status/page.tsx"
+        "src/app/status/page.tsx",
+        "src/app/feeds/page.tsx",
+        "src/app/about/page.tsx"
     )
 
     $bannedPublicUiPatterns = @(

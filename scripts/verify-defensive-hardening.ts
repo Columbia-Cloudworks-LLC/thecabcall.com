@@ -1769,6 +1769,8 @@ async function runVerificationSuite() {
     "src/app/podcast/page.tsx",
     "src/app/rubric/page.tsx",
     "src/app/status/page.tsx",
+    "src/app/feeds/page.tsx",
+    "src/app/about/page.tsx",
   ];
 
   const bannedUiRegexes: Array<{ label: string; regex: RegExp }> = [
@@ -2975,8 +2977,96 @@ async function runVerificationSuite() {
     "  ✓ Objective 18 (Issue #47) Working Tools & Rubric 50% Card Diet, SectionHeader Flattening, and Inspector Drawer De-Nesting verified."
   );
 
+  // -------------------------------------------------------------------------
+  // 19. OBJECTIVE 19 (ISSUE #48): ABOUT & FEEDS PAGE — COLLAPSE 51-CARD WALL, DE-NEST PILLARS & SLIM FEED CARDS
+  // -------------------------------------------------------------------------
   console.log(
-    "\n=== ALL 18 DEFENSIVE HARDENING, CRAFT PROSE, KRUG USABILITY, MASTHEAD, PODCAST ARCHIVE, ADMIN STUDY, EPIC #44 IA SCALE & BROADSHEET PRIMITIVES OBJECTIVES PASSED (100%) ==="
+    "\n[19/19] Verifying Objective 19 (Issue #48): About & Feeds Page (/about, /status, /feeds) — 4-Column Typographic Directory, De-Nested Pillars & Slim Feed Cards..."
+  );
+
+  const statusPageSource = fs.readFileSync(
+    path.join(process.cwd(), "src/app/status/page.tsx"),
+    "utf8"
+  );
+  const aboutPageSource = fs.readFileSync(
+    path.join(process.cwd(), "src/app/about/page.tsx"),
+    "utf8"
+  );
+  const feedsPageSource = fs.readFileSync(
+    path.join(process.cwd(), "src/app/feeds/page.tsx"),
+    "utf8"
+  );
+
+  assert.ok(
+    aboutPageSource.includes('../status/page') &&
+      feedsPageSource.includes('../status/page'),
+    "Issue #48: /about and /feeds must resolve to the unified About & Feeds page"
+  );
+  assert.equal(
+    isNavItemActive("/status", "/about"),
+    true,
+    "Issue #48: isNavItemActive('/status', '/about') must highlight About & Feeds in the navigation ledger"
+  );
+  assert.equal(
+    isNavItemActive("/status", "/feeds"),
+    true,
+    "Issue #48: isNavItemActive('/status', '/feeds') must highlight About & Feeds in the navigation ledger"
+  );
+  assert.equal(
+    /Scheduled Automated Poll/i.test(statusPageSource) ||
+      /Scheduled Automated Poll/i.test(statusClientSource),
+    false,
+    "Issue #48: status/page.tsx and SystemStatusClient.tsx must eliminate repeated 'Scheduled Automated Poll' telemetry from individual items"
+  );
+  assert.ok(
+    statusClientSource.includes(
+      "All monitored publications are polled on an automated schedule"
+    ),
+    "Issue #48: SystemStatusClient.tsx must state 'All monitored publications are polled on an automated schedule' once in the section header"
+  );
+  for (const beatHeading of [
+    "Wire & Mainstream",
+    "Tech, Cyber & Science",
+    "Policy, Law & Markets",
+    "Journals & Commentary",
+  ]) {
+    assert.ok(
+      statusClientSource.includes(beatHeading),
+      `Issue #48: SystemStatusClient.tsx must group monitored publications under beat '${beatHeading}'`
+    );
+  }
+  assert.equal(
+    statusClientSource.includes("WORKING_TOOLS.map") ||
+      statusClientSource.includes("SRE_FAILURE_MODES.map"),
+    false,
+    "Issue #48: SystemStatusClient.tsx must remove the nested 6-card mini-grids inside Pillar I and Pillar II"
+  );
+  assert.ok(
+    statusClientSource.includes(
+      "Explore the Working Tools &amp; Fault Taxonomy →"
+    ) && statusClientSource.includes('href="/rubric"'),
+    "Issue #48: Pillar I and Pillar II must replace nested mini-grids with 'Explore the Working Tools & Fault Taxonomy →' pointing to /rubric"
+  );
+  assert.equal(
+    statusClientSource.includes("Works with:") ||
+      statusClientSource.includes("Format:") ||
+      statusClientSource.includes("Volume:") ||
+      statusClientSource.includes("Cadence:") ||
+      statusClientSource.includes("Browse Podcast Archive →"),
+    false,
+    "Issue #48: SystemStatusClient.tsx must slim down the 3 syndication feed cards (removing Format/Volume/Cadence tables, Works with footers, and secondary archive buttons)"
+  );
+  assert.ok(
+    statusClientSource.includes("Open Raw Feed →"),
+    "Issue #48: SystemStatusClient.tsx must include a single 'Open Raw Feed →' link per syndication feed card"
+  );
+
+  console.log(
+    "  ✓ Objective 19 (Issue #48) About & Feeds 4-Column Typographic Directory, De-Nested Pillars, Slim Feed Cards, and Flattened Methodology Lists verified."
+  );
+
+  console.log(
+    "\n=== ALL 19 DEFENSIVE HARDENING, CRAFT PROSE, KRUG USABILITY, MASTHEAD, PODCAST ARCHIVE, ADMIN STUDY, EPIC #44 IA SCALE & BROADSHEET PRIMITIVES OBJECTIVES PASSED (100%) ==="
   );
 }
 
