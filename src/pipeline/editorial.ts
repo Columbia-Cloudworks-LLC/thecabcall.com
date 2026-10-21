@@ -249,7 +249,7 @@ const DEFAULT_PIPELINE_TRANSFORMS: Array<{
   },
 ];
 
-let editorialSchemaVerified = false;
+const editorialSchemaVerifiedDbs = new WeakSet<D1DatabaseLike>();
 
 /**
  * Ensures `telemetry_articles` has all Issue #11 editorial/image columns and
@@ -258,17 +258,19 @@ let editorialSchemaVerified = false;
 export async function ensureEditorialPipelineSchema(
   db: D1DatabaseLike
 ): Promise<void> {
-  if (editorialSchemaVerified) {
-    try {
-      const check = await db
-        .prepare("SELECT COUNT(*) as cnt FROM pipeline_transforms")
-        .first<{ cnt: number }>();
-      if (check !== null && Number(check.cnt) >= 4) {
-        return;
-      }
-    } catch {
-      editorialSchemaVerified = false;
+  if (editorialSchemaVerifiedDbs.has(db)) {
+    return;
+  }
+  try {
+    const check = await db
+      .prepare("SELECT COUNT(*) as cnt FROM pipeline_transforms")
+      .first<{ cnt: number }>();
+    if (check !== null && Number(check.cnt) >= 4) {
+      editorialSchemaVerifiedDbs.add(db);
+      return;
     }
+  } catch {
+    // Table does not exist yet; proceed with full schema initialization
   }
 
   try {
@@ -349,7 +351,7 @@ export async function ensureEditorialPipelineSchema(
         )
     );
     await executeD1Batch(db, seedStmts);
-    editorialSchemaVerified = true;
+    editorialSchemaVerifiedDbs.add(db);
   } catch {
     // Ignore on minimal mock DBs
   }

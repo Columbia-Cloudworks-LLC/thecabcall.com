@@ -12,7 +12,7 @@ export const metadata = {
 };
 
 export default async function PodcastPage() {
-  await ensureD1Snapshot(true);
+  await ensureD1Snapshot();
   const episodes = getAllEpisodes()
     .map((ep) => projectPublicEpisodeDto(ep))
     .filter((ep): ep is NonNullable<typeof ep> => ep !== null);

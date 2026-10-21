@@ -58,7 +58,7 @@ export async function executeD1Batch(
 
 export const DEFAULT_FEED_FETCH_TIMEOUT_MS = 8_000;
 export const DEFAULT_MAX_FEED_RESPONSE_BYTES = 2_097_152; // 2 MiB strict cap
-export const DEFAULT_MAX_FEEDS_PER_POLL = 26;
+export const DEFAULT_MAX_FEEDS_PER_POLL = 8;
 
 export interface FeedConfig {
   id?: number;
@@ -735,6 +735,8 @@ export function mapFilterRowToRecord(row: IngestFilterRow): IngestFilterRecord {
   };
 }
 
+const feedsTablesVerifiedDbs = new WeakSet<D1DatabaseLike>();
+
 /**
  * Ensures `ingest_feeds`, `ingest_filters`, and `system_settings` tables exist and are seeded
  * if migration 0005 has not yet run on an isolated SQLite instance.
@@ -742,11 +744,15 @@ export function mapFilterRowToRecord(row: IngestFilterRow): IngestFilterRecord {
 export async function ensureFeedsAndFiltersTables(
   db: D1DatabaseLike
 ): Promise<void> {
+  if (feedsTablesVerifiedDbs.has(db)) {
+    return;
+  }
   try {
     const check = await db
       .prepare("SELECT COUNT(*) as cnt FROM ingest_feeds")
       .first<{ cnt: number }>();
     if (check !== null) {
+      feedsTablesVerifiedDbs.add(db);
       return;
     }
   } catch {
@@ -1001,6 +1007,7 @@ export async function ensureFeedsAndFiltersTables(
       .bind(k, v, desc)
   );
   await executeD1Batch(db, settingsStatements);
+  feedsTablesVerifiedDbs.add(db);
 }
 
 export const INGEST_FEEDS_COLUMNS = `
@@ -2479,8 +2486,10 @@ export async function parseRssFeedItems(
     const guid = normalizeCanonicalGuid(rawGuid, sourceUrl);
     const urlHash = await computeCanonicalArticleHash(sourceUrl, guid);
 
-    const cleanedDesc = stripHtmlAndCdata(rawDesc);
-    const cleanedContent = stripHtmlAndCdata(rawContentEncoded);
+    const cleanedDesc = stripHtmlAndCdata(rawDesc ? rawDesc.slice(0, 12_000) : "");
+    const cleanedContent = stripHtmlAndCdata(
+      rawContentEncoded ? rawContentEncoded.slice(0, 12_000) : ""
+    );
 
     // Combine or prefer whichever payload gives richer multi-paragraph context
     let combinedBody = cleanedDesc;

@@ -394,22 +394,41 @@ const BASELINE_ARCHIVE_EPISODES: Array<{
   published_at: string;
 }> = [];
 
+const episodesColumnVerifiedDbs = new WeakSet<D1DatabaseLike>();
+const baselineEpisodesSeededDbs = new WeakSet<D1DatabaseLike>();
+
 export async function ensureEpisodesStatusColumn(db: D1DatabaseLike): Promise<void> {
-  const alterStatements = [
-    "ALTER TABLE episodes ADD COLUMN status TEXT NOT NULL DEFAULT 'PUBLISHED'",
-    "ALTER TABLE episodes ADD COLUMN artwork_url TEXT",
-    "ALTER TABLE episodes ADD COLUMN artwork_widescreen_url TEXT",
-    "ALTER TABLE episodes ADD COLUMN ai_disclaimer TEXT",
-    "ALTER TABLE episodes ADD COLUMN extended_notes TEXT",
-    "ALTER TABLE episodes ADD COLUMN sources_json TEXT",
-    "ALTER TABLE episodes ADD COLUMN source_pages_json TEXT",
-  ];
-  for (const stmt of alterStatements) {
-    try {
-      await db.prepare(stmt).run();
-    } catch {
-      // Column already exists
+  if (episodesColumnVerifiedDbs.has(db)) {
+    return;
+  }
+  try {
+    const pragmaRes = await db
+      .prepare("PRAGMA table_info(episodes)")
+      .all<{ name: string }>();
+    const existingCols = new Set(
+      (pragmaRes.results || []).map((c) => c.name.toLowerCase())
+    );
+    const alterSpecs: Array<[string, string]> = [
+      ["status", "TEXT NOT NULL DEFAULT 'PUBLISHED'"],
+      ["artwork_url", "TEXT"],
+      ["artwork_widescreen_url", "TEXT"],
+      ["ai_disclaimer", "TEXT"],
+      ["extended_notes", "TEXT"],
+      ["sources_json", "TEXT"],
+      ["source_pages_json", "TEXT"],
+    ];
+    for (const [colName, colDef] of alterSpecs) {
+      if (!existingCols.has(colName)) {
+        try {
+          await db.prepare(`ALTER TABLE episodes ADD COLUMN ${colName} ${colDef}`).run();
+        } catch {
+          // Column already exists
+        }
+      }
     }
+    episodesColumnVerifiedDbs.add(db);
+  } catch {
+    // Ignore on minimal mock DBs
   }
 }
 
@@ -421,6 +440,9 @@ export async function ensureEpisodesStatusColumn(db: D1DatabaseLike): Promise<vo
 export async function ensureBaselineEpisodesSeeded(
   db: D1DatabaseLike
 ): Promise<void> {
+  if (baselineEpisodesSeededDbs.has(db)) {
+    return;
+  }
   try {
     await ensureEpisodesStatusColumn(db);
     await db
@@ -645,6 +667,7 @@ export async function ensureBaselineEpisodesSeeded(
         });
       }
     }
+    baselineEpisodesSeededDbs.add(db);
   } catch (err) {
     console.warn("[Rollup] Failed to seed or sanitize baseline archive episodes:", err);
   }

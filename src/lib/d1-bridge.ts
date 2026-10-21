@@ -1217,7 +1217,7 @@ let cachedRemoteSnapshot: LocalD1Snapshot | null = null;
 let cachedRemoteSnapshotAtMs = 0;
 let inFlightRemoteSnapshotPromise: Promise<LocalD1Snapshot | null> | null =
   null;
-const REMOTE_SNAPSHOT_TTL_MS = 1_500;
+const REMOTE_SNAPSHOT_TTL_MS = 60_000;
 
 /**
  * Fetches `/api/snapshot` from the remote Cloudflare Worker and populates the in-memory snapshot cache.
@@ -1239,7 +1239,9 @@ export async function fetchRemoteWorkerSnapshot(
   }
 
   const workerUrl = getEffectiveWorkerUrl();
-  const snapshotUrl = `${workerUrl}/api/snapshot?fresh=1`;
+  const snapshotUrl = forceFresh
+    ? `${workerUrl}/api/snapshot?fresh=1`
+    : `${workerUrl}/api/snapshot`;
 
   const fetchPromise = (async (): Promise<LocalD1Snapshot | null> => {
     try {
@@ -1248,7 +1250,9 @@ export async function fetchRemoteWorkerSnapshot(
         headers: {
           Accept: "application/json",
         },
-        cache: "no-store",
+        ...(forceFresh
+          ? { cache: "no-store" as const }
+          : { next: { revalidate: 60 } }),
         signal: AbortSignal.timeout(8000),
       });
 
@@ -1835,6 +1839,12 @@ let lastAutoRefreshCheckMs = 0;
  * even without an external cron daemon.
  */
 export function triggerAutoRefreshIfStale(maxAgeHours = 6): void {
+  // Never trigger remote Worker ingestion from public page renders;
+  // Cloudflare Workers native cron (`0 */6 * * *`) handles scheduled ingestion in production.
+  if (shouldUseRemoteWorker()) {
+    return;
+  }
+
   const now = Date.now();
   // Throttle checks to at most once every 60 seconds per process
   if (autoRefreshInFlight || now - lastAutoRefreshCheckMs < 60_000) {
@@ -1862,28 +1872,6 @@ export function triggerAutoRefreshIfStale(maxAgeHours = 6): void {
     return;
   }
 
-  if (shouldUseRemoteWorker()) {
-    autoRefreshInFlight = true;
-    void (async () => {
-      try {
-        if (ageHours >= maxAgeHours) {
-          await triggerRemoteWorkerIngest({
-            synthesize: true,
-            synthesizeLimit: 6,
-            maxNetNew: 6,
-          });
-        } else if (hasPendingTriaged) {
-          await triggerRemoteWorkerSynthesize({ limit: 6 });
-        }
-      } catch (err) {
-        console.warn("[D1 Auto-Refresh] Remote Worker sweep error:", err);
-      } finally {
-        autoRefreshInFlight = false;
-      }
-    })();
-    return;
-  }
-
   const db = createLocalSqliteD1Adapter();
   if (!db) return;
 
@@ -1896,14 +1884,14 @@ export function triggerAutoRefreshIfStale(maxAgeHours = 6): void {
         await runD1IngestPipeline({
           db,
           typesafeApiKey: envVars.TYPESAFE_API_KEY,
-          maxNetNew: 6,
-          itemsPerFeed: 5,
+          maxNetNew: 5,
+          itemsPerFeed: 4,
         });
       }
       await runSynthesizePipeline({
         db,
         geminiApiKey: envVars.GEMINI_API_KEY,
-        limit: 6,
+        limit: 3,
       });
     } catch (err) {
       console.warn("[D1 Auto-Refresh] Background sweep error:", err);

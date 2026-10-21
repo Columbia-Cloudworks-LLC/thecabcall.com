@@ -194,11 +194,23 @@ function inferWorkerDomainSector(
   return "Public Policy & Governance";
 }
 
+const workerIncidentDtoCache = new Map<string, PublicIncidentDto | null>();
+const workerEpisodeDtoCache = new Map<string, PublicEpisodeDto | null>();
+let cachedArchiveSectorState: {
+  corpusTotalCount: number;
+  sectorCounts: Record<DomainSectorId, number>;
+} | null = null;
+
 function mapWorkerRowToPublicIncidentDto(
   row: TelemetryArticleRow
 ): PublicIncidentDto | null {
   if (row.status !== "synthesized" || Number(row.is_hidden ?? 0) === 1) {
     return null;
+  }
+
+  const cacheKey = `${row.id}:${row.url_hash}:${row.title}:${row.primary_tool}:${row.secondary_tool || ""}:${row.sre_failure_mode}:${row.is_pinned ?? 0}:${row.title_rewritten ?? 0}:${row.image_url || ""}:${(row.socratic_brief || "").length}:${(row.questions_json || "").length}`;
+  if (workerIncidentDtoCache.has(cacheKey)) {
+    return workerIncidentDtoCache.get(cacheKey) ?? null;
   }
 
   const primaryTool =
@@ -284,7 +296,7 @@ function mapWorkerRowToPublicIncidentDto(
       ? row.image_caption.trim()
       : `Blueprint Card · ${primaryTool} / ${sreFailureMode}`;
 
-  return projectPublicIncidentDto({
+  const dto = projectPublicIncidentDto({
     id: `d1-inc-${row.id}`,
     incidentCode: `#CAB-2026-${2000 + row.id}`,
     slug: `${slugBase || "incident"}-d1-${row.id}`,
@@ -323,6 +335,12 @@ function mapWorkerRowToPublicIncidentDto(
     imageSourceType: effectiveImageSourceType,
     isPinned: Number(row.is_pinned ?? 0) === 1,
   });
+
+  if (workerIncidentDtoCache.size > 500) {
+    workerIncidentDtoCache.clear();
+  }
+  workerIncidentDtoCache.set(cacheKey, dto);
+  return dto;
 }
 
 function mapWorkerRowToPublicEpisodeDto(
@@ -331,6 +349,14 @@ function mapWorkerRowToPublicEpisodeDto(
 ): PublicEpisodeDto | null {
   if (row.status && row.status !== "PUBLISHED") {
     return null;
+  }
+  const topIds = incidents
+    .slice(0, 3)
+    .map((i) => i.id)
+    .join(",");
+  const epCacheKey = `${row.id}:${row.slug}:${row.title}:${row.duration_seconds}:${row.published_at}:${(row.summary || "").length}:${(row.transcript || "").length}:${row.artwork_url || ""}:${topIds}`;
+  if (workerEpisodeDtoCache.has(epCacheKey)) {
+    return workerEpisodeDtoCache.get(epCacheKey) ?? null;
   }
   const episodeNumber = Number(row.episode_number || 21);
   const durationSeconds = Number(row.duration_seconds || 300);
@@ -461,7 +487,7 @@ function mapWorkerRowToPublicEpisodeDto(
     );
   }
 
-  return projectPublicEpisodeDto({
+  const epDto = projectPublicEpisodeDto({
     id: `d1-ep-${row.id}`,
     slug: row.slug,
     episodeNumber,
@@ -498,6 +524,11 @@ function mapWorkerRowToPublicEpisodeDto(
     externalSources,
     sourcePages,
   });
+  if (workerEpisodeDtoCache.size > 100) {
+    workerEpisodeDtoCache.clear();
+  }
+  workerEpisodeDtoCache.set(epCacheKey, epDto);
+  return epDto;
 }
 
 const CORS_HEADERS: Record<string, string> = {
@@ -512,7 +543,7 @@ function jsonResponse(
   status = 200,
   extraHeaders?: Record<string, string>
 ): Response {
-  return new Response(JSON.stringify(data, null, 2), {
+  return new Response(JSON.stringify(data), {
     status,
     headers: {
       "Content-Type": "application/json; charset=utf-8",
@@ -657,20 +688,28 @@ const worker = {
     // Public Route: GET /api/snapshot (Returns strictly projected Public DTOs; zero SELECT * or telemetry bleed)
     if (request.method === "GET" && url.pathname === "/api/snapshot") {
       try {
+        let articleRows: TelemetryArticleRow[] = [];
         try {
+          const articlesRes = await env.DB.prepare(
+            `SELECT ${TELEMETRY_ARTICLES_SYNTHESIS_COLUMNS}
+             FROM telemetry_articles
+             WHERE status = 'synthesized' AND is_hidden = 0
+             ORDER BY is_pinned DESC, published_at DESC, id DESC
+             LIMIT 100`
+          ).all<TelemetryArticleRow>();
+          articleRows = articlesRes.results || [];
+        } catch {
           await ensureBaselineEpisodesSeeded(env.DB);
           await ensureEditorialPipelineSchema(env.DB);
-        } catch {
-          // ignore seed check failure
+          const articlesRes = await env.DB.prepare(
+            `SELECT ${TELEMETRY_ARTICLES_SYNTHESIS_COLUMNS}
+             FROM telemetry_articles
+             WHERE status = 'synthesized' AND is_hidden = 0
+             ORDER BY is_pinned DESC, published_at DESC, id DESC
+             LIMIT 100`
+          ).all<TelemetryArticleRow>();
+          articleRows = articlesRes.results || [];
         }
-
-        const articlesRes = await env.DB.prepare(
-          `SELECT ${TELEMETRY_ARTICLES_SYNTHESIS_COLUMNS}
-           FROM telemetry_articles
-           WHERE status = 'synthesized' AND is_hidden = 0
-           ORDER BY is_pinned DESC, published_at DESC, id DESC`
-        ).all<TelemetryArticleRow>();
-        const articleRows = articlesRes.results || [];
 
         const incidents: PublicIncidentDto[] = [];
         for (const row of articleRows) {
@@ -701,6 +740,7 @@ const worker = {
           }
         }
 
+        const isFresh = url.searchParams.get("fresh") === "1";
         return jsonResponse(
           {
             ok: true,
@@ -710,7 +750,9 @@ const worker = {
           },
           200,
           {
-            "Cache-Control": "no-store, max-age=0",
+            "Cache-Control": isFresh
+              ? "no-store, max-age=0"
+              : "public, max-age=30, s-maxage=60, stale-while-revalidate=300",
           }
         );
       } catch (err) {
@@ -727,11 +769,6 @@ const worker = {
     // Public Route: GET /api/archive (Server-side D1 pagination, filtering, and 6x6 matrix aggregation)
     if (request.method === "GET" && url.pathname === "/api/archive") {
       try {
-        try {
-          await ensureEditorialPipelineSchema(env.DB);
-        } catch {
-          // ignore schema check failure
-        }
 
         const pageParam = parseInt(url.searchParams.get("page") || "1", 10);
         const pageSizeParam = parseInt(url.searchParams.get("pageSize") || "25", 10);
@@ -896,7 +933,7 @@ const worker = {
         }));
 
         // 3. Sector Aggregation & Paginated Ledger Slice
-        const sectorCounts: Record<DomainSectorId, number> = {
+        let sectorCounts: Record<DomainSectorId, number> = {
           "Public Policy & Governance": 0,
           "Economics & Markets": 0,
           "Technology & Cyber": 0,
@@ -904,15 +941,26 @@ const worker = {
           "Institutional Leadership": 0,
         };
 
-        const sectorAllRes = await env.DB.prepare(
-          `SELECT source_feed, title, raw_excerpt
-           FROM telemetry_articles
-           WHERE status = 'synthesized' AND is_hidden = 0`
-        ).all<{ source_feed: string; title: string; raw_excerpt: string }>();
+        if (
+          cachedArchiveSectorState &&
+          cachedArchiveSectorState.corpusTotalCount === corpusTotalCount
+        ) {
+          sectorCounts = { ...cachedArchiveSectorState.sectorCounts };
+        } else {
+          const sectorAllRes = await env.DB.prepare(
+            `SELECT source_feed, title, raw_excerpt
+             FROM telemetry_articles
+             WHERE status = 'synthesized' AND is_hidden = 0`
+          ).all<{ source_feed: string; title: string; raw_excerpt: string }>();
 
-        for (const r of sectorAllRes.results || []) {
-          const sec = inferWorkerDomainSector(r.source_feed, r.title, r.raw_excerpt);
-          sectorCounts[sec] = (sectorCounts[sec] || 0) + 1;
+          for (const r of sectorAllRes.results || []) {
+            const sec = inferWorkerDomainSector(r.source_feed, r.title, r.raw_excerpt);
+            sectorCounts[sec] = (sectorCounts[sec] || 0) + 1;
+          }
+          cachedArchiveSectorState = {
+            corpusTotalCount,
+            sectorCounts: { ...sectorCounts },
+          };
         }
 
         let items: PublicIncidentDto[] = [];
@@ -4130,8 +4178,8 @@ const worker = {
             await runD1IngestPipeline({
               db: env.DB,
               typesafeApiKey: env.TYPESAFE_API_KEY,
-              maxNetNew: 10,
-              itemsPerFeed: 5,
+              maxNetNew: 5,
+              itemsPerFeed: 4,
             });
           } catch (err) {
             console.error("[Scheduled 6h Cron] Ingest stage error:", err);
@@ -4140,7 +4188,7 @@ const worker = {
             await runSynthesizePipeline({
               db: env.DB,
               geminiApiKey: env.GEMINI_API_KEY,
-              limit: 5,
+              limit: 3,
             });
           } catch (err) {
             console.error("[Scheduled 6h Cron] Synthesize stage error:", err);
@@ -4155,8 +4203,8 @@ const worker = {
             await runD1IngestPipeline({
               db: env.DB,
               typesafeApiKey: env.TYPESAFE_API_KEY,
-              maxNetNew: 10,
-              itemsPerFeed: 5,
+              maxNetNew: 5,
+              itemsPerFeed: 4,
             });
           } catch (err) {
             console.error("[Scheduled Friday Cron] Ingest stage error:", err);
@@ -4165,7 +4213,7 @@ const worker = {
             await runSynthesizePipeline({
               db: env.DB,
               geminiApiKey: env.GEMINI_API_KEY,
-              limit: 5,
+              limit: 3,
             });
           } catch (err) {
             console.error(
