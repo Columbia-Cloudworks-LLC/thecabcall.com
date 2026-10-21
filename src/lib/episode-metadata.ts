@@ -461,3 +461,244 @@ export function buildDefaultSourcePagesForEpisode(
     },
   ];
 }
+
+const TRANSCRIPT_ABBR_PLACEHOLDER = "\u0000";
+
+const SPEAKER_LABEL_SOURCE =
+  "(?:(?:Male|Female)\\s+(?:AI\\s+)?(?:Speaker|Voice|Host)|The\\s+(?:Mainframe|Masonry)\\s+Advocate|(?:Host|Speaker|Narrator|Moderator)(?:\\s+(?:[AB12]|One|Two))?)\\s*:";
+
+const TIMESTAMP_BRACKET_SOURCE =
+  "\\[\\d{1,2}:\\d{2}(?::\\d{2})?(?:\\s*[—–-]\\s*[^\\]]+)?\\]";
+
+const TURN_OR_TIMESTAMP_BOUNDARY_REGEX = new RegExp(
+  `(${TIMESTAMP_BRACKET_SOURCE}\\s*${SPEAKER_LABEL_SOURCE}|${SPEAKER_LABEL_SOURCE}\\s*${TIMESTAMP_BRACKET_SOURCE}|${SPEAKER_LABEL_SOURCE}|${TIMESTAMP_BRACKET_SOURCE})`,
+  "gi"
+);
+
+const LEADING_TURN_OR_TIMESTAMP_REGEX = new RegExp(
+  `^(?:${TIMESTAMP_BRACKET_SOURCE}|${SPEAKER_LABEL_SOURCE})`,
+  "i"
+);
+
+/**
+ * Converts a bracketed or unbracketed timestamp string (e.g. `[00:01:08]`, `[01:15]`,
+ * `[01:15 — THE PROPORTIONALITY CHECK]`, or `03:30`) into integer seconds.
+ */
+export function parseTimestampToSeconds(rawTimestamp: string): number {
+  if (!rawTimestamp) return 0;
+  const match = rawTimestamp.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) return 0;
+  if (match[3] !== undefined) {
+    const hours = parseInt(match[1], 10) || 0;
+    const mins = parseInt(match[2], 10) || 0;
+    const secs = parseInt(match[3], 10) || 0;
+    return hours * 3600 + mins * 60 + secs;
+  }
+  const mins = parseInt(match[1], 10) || 0;
+  const secs = parseInt(match[2], 10) || 0;
+  return mins * 60 + secs;
+}
+
+export interface TranscriptToken {
+  type: "timestamp" | "speaker" | "text";
+  value: string;
+  seconds?: number;
+}
+
+/**
+ * Tokenizes a transcript paragraph into timestamp anchor pills (`[00:XX:XX]` / `[XX:XX]`),
+ * speaker labels, and prose text runs so the UI can render scannable brass-gold timestamp pills.
+ */
+export function tokenizeTranscriptParagraph(paragraph: string): TranscriptToken[] {
+  if (!paragraph || !paragraph.trim()) return [];
+  const tokenRegex = new RegExp(
+    `(${TIMESTAMP_BRACKET_SOURCE})|(${SPEAKER_LABEL_SOURCE})`,
+    "gi"
+  );
+  const tokens: TranscriptToken[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = tokenRegex.exec(paragraph)) !== null) {
+    if (match.index > lastIndex) {
+      const textSlice = paragraph.slice(lastIndex, match.index);
+      if (textSlice) {
+        tokens.push({ type: "text", value: textSlice });
+      }
+    }
+
+    if (match[1]) {
+      tokens.push({
+        type: "timestamp",
+        value: match[1],
+        seconds: parseTimestampToSeconds(match[1]),
+      });
+    } else if (match[2]) {
+      tokens.push({
+        type: "speaker",
+        value: match[2].trim(),
+      });
+    }
+
+    lastIndex = tokenRegex.lastIndex;
+  }
+
+  if (lastIndex < paragraph.length) {
+    const tail = paragraph.slice(lastIndex);
+    if (tail) {
+      tokens.push({ type: "text", value: tail });
+    }
+  }
+
+  return tokens;
+}
+
+function splitParagraphIntoSentences(block: string): string[] {
+  const trimmed = block.trim();
+  if (!trimmed) return [];
+
+  // Temporarily protect common abbreviations and leading markers before splitting on sentence punctuation
+  const protectedText = trimmed
+    .replace(/\b(U\.S|U\.K|E\.U|U\.N)\./g, `$1${TRANSCRIPT_ABBR_PLACEHOLDER}`)
+    .replace(
+      /\b(Rep|Sen|Gov|Pres|Mr|Mrs|Ms|Dr|Prof|Gen|Col|Lt|Sgt|St|Ave|Inc|Corp|Co|Ltd|Jr|Sr|vs|v|No|Fig|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\./gi,
+      `$1${TRANSCRIPT_ABBR_PLACEHOLDER}`
+    )
+    .replace(/(\b[A-Z])\./g, `$1${TRANSCRIPT_ABBR_PLACEHOLDER}`);
+
+  const rawSentences =
+    protectedText.match(/[^.!?]+[.!?]+["”']?(?:\s+|$)|[^.!?]+$/g) || [
+      protectedText,
+    ];
+
+  const restored = rawSentences
+    .map((s) =>
+      s
+        .replace(new RegExp(TRANSCRIPT_ABBR_PLACEHOLDER, "g"), ".")
+        .replace(/\s+/g, " ")
+        .trim()
+    )
+    .filter(Boolean);
+
+  // Merge any tiny 1-2 word conversational fragments (e.g. "Yeah.", "Right?", "Mm-hmm.") into an adjacent sentence
+  // unless it starts with a timestamp or speaker label
+  const merged: string[] = [];
+  for (const s of restored) {
+    const wordCount = s.split(/\s+/).length;
+    if (
+      merged.length > 0 &&
+      wordCount <= 2 &&
+      !LEADING_TURN_OR_TIMESTAMP_REGEX.test(s)
+    ) {
+      merged[merged.length - 1] = `${merged[merged.length - 1]} ${s}`;
+    } else {
+      merged.push(s);
+    }
+  }
+
+  return merged;
+}
+
+function chunkSentencesIntoParagraphs(sentences: string[]): string[] {
+  const total = sentences.length;
+  if (total === 0) return [];
+  if (total <= 5) return [sentences.join(" ")];
+
+  const paragraphs: string[] = [];
+  let idx = 0;
+  while (idx < total) {
+    const remaining = total - idx;
+    let take = 4;
+    if (remaining <= 5) {
+      take = remaining;
+    } else if (remaining === 6) {
+      take = 3;
+    } else if (remaining === 7) {
+      take = 4;
+    } else if (remaining === 9) {
+      take = 3;
+    } else if (remaining === 10) {
+      take = 4;
+    }
+    paragraphs.push(sentences.slice(idx, idx + take).join(" "));
+    idx += take;
+  }
+
+  return paragraphs;
+}
+
+/**
+ * Deterministic transcript formatter (`formatTranscriptParagraphs`, Issue #46):
+ * - Strips leading file/episode header boilerplate and trailing AI disclaimers
+ * - Inserts double line breaks (`\n\n`) at speaker transitions and inline timestamps (e.g., `[00:01:08]`)
+ * - Segments long single-block transcripts into comfortable 3–5 sentence paragraphs
+ * - Merges orphaned 1-sentence lines (when not starting a new speaker turn or timestamp) into 3–5 sentence paragraphs
+ */
+export function formatTranscriptParagraphs(raw: string): string {
+  if (!raw || typeof raw !== "string") return "";
+
+  let cleaned = stripAiDisclaimers(raw.replace(/\r\n/g, "\n")).trim();
+  if (!cleaned) return "";
+
+  // Strip leading legacy file headers (e.g. "=== THE CAB CALL PODCAST // EPISODE #7 ===\nTitle: ..." or "Title\n===\n")
+  cleaned = cleaned
+    .replace(
+      /^===\s*THE CAB CALL PODCAST[^\n]*===\s*\n+(?:Title:\s*[^\n]*\n+)?/i,
+      ""
+    )
+    .replace(/^[^\n]{1,140}\n={3,}\s*\n+/, "")
+    .trim();
+
+  // Normalize single line breaks inside paragraphs to spaces while preserving existing paragraph breaks
+  cleaned = cleaned
+    .replace(/\n{2,}/g, "\n\n")
+    .replace(/(?<!\n)\n(?!\n)/g, " ")
+    .replace(/[ \t]{2,}/g, " ");
+
+  // Insert double line breaks before speaker transitions or inline timestamps
+  // while keeping adjacent [timestamp] + Speaker: or Speaker: + [timestamp] pairs together
+  const segmented = cleaned.replace(
+    TURN_OR_TIMESTAMP_BOUNDARY_REGEX,
+    (match, _group, offset: number) => {
+      if (offset === 0) return match;
+      return `\n\n${match.trim()}`;
+    }
+  );
+
+  const rawBlocks = segmented
+    .split(/\n{2,}/)
+    .map((b) => b.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  // Merge consecutive unlabeled short fragments (from raw files that broke lines every sentence without speaker labels)
+  // while always starting a new block on any speaker transition or timestamp
+  const consolidatedBlocks: string[] = [];
+  let pendingSentences: string[] = [];
+
+  const flushPending = () => {
+    if (pendingSentences.length === 0) return;
+    consolidatedBlocks.push(...chunkSentencesIntoParagraphs(pendingSentences));
+    pendingSentences = [];
+  };
+
+  for (const block of rawBlocks) {
+    const startsNewTurn = LEADING_TURN_OR_TIMESTAMP_REGEX.test(block);
+    const blockSentences = splitParagraphIntoSentences(block);
+
+    if (startsNewTurn) {
+      flushPending();
+      pendingSentences = [...blockSentences];
+      if (pendingSentences.length >= 4) {
+        flushPending();
+      }
+    } else {
+      pendingSentences.push(...blockSentences);
+      if (pendingSentences.length >= 4) {
+        flushPending();
+      }
+    }
+  }
+  flushPending();
+
+  return consolidatedBlocks.join("\n\n").trim();
+}

@@ -36,6 +36,7 @@ import {
   buildCleanExtendedNotes,
   buildDefaultSourcePagesForEpisode,
   extractExternalSourcesFromText,
+  formatTranscriptParagraphs,
   sanitizeEpisodeSummaryDefensive,
   stripAiDisclaimers,
 } from "./episode-metadata";
@@ -566,7 +567,9 @@ export function mapD1RowToPodcastEpisode(
   const rawSummaryProse = sanitizeEpisodeProse(row.summary);
   const cleanSummary = sanitizeEpisodeSummaryDefensive(rawSummaryProse);
   const rawTranscript = row.transcript || row.summary;
-  const cleanTranscript = stripAiDisclaimers(sanitizeEpisodeProse(rawTranscript));
+  const cleanTranscript = formatTranscriptParagraphs(
+    stripAiDisclaimers(sanitizeEpisodeProse(rawTranscript))
+  );
 
   const extendedNotes =
     row.extended_notes && row.extended_notes.trim()

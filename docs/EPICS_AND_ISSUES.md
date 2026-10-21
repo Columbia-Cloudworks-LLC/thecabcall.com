@@ -82,7 +82,7 @@
 - [x] **Issue #43 ([GitHub Issue #43](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/43)): [Scale & Data] Archive Scalability Refactor: Server-Side Pagination, URL State, 6×6 Brass Heatmap & Zero Horizontal Overflow (`migrations/0010_archive_pagination_indexes.sql`, `d1-bridge.ts`, `worker.ts`, `KnowledgeGraphClient.tsx`, `src/app/archive/page.tsx`)**
 
 ### Krug "Don't Make Me Think" Global UI/UX Flattening & Readability Overhaul Epic ([GitHub Issue #45](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/45) — Issues #46 to #51)
-- [ ] **Issue #46 ([GitHub Issue #46](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/46)): Podcast Page (`/podcast`) — Transcript Formatting, Paragraph Segmentation & Drawer Flattening**
+- [x] **Issue #46 ([GitHub Issue #46](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/46)): Podcast Page (`/podcast`) — Transcript Formatting, Paragraph Segmentation & Drawer Flattening**
 - [ ] **Issue #47 ([GitHub Issue #47](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/47)): Working Tools & Rubric Page (`/rubric`) — 50% Card Diet & Redundancy Removal**
 - [ ] **Issue #48 ([GitHub Issue #48](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/48)): About & Feeds Page (`/about`, `/status`, `/feeds`) — Collapse the 51-Card Wall, De-Nest Pillars & Slim Feed Cards**
 - [ ] **Issue #49 ([GitHub Issue #49](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/49)): Unseen Public Pages Audit & Flattening (`/archive`, `/tools/[slug]`, `/failures/[slug]`, `/incidents/[slug]`)**
@@ -719,7 +719,7 @@
 
 ### Issue #46 (Sub-Issue 1): Podcast Page (`/podcast`) — Transcript Formatting, Paragraph Segmentation & Drawer Flattening
 - **GitHub Issue:** [#46](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/46)
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Target Files:** `src/components/PodcastArchiveClient.tsx`, `src/app/podcast/page.tsx`, `src/lib/episode-metadata.ts`, `scripts/import-legacy-episodes.ts`
 
 ### Issue #47 (Sub-Issue 2): Working Tools & Rubric Page (`/rubric`) — 50% Card Diet & Redundancy Removal

@@ -7,6 +7,7 @@ import {
   buildCleanExtendedNotes,
   extractExternalSourcesFromText,
   buildDefaultSourcePagesForEpisode,
+  formatTranscriptParagraphs,
   stripAiDisclaimers,
 } from "../src/lib/episode-metadata";
 import type {
@@ -529,17 +530,23 @@ export function scanLegacyEpisodesDirectory(
     // Build clean transcript without trailing AI disclaimers
     let transcriptBody = "";
     if (speakerTranscriptText) {
-      transcriptBody = sanitizeLegacyText(speakerTranscriptText);
+      transcriptBody = formatTranscriptParagraphs(
+        sanitizeLegacyText(speakerTranscriptText)
+      );
     } else if (srtFile) {
       const srtRaw = fs.readFileSync(path.join(dir.fullPath, srtFile), "utf8");
-      transcriptBody = sanitizeLegacyText(parseSrtToTranscript(srtRaw));
+      transcriptBody = formatTranscriptParagraphs(
+        sanitizeLegacyText(parseSrtToTranscript(srtRaw))
+      );
     } else {
-      transcriptBody = [
-        `=== THE CAB CALL PODCAST // EPISODE #${epNum} ===`,
-        `Title: ${formattedTitle}`,
-        ``,
-        cleanExtendedNotes,
-      ].join("\n");
+      transcriptBody = formatTranscriptParagraphs(
+        [
+          `=== THE CAB CALL PODCAST // EPISODE #${epNum} ===`,
+          `Title: ${formattedTitle}`,
+          ``,
+          cleanExtendedNotes,
+        ].join("\n")
+      );
     }
 
     const publishedAt = new Date(

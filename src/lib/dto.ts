@@ -20,6 +20,7 @@ import {
   WorkingToolId,
 } from "./taxonomy";
 import {
+  formatTranscriptParagraphs,
   sanitizeEpisodeSummaryDefensive,
   stripAiDisclaimers,
 } from "./episode-metadata";
@@ -520,13 +521,15 @@ export function projectPublicEpisodeDto(
     series: mapped.series === "legacy_archive" ? "legacy_archive" : "weekly_rollup",
     title: sanitizeEditorialText(mapped.title),
     summary: sanitizeEditorialText(sanitizeEpisodeSummaryDefensive(mapped.summary)),
-    transcript: stripAiDisclaimers(
-      stripRawFailureShortCodes(
-        (mapped.transcript || "")
-          .replace(/\bjev-1\.14\.0\b/gi, "")
-          .replace(/\s*\(\d+(?:\.\d+)?%\)/g, "")
+    transcript: formatTranscriptParagraphs(
+      stripAiDisclaimers(
+        stripRawFailureShortCodes(
+          (mapped.transcript || "")
+            .replace(/\bjev-1\.14\.0\b/gi, "")
+            .replace(/\s*\(\d+(?:\.\d+)?%\)/g, "")
+        )
       )
-    ).trim(),
+    ),
     audioUrl: mapped.audioUrl.trim(),
     durationSeconds: Number(mapped.durationSeconds),
     durationFormatted: mapped.durationFormatted || "05:00",
