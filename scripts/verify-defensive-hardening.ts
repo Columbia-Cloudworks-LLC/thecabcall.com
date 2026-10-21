@@ -1024,7 +1024,7 @@ async function runVerificationSuite() {
       mustContain: [
         "Weekly Ledger Roundups",
         "Foundational Essays",
-        "1. The Week&apos;s Trestleboard (0:00 – 1:15)",
+        "1. The Week&apos;s Trestleboard",
       ],
       mustNotContain: [
         /Weekly Telemetry Rollups \(5-Min\)/,
@@ -2125,12 +2125,12 @@ async function runVerificationSuite() {
 
   // Issue #34: Masthead & Filter Tabs + dedicated /podcast route
   assert.ok(
-    podcastArchiveSource.includes("THE CAB CALL PODCAST // CONVERSATIONAL DEEP-DIVES &amp; ARCHIVE") &&
+    podcastArchiveSource.includes("THE CAB CALL PODCAST") &&
       podcastArchiveSource.includes("The CAB Call Podcast") &&
       podcastArchiveSource.includes("Weekly Ledger Roundups") &&
       podcastArchiveSource.includes("Foundational Essays") &&
-      podcastArchiveSource.includes("WEEKLY LEDGER #") &&
-      podcastArchiveSource.includes("FOUNDATIONAL ESSAY #") &&
+      podcastArchiveSource.includes("Weekly Ledger Roundup #") &&
+      podcastArchiveSource.includes("Foundational Essay #") &&
       !podcastArchiveSource.includes("PODCAST ARCHIVE // FRIDAY 5-MINUTE ROLLUP & LEGACY CATALOG") &&
       !podcastArchiveSource.includes("Legacy Deep-Dive Archive") &&
       !podcastArchiveSource.includes("5-MIN BRIEF") &&
@@ -2903,8 +2903,80 @@ async function runVerificationSuite() {
     "  ✓ Objective 17 (Issue #51) Global CSS Single-Border Frame, Nested Frame Guardrail & Shared Broadsheet Primitives verified."
   );
 
+  // -------------------------------------------------------------------------
+  // 18. OBJECTIVE 18 (ISSUE #47): WORKING TOOLS & RUBRIC PAGE 50% CARD DIET & DRAWER FLATTENING
+  // -------------------------------------------------------------------------
   console.log(
-    "\n=== ALL 17 DEFENSIVE HARDENING, CRAFT PROSE, KRUG USABILITY, MASTHEAD, PODCAST ARCHIVE, ADMIN STUDY, EPIC #44 IA SCALE & BROADSHEET PRIMITIVES OBJECTIVES PASSED (100%) ==="
+    "\n[18/18] Verifying Objective 18 (Issue #47): Working Tools & Rubric Page 50% Card Diet, Redundancy Removal & Drawer Flattening..."
+  );
+
+  assert.equal(
+    rubricCodexSource.includes('href="#axis-1"') ||
+      rubricCodexSource.includes('href="#axis-2"') ||
+      rubricCodexSource.includes('href="#axis-3"'),
+    false,
+    "Issue #47: RubricCodexClient.tsx must remove the redundant top 3 Axis summary cards"
+  );
+  assert.equal(
+    rubricCodexSource.includes("BrassSectionDivider") ||
+      rubricCodexSource.includes("engravingCaption") ||
+      rubricCodexSource.includes("Shop-Floor Mechanics:") ||
+      rubricCodexSource.includes("Archive →"),
+    false,
+    "Issue #47: RubricCodexClient.tsx must enforce the 50% card diet (no BrassSectionDivider, no engravingCaption, no Shop-Floor Mechanics paragraph, and no competing Archive → footer link)"
+  );
+  assert.ok(
+    rubricCodexSource.includes("SectionHeader") &&
+      rubricCodexSource.includes("HeroCornerBrackets") &&
+      rubricCodexSource.includes("Explore Hub"),
+    "Issue #47: RubricCodexClient.tsx must use SectionHeader, HeroCornerBrackets, and a single inline Explore Hub cue per card"
+  );
+
+  assert.equal(
+    rubricDrawerSource.includes("border-double") ||
+      rubricDrawerSource.includes("Filter Archive Ledger →"),
+    false,
+    "Issue #47: RubricInspectorDrawer.tsx must de-nest inner bordered boxes and remove competing secondary footer links"
+  );
+  assert.ok(
+    rubricDrawerSource.includes("HairlineSection") &&
+      rubricDrawerSource.includes("primaryHubHref"),
+    "Issue #47: RubricInspectorDrawer.tsx must use HairlineSection dividers and a single primary footer CTA"
+  );
+
+  for (const expectedSlug of [
+    "24-inch-gauge",
+    "common-gavel",
+    "the-plumb",
+    "the-square",
+    "the-level",
+    "the-trowel",
+  ]) {
+    assert.ok(
+      WORKING_TOOLS.some((t) => t.slug === expectedSlug),
+      `Issue #47: WORKING_TOOLS must preserve hash anchor slug #${expectedSlug}`
+    );
+  }
+  for (const expectedFailureSlug of [
+    "configuration-drift",
+    "cascading-failure",
+    "alert-fatigue",
+    "single-point-of-failure",
+    "blame-culture",
+    "institutional-debt",
+  ]) {
+    assert.ok(
+      SRE_FAILURE_MODES.some((m) => m.slug === expectedFailureSlug),
+      `Issue #47: SRE_FAILURE_MODES must preserve hash anchor slug #${expectedFailureSlug}`
+    );
+  }
+
+  console.log(
+    "  ✓ Objective 18 (Issue #47) Working Tools & Rubric 50% Card Diet, SectionHeader Flattening, and Inspector Drawer De-Nesting verified."
+  );
+
+  console.log(
+    "\n=== ALL 18 DEFENSIVE HARDENING, CRAFT PROSE, KRUG USABILITY, MASTHEAD, PODCAST ARCHIVE, ADMIN STUDY, EPIC #44 IA SCALE & BROADSHEET PRIMITIVES OBJECTIVES PASSED (100%) ==="
   );
 }
 

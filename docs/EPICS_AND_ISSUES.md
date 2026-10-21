@@ -83,7 +83,7 @@
 
 ### Krug "Don't Make Me Think" Global UI/UX Flattening & Readability Overhaul Epic ([GitHub Issue #45](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/45) — Issues #46 to #51)
 - [x] **Issue #46 ([GitHub Issue #46](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/46)): Podcast Page (`/podcast`) — Transcript Formatting, Paragraph Segmentation & Drawer Flattening**
-- [ ] **Issue #47 ([GitHub Issue #47](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/47)): Working Tools & Rubric Page (`/rubric`) — 50% Card Diet & Redundancy Removal**
+- [x] **Issue #47 ([GitHub Issue #47](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/47)): Working Tools & Rubric Page (`/rubric`) — 50% Card Diet & Redundancy Removal**
 - [ ] **Issue #48 ([GitHub Issue #48](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/48)): About & Feeds Page (`/about`, `/status`, `/feeds`) — Collapse the 51-Card Wall, De-Nest Pillars & Slim Feed Cards**
 - [ ] **Issue #49 ([GitHub Issue #49](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/49)): Unseen Public Pages Audit & Flattening (`/archive`, `/tools/[slug]`, `/failures/[slug]`, `/incidents/[slug]`)**
 - [ ] **Issue #50 ([GitHub Issue #50](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/50)): `admin.thecabcall.com` — Apply Krug "Don't Make Me Think" Discipline Across the Admin Portal**
@@ -724,7 +724,7 @@
 
 ### Issue #47 (Sub-Issue 2): Working Tools & Rubric Page (`/rubric`) — 50% Card Diet & Redundancy Removal
 - **GitHub Issue:** [#47](https://github.com/Columbia-Cloudworks-LLC/thecabcall.com/issues/47)
-- **Status:** `[ ] Pending`
+- **Status:** `[x] Completed`
 - **Target Files:** `src/components/RubricCodexClient.tsx`, `src/components/RubricInspectorDrawer.tsx`, `src/app/rubric/page.tsx`
 
 ### Issue #48 (Sub-Issue 3): About & Feeds Page (`/about`, `/status`, `/feeds`) — Collapse the 51-Card Wall, De-Nest Pillars & Slim Feed Cards
